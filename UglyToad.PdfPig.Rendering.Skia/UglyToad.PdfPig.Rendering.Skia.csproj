@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>netstandard2.0;net462;net6.0;net8.0</TargetFrameworks>
+		<Version>0.1.9.1-alpha001</Version>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="PdfPig" Version="0.1.9-alpha-20240217-f4e75" />
+	  <PackageReference Include="SkiaSharp" Version="2.88.7" />
+	</ItemGroup>
+
+</Project>
