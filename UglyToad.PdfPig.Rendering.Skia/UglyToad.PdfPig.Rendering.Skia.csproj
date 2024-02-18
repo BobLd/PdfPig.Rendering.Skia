@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>netstandard2.0;net462;net471;net6.0;net8.0</TargetFrameworks>
+		<TargetFrameworks>net8.0</TargetFrameworks>
 		<LangVersion>12</LangVersion>
 		<Version>0.1.9.2</Version>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -39,13 +39,21 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="PdfPig" Version="0.1.9" />
 		<PackageReference Include="SkiaSharp" Version="2.88.8" />
 		<PackageReference Include="SkiaSharp.HarfBuzz" Version="2.88.8" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0' or '$(TargetFramework)'=='net462' OR '$(TargetFramework)'=='net471'">
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="1.1.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Core\UglyToad.PdfPig.Core.csproj" />
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.DocumentLayoutAnalysis\UglyToad.PdfPig.DocumentLayoutAnalysis.csproj" />
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Fonts\UglyToad.PdfPig.Fonts.csproj" />
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Tokenization\UglyToad.PdfPig.Tokenization.csproj" />
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Tokens\UglyToad.PdfPig.Tokens.csproj" />
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig\UglyToad.PdfPig.csproj" />
 	</ItemGroup>
 
 </Project>
