@@ -1,8 +1,10 @@
-# UglyToad.PdfPig.Rendering.Skia
+# PdfPig.Rendering.Skia
 
 Render pdf documents as images with `PdfPig` using `SkiaSharp`.
 
 **This is a very early version and not everything is supported (more to come).**
+
+Available as a *Prerelease* Nuget package https://www.nuget.org/packages/PdfPig.Rendering.Skia/
 
 Uses parts of [PDFBox](https://github.com/apache/pdfbox) code.
 
