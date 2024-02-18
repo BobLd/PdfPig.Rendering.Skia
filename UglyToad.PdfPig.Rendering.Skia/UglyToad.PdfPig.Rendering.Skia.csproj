@@ -10,9 +10,32 @@
 		<IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
 	</PropertyGroup>
 
+	<PropertyGroup>
+		<Authors>BobLd</Authors>
+		<PackageTags>PDF;Reader;Document;Adobe;PDFBox;PdfPig;pdf;file;C#;dotnet;.NET;image;skia;skiasharp;render</PackageTags>
+		<RepositoryUrl>https://github.com/BobLd/PdfPig.Rendering.Skia</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/BobLd/PdfPig.Rendering.Skia</PackageProjectUrl>
+		<Description>Render pdf documents as images using PdfPig and SkiaSharp.</Description>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+		<PackageId>PdfPig.Rendering.Skia</PackageId>
+		<Title>PdfPig.Rendering.Skia</Title>
+		<Product>PdfPig.Rendering.Skia</Product>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+	</PropertyGroup>
+
 	<ItemGroup>
-	  <PackageReference Include="PdfPig" Version="0.1.9-alpha-20240217-f4e75" />
-	  <PackageReference Include="SkiaSharp" Version="2.88.7" />
+		<None Include="..\README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="PdfPig" Version="0.1.9-alpha-20240217-f4e75" />
+		<PackageReference Include="SkiaSharp" Version="2.88.7" />
 	</ItemGroup>
 
 </Project>
