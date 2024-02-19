@@ -73,12 +73,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             //return HashCode.Combine(...)
         }
 
-        public SKPaint GetPaint(IColor color, decimal alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,
-            LineCapStyle? capStyle, LineDashPattern? dashPattern, TransformationMatrix? matrix)
-        {
-            return GetPaint(color, (double)alpha, stroke, strokeWidth, joinStyle, capStyle, dashPattern, matrix);
-        }
-
         public SKPaint GetPaint(IColor color, double alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,
             LineCapStyle? capStyle, LineDashPattern? dashPattern, TransformationMatrix? matrix)
         {
