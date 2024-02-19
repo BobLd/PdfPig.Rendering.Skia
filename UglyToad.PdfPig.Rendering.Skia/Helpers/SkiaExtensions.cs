@@ -222,11 +222,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return fillingRule == FillingRule.NonZeroWinding ? SKPathFillType.Winding : SKPathFillType.EvenOdd;
         }
 
-        public static SKColor ToSKColor(this IColor pdfColor, decimal alpha)
-        {
-            return ToSKColor(pdfColor, (double)alpha);
-        }
-
         public static SKColor ToSKColor(this IColor pdfColor, double alpha)
         {
             var color = SKColors.Black;
