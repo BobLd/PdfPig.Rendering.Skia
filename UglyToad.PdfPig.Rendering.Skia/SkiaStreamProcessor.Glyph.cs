@@ -86,9 +86,36 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 if (fill.Value)
                 {
                     // Do fill first
-                    var fillBrush = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
-                        null, null, null, null, null);
-                    _canvas.DrawPath(transformedPath, fillBrush);
+                    if (nonStrokingColor != null && nonStrokingColor.ColorSpace == ColorSpace.Pattern)
+                    {
+                        // TODO - Clean shading patterns painting
+                        // See documents:
+                        // - GHOSTSCRIPT-693120-0
+                        // - GHOSTSCRIPT-698721-0.zip-6
+                        // - GHOSTSCRIPT-698721-1_1
+
+                        if (!(nonStrokingColor is PatternColor pattern))
+                        {
+                            throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got {nonStrokingColor.GetType()}");
+                        }
+
+                        switch (pattern.PatternType)
+                        {
+                            case PatternType.Tiling:
+                                RenderTilingPattern(transformedPath, pattern as TilingPatternColor, false);
+                                break;
+
+                            case PatternType.Shading:
+                                RenderShadingPattern(transformedPath, pattern as ShadingPatternColor, false);
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        var fillBrush = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
+                            null, null, null, null, null);
+                        _canvas.DrawPath(transformedPath, fillBrush);
+                    }
                 }
 
                 if (stroke.Value)
@@ -128,6 +155,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
             double pointSize, string unicode, TransformationMatrix renderingMatrix, TransformationMatrix textMatrix,
             TransformationMatrix transformationMatrix, CharacterBoundingBox characterBoundingBox)
         {
+            // TODO - Handle Fill
+
             var style = textRenderingMode.ToSKPaintStyle();
             if (!style.HasValue)
             {

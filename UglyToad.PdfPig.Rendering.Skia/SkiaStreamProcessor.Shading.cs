@@ -26,13 +26,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
     internal partial class SkiaStreamProcessor
     {
         /// <inheritdoc/>
-        public override void PaintShading(NameToken shading)
+        public override void PaintShading(NameToken shadingNameToken)
         {
-            RenderShading(ResourceStore.GetShading(shading));
-        }
+            Shading shading = ResourceStore.GetShading(shadingNameToken);
 
-        protected void RenderShading(Shading shading)
-        {
             float maxX = _canvas.DeviceClipBounds.Right;
             float maxY = _canvas.DeviceClipBounds.Top;
             float minX = _canvas.DeviceClipBounds.Left;
@@ -347,7 +344,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private void RenderShadingPattern(ShadingPatternColor pattern, bool isStroke)
+        private void RenderShadingPatternCurrentPath(ShadingPatternColor pattern, bool isStroke)
+        {
+            RenderShadingPattern(_currentPath, pattern, isStroke);
+        }
+
+        private void RenderShadingPattern(SKPath path, ShadingPatternColor pattern, bool isStroke)
         {
             if (pattern.ExtGState != null)
             {
@@ -356,23 +358,23 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             TransformationMatrix transformationMatrix = CurrentTransformationMatrix.Multiply(pattern.Matrix);
 
-            float maxX = _currentPath.Bounds.Right;
-            float maxY = _currentPath.Bounds.Top;
-            float minX = _currentPath.Bounds.Left;
-            float minY = _currentPath.Bounds.Bottom;
+            float maxX = path.Bounds.Right;
+            float maxY = path.Bounds.Top;
+            float minX = path.Bounds.Left;
+            float minY = path.Bounds.Bottom;
 
             switch (pattern.Shading.ShadingType)
             {
                 case ShadingType.Axial:
-                    RenderAxialShading(pattern.Shading as AxialShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, _currentPath);
+                    RenderAxialShading(pattern.Shading as AxialShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
                     break;
 
                 case ShadingType.Radial:
-                    RenderRadialShading(pattern.Shading as RadialShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, _currentPath);
+                    RenderRadialShading(pattern.Shading as RadialShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
                     break;
 
                 case ShadingType.FunctionBased:
-                    RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, _currentPath);
+                    RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
                     break;
 
                 case ShadingType.FreeFormGouraud:
@@ -385,7 +387,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private void RenderTilingPattern(TilingPatternColor pattern, bool isStroke)
+        private void RenderTilingPatternCurrentPath(TilingPatternColor pattern, bool isStroke)
+        {
+            RenderTilingPattern(_currentPath, pattern, isStroke);
+        }
+
+        private void RenderTilingPattern(SKPath path, TilingPatternColor pattern, bool isStroke)
         {
             // TODO - to finish
             // See 22060_A1_01_Plans-1.pdf
@@ -466,7 +473,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 // TODO - check if bbox not null
 
-                _canvas.DrawPath(_currentPath, paint);
+                _canvas.DrawPath(path, paint);
             }
 
             if (hasResources)
