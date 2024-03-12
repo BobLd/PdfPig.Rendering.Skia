@@ -47,8 +47,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            // TODO - need better handling for images where rotation is not 180
-            // see issue_484Test, Pig production p15
             float left = (float)image.Bounds.Left;
             float top = (float)(_height - image.Bounds.Top);
             float right = left + (float)image.Bounds.Width;
@@ -57,9 +55,26 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             try
             {
-                using (var bitmap = SKBitmap.Decode(image.GetImageBytes()))
+                if (CurrentTransformationMatrix.A > 0 && CurrentTransformationMatrix.D > 0)
                 {
-                    _canvas.DrawBitmap(bitmap, destRect, _paintCache.GetAntialiasing());
+                    // No transformation to do
+                    using (var bitmap = SKBitmap.Decode(image.GetImageBytes()))
+                    {
+                        _canvas.DrawBitmap(bitmap, destRect, _paintCache.GetAntialiasing());
+                    }
+                }
+                else
+                {
+                    SKMatrix matrix = SKMatrix.CreateScale(
+                        Math.Sign(CurrentTransformationMatrix.A),
+                        Math.Sign(CurrentTransformationMatrix.D));
+
+                    using (var bitmap = SKBitmap.Decode(image.GetImageBytes()))
+                    using (new SKAutoCanvasRestore(_canvas, true))
+                    {
+                        _canvas.SetMatrix(matrix);
+                        _canvas.DrawBitmap(bitmap, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
+                    }
                 }
 
                 return;
