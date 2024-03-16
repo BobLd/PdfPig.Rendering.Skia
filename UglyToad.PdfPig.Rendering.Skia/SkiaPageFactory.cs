@@ -15,6 +15,7 @@
 using System;
 using System.Collections.Generic;
 using SkiaSharp;
+using UglyToad.PdfPig.Annotations;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Filters;
@@ -50,15 +51,23 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <inheritdoc/>
-        protected override SKPicture ProcessPage(int pageNumber, DictionaryToken dictionary, NamedDestinations namedDestinations,
-            MediaBox mediaBox, CropBox cropBox, UserSpaceUnit userSpaceUnit, PageRotationDegrees rotation,
-            TransformationMatrix initialMatrix, IReadOnlyList<IGraphicsStateOperation> operations)
+        protected override SKPicture ProcessPage(int pageNumber, DictionaryToken dictionary,
+            NamedDestinations namedDestinations, MediaBox mediaBox, CropBox cropBox, UserSpaceUnit userSpaceUnit,
+            PageRotationDegrees rotation, TransformationMatrix initialMatrix,
+            IReadOnlyList<IGraphicsStateOperation> operations)
         {
+            var annotationProvider = new AnnotationProvider(PdfScanner,
+                dictionary,
+                initialMatrix,
+                namedDestinations,
+                ParsingOptions.Logger);
+
             // Special case where cropbox is outside mediabox: use cropbox instead of intersection
             var effectiveCropBox = new CropBox(mediaBox.Bounds.Intersect(cropBox.Bounds) ?? cropBox.Bounds);
 
             var context = new SkiaStreamProcessor(pageNumber, ResourceStore, PdfScanner, PageContentParser,
-                FilterProvider, effectiveCropBox, userSpaceUnit, rotation, initialMatrix, ParsingOptions, _fontCache);
+                FilterProvider, effectiveCropBox, userSpaceUnit, rotation, initialMatrix, ParsingOptions,
+                annotationProvider, dictionary, _fontCache);
 
             return context.Process(pageNumber, operations);
         }
