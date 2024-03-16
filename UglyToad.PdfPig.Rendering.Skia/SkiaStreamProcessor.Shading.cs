@@ -424,7 +424,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var processor = new SkiaStreamProcessor(PageNumber, ResourceStore, PdfScanner, PageContentParser,
                 FilterProvider, new UglyToad.PdfPig.Content.CropBox(bbox), UserSpaceUnit, Rotation,
                 CurrentTransformationMatrix, // TODO - Not sure about the matrix
-                ParsingOptions, _fontCache);
+                ParsingOptions, _annotationProvider, _pageDictionary, _fontCache);
 
             processor.ModifyCurrentTransformationMatrix(new double[] { m.A, m.B, 0, m.C, m.D, 0, m.E, m.F, 1 });
 
