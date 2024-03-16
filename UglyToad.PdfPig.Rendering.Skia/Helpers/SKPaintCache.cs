@@ -27,7 +27,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
     {
         private readonly bool _isAntialias;
 
-        private readonly float _minimumLinwWidth;
+        private readonly float _minimumLineWidth;
 
         private readonly Dictionary<int, SKPaint> _cache = new Dictionary<int, SKPaint>();
 
@@ -37,10 +37,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         private readonly SKPaint _imageDebugPaint;
 #endif
 
-        public SKPaintCache(bool isAntialias, float minimumLinwWidth)
+        public SKPaintCache(bool isAntialias, float minimumLineWidth)
         {
             _isAntialias = isAntialias;
-            _minimumLinwWidth = minimumLinwWidth;
+            _minimumLineWidth = minimumLineWidth;
             _antialiasingPaint = new SKPaint() { IsAntialias = _isAntialias };
 #if DEBUG
             _imageDebugPaint = new SKPaint()
@@ -94,7 +94,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             {
                 // Careful - we assume they all have values if stroke!
                 float scaledWidth = (float)(strokeWidth.Value * matrix.Value.A); // A guess
-                paint.StrokeWidth = Math.Max(_minimumLinwWidth, scaledWidth);
+                paint.StrokeWidth = Math.Max(_minimumLineWidth, scaledWidth);
                 paint.StrokeJoin = joinStyle.Value.ToSKStrokeJoin();
                 paint.StrokeCap = capStyle.Value.ToSKStrokeCap();
                 paint.PathEffect = dashPattern.Value.ToSKPathEffect(strokeWidth.Value);
