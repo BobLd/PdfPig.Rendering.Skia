@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using SkiaSharp;
+using UglyToad.PdfPig.Annotations;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Filters;
@@ -29,6 +32,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
 {
     internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
     {
+        private readonly bool _renderAnnotations = true; // TODO - param
+
         private readonly int _height;
         private readonly int _width;
 
@@ -44,6 +49,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private readonly FontCache _fontCache;
         private readonly SKPaintCache _paintCache = new SKPaintCache(_antiAliasing, _minimumLineWidth);
 
+        private readonly DictionaryToken _pageDictionary;
+
+        private readonly AnnotationProvider _annotationProvider;
+
         public SkiaStreamProcessor(
             int pageNumber,
             IResourceStore resourceStore,
@@ -55,6 +64,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
             PageRotationDegrees rotation,
             TransformationMatrix initialMatrix,
             ParsingOptions parsingOptions,
+            AnnotationProvider annotationProvider,
+            DictionaryToken pageDictionary,
             FontCache fontCache)
             : base(pageNumber,
                 resourceStore,
@@ -67,6 +78,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 initialMatrix,
                 parsingOptions)
         {
+            _pageDictionary = pageDictionary;
+            _annotationProvider = annotationProvider;
+
+            _annotations = new Lazy<Annotation[]>(() => _annotationProvider.GetAnnotations().ToArray());
+
             _fontCache = fontCache;
 
             _width = (int)cropBox.Bounds.Width;
@@ -86,7 +102,17 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 using (var recorder = new SKPictureRecorder())
                 using (_canvas = recorder.BeginRecording(SKRect.Create(_width, _height)))
                 {
+                    if (_renderAnnotations)
+                    {
+                        DrawAnnotations(true);
+                    }
+
                     ProcessOperations(operations);
+
+                    if (_renderAnnotations)
+                    {
+                        DrawAnnotations(false);
+                    }
 
                     _canvas.Flush();
 
