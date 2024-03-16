@@ -5,7 +5,12 @@ VisualStudioVersion = 17.8.34322.80
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UglyToad.PdfPig.Rendering.Skia", "UglyToad.PdfPig.Rendering.Skia\UglyToad.PdfPig.Rendering.Skia.csproj", "{7CDB2D2C-3F40-4AAB-A9D0-D2F016582D50}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UglyToad.PdfPig.Rendering.Skia.Tests", "UglyToad.PdfPig.Rendering.Skia.Tests\UglyToad.PdfPig.Rendering.Skia.Tests.csproj", "{AB3779CB-2D75-49E5-889A-5628D2B895E2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UglyToad.PdfPig.Rendering.Skia.Tests", "UglyToad.PdfPig.Rendering.Skia.Tests\UglyToad.PdfPig.Rendering.Skia.Tests.csproj", "{AB3779CB-2D75-49E5-889A-5628D2B895E2}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8274B07B-83AC-4C28-B258-366C85B93F32}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
