@@ -20,11 +20,14 @@ using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Geometry;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Graphics.Operations;
+using UglyToad.PdfPig.Graphics.Operations.MarkedContent;
 using UglyToad.PdfPig.Graphics.Operations.PathConstruction;
 using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia
 {
+    // Based on PdfBox
+
     internal partial class SkiaStreamProcessor
     {
         /// <summary>
@@ -58,15 +61,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/rendering/PageDrawer.java
             // https://github.com/apache/pdfbox/blob/c4b212ecf42a1c0a55529873b132ea338a8ba901/pdfbox/src/main/java/org/apache/pdfbox/contentstream/PDFStreamEngine.java#L312
-            foreach (var annotation in _annotations.Value.Where(a => IsAnnotationBelowText(a) == isBelowText))
+            foreach (Annotation annotation in _annotations.Value.Where(a => IsAnnotationBelowText(a) == isBelowText))
             {
                 // Check if visible
 
                 // Get appearance
-                var appearance = GetNormalAppearanceAsStream(annotation);
-
-                PdfRectangle? bbox = null;
-                PdfRectangle? rect = annotation.Rectangle;
+                StreamToken appearance = GetNormalAppearanceAsStream(annotation);
 
                 if (appearance is null)
                 {
@@ -74,6 +74,17 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     continue;
                 }
 
+                if (!appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Rect, out var rectToken))
+                {
+                    // TODO - log
+                    continue; // Should never happen
+                }
+
+                // Don't use annotation.Rectangle, we might have updated it in GetNormalAppearanceAsStream()
+                var rectPoints = rectToken.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
+                PdfRectangle rect = new PdfRectangle(rectPoints[0], rectPoints[1], rectPoints[2], rectPoints[3]);
+
+                PdfRectangle? bbox = null;
                 if (appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Bbox, out var bboxToken))
                 {
                     var points = bboxToken.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
@@ -81,7 +92,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 }
 
                 // zero-sized rectangles are not valid
-                if (rect.HasValue && rect.Value.Width > 0 && rect.Value.Height > 0 &&
+                if (rect.Width > 0 && rect.Height > 0 &&
                     bbox.HasValue && bbox.Value.Width > 0 && bbox.Value.Height > 0)
                 {
                     var matrix = TransformationMatrix.Identity;
@@ -92,33 +103,31 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
 
                     PushState();
+                    int gsCount = GraphicsStack.Count;
 
+                    // https://github.com/apache/pdfbox/blob/47867f7eee275e9e54a87222b66ab14a8a3a062a/pdfbox/src/main/java/org/apache/pdfbox/contentstream/PDFStreamEngine.java#L310
                     // transformed appearance box  fixme: may be an arbitrary shape
                     PdfRectangle transformedBox = matrix.Transform(bbox.Value).Normalise();
 
-                    // Matrix a = Matrix.getTranslateInstance(rect.getLowerLeftX(), rect.getLowerLeftY());
-                    TransformationMatrix a =
-                        TransformationMatrix.GetTranslationMatrix(rect.Value.TopLeft.X, rect.Value.TopLeft.Y);
-                    a = Scale(a, (float)(rect.Value.Width / transformedBox.Width),
-                        (float)(rect.Value.Height / transformedBox.Height));
+                    var a = TransformationMatrix.GetTranslationMatrix(rect.TopLeft.X, rect.TopLeft.Y);
+                    a = Scale(a, (float)(rect.Width / transformedBox.Width),
+                        (float)(rect.Height / transformedBox.Height));
                     a = a.Translate(-transformedBox.TopLeft.X, -transformedBox.TopLeft.Y);
-
-                    // Matrix shall be concatenated with A to form a matrix AA that maps from the appearance's
-                    // coordinate system to the annotation's rectangle in default user space
-                    //
-                    // HOWEVER only the opposite order works for rotated pages with 
-                    // filled fields / annotations that have a matrix in the appearance stream, see PDFBOX-3083
-                    //Matrix aa = Matrix.concatenate(a, matrix);
-                    //TransformationMatrix aa = a.Multiply(matrix);
 
                     GetCurrentState().CurrentTransformationMatrix = a;
 
                     try
                     {
-                        base.ProcessFormXObject(appearance, null);
+                        ProcessFormXObject(appearance, null);
                     }
                     catch (Exception ex)
                     {
+                        // An exception was thrown in ProcessFormXObject, we want to make sure the stack
+                        // is the same as before we entered the method
+                        while (GraphicsStack.Count > gsCount)
+                        {
+                            PopState();
+                        }
                         System.Diagnostics.Debug.WriteLine($"DrawAnnotations: {ex}");
                     }
                     finally
@@ -137,25 +146,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var y0 = matrix[1, 0] * sy;
             var y1 = matrix[1, 1] * sy;
             var y2 = matrix[1, 2] * sy;
-            return new TransformationMatrix(x0, x1, x2, y0, y1, y2, matrix[2, 0], matrix[2, 1], matrix[2, 2]);
+            return new TransformationMatrix(
+                x0, x1, x2,
+                y0, y1, y2,
+                matrix[2, 0], matrix[2, 1], matrix[2, 2]);
         }
 
-        /// <summary>
-        /// todo
-        /// </summary>
         private StreamToken GetNormalAppearanceAsStream(Annotation annotation)
         {
-            var dict = GetAppearance(annotation);
+            var appearanceDict = GetAppearance(annotation);
 
             // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/form/AppearanceGeneratorHelper.java
 
-            if (dict == null)
+            if (appearanceDict == null)
             {
                 return GenerateNormalAppearanceAsStream(annotation);
             }
 
             // get Normal Appearance
-            if (!dict.Data.TryGetValue(NameToken.N, out var data))
+            if (!appearanceDict.Data.TryGetValue(NameToken.N, out var data))
             {
                 return null;
             }
@@ -211,32 +220,118 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 throw new ArgumentException("TODO GetNormalAppearanceAsStream");
             }
 
-            if (annotation.Type == AnnotationType.Widget)
+            if (normalAppearance is null)
             {
-                /*
-                var contentStream = normalAppearance.Decode(filterProvider, pdfScanner);
-                var operations = pageContentParser.Parse(pageNumber, new ByteArrayInputBytes(contentStream), parsingOptions.Logger).ToList();
-
-                // DO STUFF
-
-                using (MemoryStream newMs = new MemoryStream())
-                {
-                    foreach (var operation in operations)
-                    {
-                        operation.Write(newMs);
-                    }
-
-                    normalAppearance = new StreamToken(normalAppearance.StreamDictionary, newMs.ToArray());
-                }
-                */
+                return null;
             }
 
-            return normalAppearance;
+            if (annotation.Type == AnnotationType.Widget)
+            {
+                normalAppearance = setAppearanceContent(annotation, normalAppearance);
+            }
+
+            var dict = normalAppearance.StreamDictionary
+                .With(NameToken.Rect, annotation.Rectangle.ToArrayToken());
+
+            return new StreamToken(dict, normalAppearance.Data);
         }
 
         /// <summary>
-        /// TODO
+        /// Constructs and sets new contents for given appearance stream.
         /// </summary>
+        private StreamToken setAppearanceContent(Annotation widget, StreamToken appearanceStream)
+        {
+            // first copy any needed resources from the document’s DR dictionary into
+            // the stream’s Resources dictionary
+            //getWidgetDefaultAppearanceString(widget);
+            //defaultAppearance.copyNeededResourcesTo(appearanceStream);
+
+            using (var ms = new MemoryStream())
+            {
+                var contentStream = appearanceStream.Decode(FilterProvider, PdfScanner);
+                var tokens = PageContentParser
+                    .Parse(PageNumber, new ByteArrayInputBytes(contentStream), ParsingOptions.Logger).ToList();
+
+                int bmcIndex = tokens.FindIndex(x => x is BeginMarkedContent);
+
+                if (bmcIndex == -1)
+                {
+                    // append to existing stream
+                    foreach (var operation in tokens)
+                    {
+                        operation.Write(ms);
+                    }
+                    new BeginMarkedContent(NameToken.Tx).Write(ms);
+                }
+                else
+                {
+                    // prepend content before BMC
+                    foreach (var operation in tokens.Take(bmcIndex + 1))
+                    {
+                        operation.Write(ms);
+                    }
+                }
+
+                // insert field contents
+                // TODO - To finish, does not follow PdfBox
+                var (r, g, b) = DefaultFieldsHighlightColor.ToRGBValues();
+                GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
+
+                PdfRectangle bbox = widget.Rectangle;
+                if (widget.AnnotationDictionary.TryGet(NameToken.Rect, out ArrayToken rect))
+                {
+                    var points = rect.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
+                    bbox = new PdfRectangle(points[0], points[1], points[2], points[3]);
+                }
+
+                new AppendRectangle(0,0, bbox.Width, bbox.Height).Write(ms);
+                PdfPig.Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Write(ms);
+
+                int emcIndex = tokens.FindIndex(x => x is EndMarkedContent);
+
+                if (emcIndex != -1)
+                {
+                    int count = emcIndex - (bmcIndex + 1);
+                    foreach (var operation in tokens.Skip(bmcIndex + 1).Take(count))
+                    {
+                        operation.Write(ms);
+                    }
+                }
+                else
+                {
+                    foreach (var operation in tokens.Skip(bmcIndex + 1))
+                    {
+                        operation.Write(ms);
+                    }
+                }
+
+                //insertGeneratedAppearance(widget, appearanceStream, ms);
+                // TODO - END To finish, does not follow PdfBox
+
+                if (emcIndex == -1)
+                {
+                    // append EMC
+                    Graphics.Operations.MarkedContent.EndMarkedContent.Value.Write(ms);
+                }
+                else
+                {
+                    // append contents after EMC
+                    foreach (var operation in tokens.Skip(emcIndex))
+                    {
+                        operation.Write(ms);
+                    }
+                }
+
+                var newAppearance = new StreamToken(appearanceStream.StreamDictionary, ms.ToArray());
+
+                //var contentStreamTest = newAppearance.Decode(FilterProvider, PdfScanner);
+                //var operationsTest = PageContentParser
+                //    .Parse(PageNumber, new ByteArrayInputBytes(contentStreamTest), ParsingOptions.Logger).ToList();
+
+                return newAppearance;
+            }
+        }
+
         private DictionaryToken GetAppearance(Annotation annotation)
         {
             return annotation.AnnotationDictionary.TryGet<DictionaryToken>(NameToken.Ap, PdfScanner, out var appearance)
@@ -248,25 +343,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             // https://github.com/apache/pdfbox/blob/c4b212ecf42a1c0a55529873b132ea338a8ba901/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDAbstractAppearanceHandler.java#L479
 
-            switch (annotation.Type)
+            return annotation.Type switch
             {
-                case AnnotationType.StrikeOut:
-                    return GenerateStrikeOutNormalAppearanceAsStream(annotation);
-
-                case AnnotationType.Highlight:
-                    return GenerateHighlightNormalAppearanceAsStream(annotation);
-
-                case AnnotationType.Underline:
-                    return GenerateUnderlineNormalAppearanceAsStream(annotation);
-
-                case AnnotationType.Link:
-                    return GenerateLinkNormalAppearanceAsStream(annotation);
-
-                case AnnotationType.Widget:
-                    return GenerateWidgetNormalAppearanceAsStream(annotation);
-            }
-
-            return null;
+                AnnotationType.StrikeOut => GenerateStrikeOutNormalAppearanceAsStream(annotation),
+                AnnotationType.Highlight => GenerateHighlightNormalAppearanceAsStream(annotation),
+                AnnotationType.Underline => GenerateUnderlineNormalAppearanceAsStream(annotation),
+                AnnotationType.Link => GenerateLinkNormalAppearanceAsStream(annotation),
+                AnnotationType.Widget => GenerateWidgetNormalAppearanceAsStream(annotation),
+                _ => null
+            };
         }
 
         private StreamToken GenerateStrikeOutNormalAppearanceAsStream(Annotation annotation)
@@ -276,16 +361,16 @@ namespace UglyToad.PdfPig.Rendering.Skia
             PdfRectangle rect = annotation.Rectangle;
 
             if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner,
-                    out var quadpoints))
+                    out var quadPoints))
             {
                 return null;
             }
 
-            var pathsArray = quadpoints.Data.OfType<NumericToken>().Select(x => (float)x.Double).ToArray();
+            var pathsArray = quadPoints.Data.OfType<NumericToken>().Select(x => (float)x.Double).ToArray();
 
-            var ab = annotation.Border;
+            AnnotationBorder ab = annotation.Border;
 
-            if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.C, PdfScanner, out var colorToken) ||
+            if (!annotation.AnnotationDictionary.TryGet(NameToken.C, PdfScanner, out ArrayToken colorToken) ||
                 colorToken.Data.Count == 0)
             {
                 return null;
@@ -296,6 +381,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             double width = ab.BorderWidth;
             if (width == 0)
             {
+                // value found in adobe reader
                 width = 1.5;
             }
 
@@ -320,7 +406,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var setLowerLeftY = Math.Min(minY - (float)width / 2.0, rect.BottomLeft.Y);
             var setUpperRightX = Math.Max(maxX + (float)width / 2.0, rect.TopRight.X);
             var setUpperRightY = Math.Max(maxY + (float)width / 2.0, rect.TopRight.Y);
-            PdfRectangle pdfRectangle = new PdfRectangle(setLowerLeftX, setLowerLeftY, setUpperRightX, setUpperRightY); //annotation.setRectangle(rect);
+            rect = new PdfRectangle(setLowerLeftX, setLowerLeftY, setUpperRightX, setUpperRightY);
 
             try
             {
@@ -335,7 +421,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     //    cs.setLineDashPattern(ab.dashArray, 0);
                     //}                   
 
-                    new UglyToad.PdfPig.Graphics.Operations.General.SetLineWidth(width).Write(ms);
+                    new Graphics.Operations.General.SetLineWidth(width).Write(ms);
 
                     // spec is incorrect
                     // https://stackoverflow.com/questions/9855814/pdf-spec-vs-acrobat-creation-quadpoints
@@ -376,25 +462,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         new AppendStraightLineSegment(x1, y1).Write(ms);
                     }
 
-                    UglyToad.PdfPig.Graphics.Operations.PathPainting.StrokePath.Value.Write(ms);
+                    Graphics.Operations.PathPainting.StrokePath.Value.Write(ms);
 
-                    // https://github.com/apache/pdfbox/blob/c4b212ecf42a1c0a55529873b132ea338a8ba901/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDAbstractAppearanceHandler.java#L511
-                    var dict = _pageDictionary;
-
-                    /*
-                        private void setTransformationMatrix(PDAppearanceStream appearanceStream)
-                        {
-                            PDRectangle bbox = getRectangle();
-                            appearanceStream.setBBox(bbox);
-                            AffineTransform transform = AffineTransform.getTranslateInstance(-bbox.getLowerLeftX(),
-                                    -bbox.getLowerLeftY());
-                            appearanceStream.setMatrix(transform);
-                        }
-                     */
-                    if (annotation.AnnotationDictionary.TryGet(NameToken.Rect, out var rectToken))
-                    {
-                        dict = dict.With(NameToken.Bbox.Data, rectToken); // should use new rect
-                    }
+                    var dict = annotation.AnnotationDictionary
+                        .With(NameToken.Rect, rect.ToArrayToken());
+                    dict = setTransformationMatrix(dict, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -403,9 +475,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 System.Diagnostics.Debug.WriteLine(ex);
                 // TODO - Log
+                return null;
             }
-
-            return null;
         }
 
         private StreamToken GenerateHighlightNormalAppearanceAsStream(Annotation annotation)
@@ -467,7 +538,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var setLowerLeftY = Math.Min(minY - (float)width / 2.0, rect.BottomLeft.Y);
             var setUpperRightX = Math.Max(maxX + (float)width / 2.0, rect.TopRight.X);
             var setUpperRightY = Math.Max(maxY + (float)width / 2.0, rect.TopRight.Y);
-            PdfRectangle pdfRectangle = new PdfRectangle(setLowerLeftX, setLowerLeftY, setUpperRightX, setUpperRightY);
+            rect = new PdfRectangle(setLowerLeftX, setLowerLeftY, setUpperRightX, setUpperRightY);
 
             try
             {
@@ -580,27 +651,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                                 .Write(ms);
                         }
 
-                        UglyToad.PdfPig.Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Write(ms);
+                        Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Write(ms);
                         of += 8;
                     }
 
-                    // https://github.com/apache/pdfbox/blob/c4b212ecf42a1c0a55529873b132ea338a8ba901/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDAbstractAppearanceHandler.java#L511
-                    var dict = _pageDictionary;
-
-                    /*
-                        private void setTransformationMatrix(PDAppearanceStream appearanceStream)
-                        {
-                            PDRectangle bbox = getRectangle();
-                            appearanceStream.setBBox(bbox);
-                            AffineTransform transform = AffineTransform.getTranslateInstance(-bbox.getLowerLeftX(),
-                                    -bbox.getLowerLeftY());
-                            appearanceStream.setMatrix(transform);
-                        }
-                     */
-                    if (annotation.AnnotationDictionary.TryGet(NameToken.Rect, out var rectToken))
-                    {
-                        dict = dict.With(NameToken.Bbox.Data, rectToken);
-                    }
+                    var dict = annotation.AnnotationDictionary
+                        .With(NameToken.Rect, rect.ToArrayToken());
+                    dict = setTransformationMatrix(dict, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -667,7 +724,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var setLowerLeftY = Math.Min(minY - (float)width / 2.0, rect.BottomLeft.Y);
             var setUpperRightX = Math.Max(maxX + (float)width / 2.0, rect.TopRight.X);
             var setUpperRightY = Math.Max(maxY + (float)width / 2.0, rect.TopRight.Y);
-            PdfRectangle pdfRectangle = new PdfRectangle(setLowerLeftX, setLowerLeftY, setUpperRightX, setUpperRightY);
+            rect = new PdfRectangle(setLowerLeftX, setLowerLeftY, setUpperRightX, setUpperRightY);
 
             try
             {
@@ -682,7 +739,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     //    cs.setLineDashPattern(ab.dashArray, 0);
                     //}                   
 
-                    new UglyToad.PdfPig.Graphics.Operations.General.SetLineWidth(width).Write(ms);
+                    new Graphics.Operations.General.SetLineWidth(width).Write(ms);
 
                     // spec is incorrect
                     // https://stackoverflow.com/questions/9855814/pdf-spec-vs-acrobat-creation-quadpoints
@@ -717,25 +774,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         new AppendStraightLineSegment(x1, y1).Write(ms);
                     }
 
-                    UglyToad.PdfPig.Graphics.Operations.PathPainting.StrokePath.Value.Write(ms);
+                    Graphics.Operations.PathPainting.StrokePath.Value.Write(ms);
 
-                    // https://github.com/apache/pdfbox/blob/c4b212ecf42a1c0a55529873b132ea338a8ba901/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDAbstractAppearanceHandler.java#L511
-                    var dict = _pageDictionary; //.Data.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
-                    /*
-                        private void setTransformationMatrix(PDAppearanceStream appearanceStream)
-                        {
-                            PDRectangle bbox = getRectangle();
-                            appearanceStream.setBBox(bbox);
-                            AffineTransform transform = AffineTransform.getTranslateInstance(-bbox.getLowerLeftX(),
-                                    -bbox.getLowerLeftY());
-                            appearanceStream.setMatrix(transform);
-                        }
-                     */
-                    if (annotation.AnnotationDictionary.TryGet(NameToken.Rect, out var rectToken))
-                    {
-                        dict = dict.With(NameToken.Bbox.Data, rectToken);
-                    }
+                    var dict = annotation.AnnotationDictionary
+                        .With(NameToken.Rect, rect.ToArrayToken());
+                    dict = setTransformationMatrix(dict, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -770,14 +813,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     {
                         // spec is unclear, but black is what Adobe does
                         //color = new decimal[] { 0 }; // DeviceGray black (from Pdfbox)
-                        color = Array.Empty<double>(); // Empty array, transparent
+                        color = []; // Empty array, transparent
                     }
 
                     GetAnnotationStrokeColorOperation(color)?.Write(ms);
 
                     double lineWidth = ab.BorderWidth;
 
-                    new UglyToad.PdfPig.Graphics.Operations.General.SetLineWidth(lineWidth).Write(ms);
+                    new Graphics.Operations.General.SetLineWidth(lineWidth).Write(ms);
 
                     // Acrobat applies a padding to each side of the bbox so the line is completely within
                     // the bbox.
@@ -852,7 +895,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         {
                             new AppendStraightLineSegment(pathsArray[of + 4], pathsArray[of + 5]).Write(ms);
                             new AppendStraightLineSegment(pathsArray[of + 6], pathsArray[of + 7]).Write(ms);
-                            UglyToad.PdfPig.Graphics.Operations.PathConstruction.CloseSubpath.Value.Write(ms);
+                            Graphics.Operations.PathConstruction.CloseSubpath.Value.Write(ms);
                         }
 
                         of += 8;
@@ -860,27 +903,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     if (lineWidth > 0 && color.Length > 0) // TODO - TO CHECK
                     {
-                        UglyToad.PdfPig.Graphics.Operations.PathPainting.StrokePath.Value.Write(ms);
+                        Graphics.Operations.PathPainting.StrokePath.Value.Write(ms);
                     }
                     //contentStream.drawShape(lineWidth, hasStroke, false);
 
-                    // https://github.com/apache/pdfbox/blob/c4b212ecf42a1c0a55529873b132ea338a8ba901/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDAbstractAppearanceHandler.java#L511
-                    var dict = _pageDictionary; //.Data.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
-                    /*
-                        private void setTransformationMatrix(PDAppearanceStream appearanceStream)
-                        {
-                            PDRectangle bbox = getRectangle();
-                            appearanceStream.setBBox(bbox);
-                            AffineTransform transform = AffineTransform.getTranslateInstance(-bbox.getLowerLeftX(),
-                                    -bbox.getLowerLeftY());
-                            appearanceStream.setMatrix(transform);
-                        }
-                     */
-                    if (annotation.AnnotationDictionary.TryGet(NameToken.Rect, out var rectToken))
-                    {
-                        dict = dict.With(NameToken.Bbox.Data, rectToken);
-                    }
+                    var dict = annotation.AnnotationDictionary
+                        .With(NameToken.Rect, rect.ToArrayToken());
+                    dict = setTransformationMatrix(dict, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -889,9 +918,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 System.Diagnostics.Debug.WriteLine(ex);
                 // TODO - Log
+                return null;
             }
-
-            return null;
         }
 
         private StreamToken GenerateWidgetNormalAppearanceAsStream(Annotation annotation)
@@ -905,7 +933,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 double lineWidth = ab.BorderWidth;
 
                 var (r, g, b) = DefaultFieldsHighlightColor.ToRGBValues();
-                // GetAnnotationNonStrokeColorOperation(new decimal[] { r, g, b })?.Write(ms); // let's not fill anything for now
+                GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
 
                 float[] pathsArray = null;
                 if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner,
@@ -954,24 +982,30 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     new AppendStraightLineSegment(pathsArray[of + 4], pathsArray[of + 5]).Write(ms);
                     new AppendStraightLineSegment(pathsArray[of + 6], pathsArray[of + 7]).Write(ms);
-                    UglyToad.PdfPig.Graphics.Operations.PathConstruction.CloseSubpath.Value.Write(ms);
+                    Graphics.Operations.PathConstruction.CloseSubpath.Value.Write(ms);
                     of += 8;
                 }
 
-                //PdfPig.Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Write(ms); // let's not fill anything for now
+                Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Write(ms);
 
-                var dict = _pageDictionary;
-
-                if (annotation.AnnotationDictionary.TryGet(NameToken.Rect, out var rectToken))
-                {
-                    dict = dict.With(NameToken.Bbox.Data, rectToken);
-                }
+                var dict = annotation.AnnotationDictionary
+                    .With(NameToken.Rect, rect.ToArrayToken());
+                dict = setTransformationMatrix(dict, annotation.Rectangle);
 
                 return new StreamToken(dict, ms.ToArray());
             }
         }
 
-        private static IGraphicsStateOperation GetAnnotationStrokeColorOperation(double[] color)
+        private static DictionaryToken setTransformationMatrix(DictionaryToken annotationDictionary, PdfRectangle bbox)
+        {
+            // https://github.com/apache/pdfbox/blob/c4b212ecf42a1c0a55529873b132ea338a8ba901/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDAbstractAppearanceHandler.java#L511
+            return annotationDictionary
+                .With(NameToken.Bbox, bbox.ToArrayToken())
+                .With(NameToken.Matrix, TransformationMatrix.Identity.ToArrayToken()) // annotation.Rectangle is already transformed
+                .Without(NameToken.F); // Need to remove the F entry as it will be treated as a Filter entry in ProcessFormXObject()
+        }
+
+        private static IGraphicsStateOperation GetAnnotationStrokeColorOperation(ReadOnlySpan<double> color)
         {
             // An array of numbers in the range 0.0 to 1.0, representing a colour used for the following purposes:
             // The background of the annotation’s icon when closed
@@ -999,7 +1033,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private static IGraphicsStateOperation GetAnnotationNonStrokeColorOperation(double[] color)
+        private static IGraphicsStateOperation GetAnnotationNonStrokeColorOperation(ReadOnlySpan<double> color)
         {
             // An array of numbers in the range 0.0 to 1.0, representing a colour used for the following purposes:
             // The background of the annotation’s icon when closed

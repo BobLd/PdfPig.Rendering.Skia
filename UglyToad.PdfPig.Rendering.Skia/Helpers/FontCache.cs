@@ -208,21 +208,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         private static int GetFontKey(IFont font)
         {
-            // https://stackoverflow.com/questions/263400/what-is-the-best-algorithm-for-overriding-gethashcode?lq=1
-            // https://thomaslevesque.com/2020/05/15/things-every-csharp-developer-should-know-1-hash-codes/
-            unchecked
-            {
-                // 1430287 amd 7302013 are prime numbers
-                int hashcode = 1430287;
-                hashcode = hashcode * 7302013 ^ font.Name.GetHashCode();
-                hashcode = hashcode * 7302013 ^ font.GetType().Name.GetHashCode();
-                hashcode = hashcode * 7302013 ^ font.IsVertical.GetHashCode();
-                hashcode = hashcode * 7302013 ^ font.Details.IsItalic.GetHashCode();
-                hashcode = hashcode * 7302013 ^ font.Details.IsBold.GetHashCode();
-                hashcode = hashcode * 7302013 ^ font.Details.Weight.GetHashCode();
-                return hashcode;
-            }
-            //return HashCode.Combine(...)
+            return HashCode.Combine(font.Name, font.GetType().Name, font.IsVertical, font.Details.IsItalic,
+                font.Details.IsBold, font.Details.Weight);
         }
     }
 }
