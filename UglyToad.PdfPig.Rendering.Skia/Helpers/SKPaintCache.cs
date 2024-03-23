@@ -53,22 +53,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         private static int GetPaintKey(IColor color, double alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,
             LineCapStyle? capStyle, LineDashPattern? dashPattern)
         {
-            // https://stackoverflow.com/questions/263400/what-is-the-best-algorithm-for-overriding-gethashcode?lq=1
-            // https://thomaslevesque.com/2020/05/15/things-every-csharp-developer-should-know-1-hash-codes/
-            unchecked
-            {
-                // 1430287 amd 7302013 are prime numbers
-                int hashcode = 1430287;
-                hashcode = hashcode * 7302013 ^ (color?.GetHashCode() ?? 0);
-                hashcode = hashcode * 7302013 ^ alpha.GetHashCode();
-                hashcode = hashcode * 7302013 ^ stroke.GetHashCode();
-                hashcode = hashcode * 7302013 ^ (strokeWidth?.GetHashCode() ?? 0);
-                hashcode = hashcode * 7302013 ^ (joinStyle?.GetHashCode() ?? 0);
-                hashcode = hashcode * 7302013 ^ (capStyle?.GetHashCode() ?? 0);
-                hashcode = hashcode * 7302013 ^ getHash(dashPattern);
-                return hashcode;
-            }
-            //return HashCode.Combine(...)
+            return HashCode.Combine(color, alpha, stroke, strokeWidth, joinStyle, capStyle, getHash(dashPattern));
         }
 
         public SKPaint GetPaint(IColor color, double alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,

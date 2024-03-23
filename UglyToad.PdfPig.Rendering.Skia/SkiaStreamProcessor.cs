@@ -49,8 +49,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private readonly FontCache _fontCache;
         private readonly SKPaintCache _paintCache = new SKPaintCache(_antiAliasing, _minimumLineWidth);
 
-        private readonly DictionaryToken _pageDictionary;
-
         private readonly AnnotationProvider _annotationProvider;
 
         public SkiaStreamProcessor(
@@ -65,7 +63,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             TransformationMatrix initialMatrix,
             ParsingOptions parsingOptions,
             AnnotationProvider annotationProvider,
-            DictionaryToken pageDictionary,
             FontCache fontCache)
             : base(pageNumber,
                 resourceStore,
@@ -78,7 +75,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 initialMatrix,
                 parsingOptions)
         {
-            _pageDictionary = pageDictionary;
             _annotationProvider = annotationProvider;
 
             _annotations = new Lazy<Annotation[]>(() => _annotationProvider.GetAnnotations().ToArray());

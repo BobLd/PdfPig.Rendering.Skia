@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System;
 using System.IO;
 using SkiaSharp;
+using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
+using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia
 {
@@ -78,6 +81,27 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 bitmap.Encode(ms, SKEncodedImageFormat.Png, quality);
                 return ms;
             }
+        }
+
+        internal static ArrayToken ToArrayToken(this PdfRectangle rectangle)
+        {
+            return new ArrayToken(new[]
+            {
+                new NumericToken(rectangle.Left),
+                new NumericToken(rectangle.Bottom),
+                new NumericToken(rectangle.Right),
+                new NumericToken(rectangle.Top)
+            });
+        }
+
+        internal static ArrayToken ToArrayToken(this TransformationMatrix matrix)
+        {
+            return new ArrayToken(new[]
+            {
+                new NumericToken(matrix.A), new NumericToken(matrix.B), new NumericToken(matrix[0, 2]),
+                new NumericToken(matrix.C), new NumericToken(matrix.D), new NumericToken(matrix[1, 2]),
+                new NumericToken(matrix.E), new NumericToken(matrix.F), new NumericToken(matrix[2, 2]),
+            });
         }
     }
 }

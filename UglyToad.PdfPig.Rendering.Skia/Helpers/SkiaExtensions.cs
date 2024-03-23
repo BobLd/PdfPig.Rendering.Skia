@@ -31,15 +31,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             {
                 return SKFontStyle.BoldItalic;
             }
-            else if (fontDetails.IsBold)
+
+            if (fontDetails.IsBold)
             {
                 return SKFontStyle.Bold;
             }
-            else if (fontDetails.IsItalic)
-            {
-                return SKFontStyle.Italic;
-            }
-            return SKFontStyle.Normal;
+
+            return fontDetails.IsItalic ? SKFontStyle.Italic : SKFontStyle.Normal;
         }
 
         public static string GetCleanFontName(this IFont font)
@@ -64,38 +62,24 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         public static SKStrokeJoin ToSKStrokeJoin(this LineJoinStyle lineJoinStyle)
         {
-            switch (lineJoinStyle)
+            return lineJoinStyle switch
             {
-                case LineJoinStyle.Bevel:
-                    return SKStrokeJoin.Bevel;
-
-                case LineJoinStyle.Miter:
-                    return SKStrokeJoin.Miter;
-
-                case LineJoinStyle.Round:
-                    return SKStrokeJoin.Round;
-
-                default:
-                    throw new NotImplementedException($"Unknown LineJoinStyle '{lineJoinStyle}'.");
-            }
+                LineJoinStyle.Bevel => SKStrokeJoin.Bevel,
+                LineJoinStyle.Miter => SKStrokeJoin.Miter,
+                LineJoinStyle.Round => SKStrokeJoin.Round,
+                _ => throw new NotImplementedException($"Unknown LineJoinStyle '{lineJoinStyle}'.")
+            };
         }
 
         public static SKStrokeCap ToSKStrokeCap(this LineCapStyle lineCapStyle)
         {
-            switch (lineCapStyle)
+            return lineCapStyle switch
             {
-                case LineCapStyle.Butt:
-                    return SKStrokeCap.Butt;
-
-                case LineCapStyle.ProjectingSquare:
-                    return SKStrokeCap.Square;
-
-                case LineCapStyle.Round:
-                    return SKStrokeCap.Round;
-
-                default:
-                    throw new NotImplementedException($"Unknown LineCapStyle '{lineCapStyle}'.");
-            }
+                LineCapStyle.Butt => SKStrokeCap.Butt,
+                LineCapStyle.ProjectingSquare => SKStrokeCap.Square,
+                LineCapStyle.Round => SKStrokeCap.Round,
+                _ => throw new NotImplementedException($"Unknown LineCapStyle '{lineCapStyle}'.")
+            };
         }
 
         public static SKPathEffect ToSKPathEffect(this LineDashPattern lineDashPattern, float lineWidth)
@@ -107,35 +91,38 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 return null;
             }
 
-            float scale = lineWidth * oneOver72 / 2; // Scale is still not correct
+            float scale = lineWidth * oneOver72 / 2; // TODO - Scale is still not correct
+
             float phase = lineDashPattern.Phase * scale;
 
-            if (lineDashPattern.Array.Count == 1)
+            switch (lineDashPattern.Array.Count)
             {
-                var v = (float)lineDashPattern.Array[0] * scale;
-                return SKPathEffect.CreateDash(new[] { v, v }, phase);
-            }
-
-            if (lineDashPattern.Array.Count > 0)
-            {
-                float[] pattern = new float[lineDashPattern.Array.Count];
-                for (int i = 0; i < lineDashPattern.Array.Count; i++)
-                {
-                    var v = (float)lineDashPattern.Array[i] * scale;
-                    if (v == 0)
+                case 1:
                     {
-                        pattern[i] = oneOver72;
+                        var v = (float)lineDashPattern.Array[0] * scale;
+                        return SKPathEffect.CreateDash([v, v], phase);
                     }
-                    else
+                case > 0:
                     {
-                        pattern[i] = v;
+                        float[] pattern = new float[lineDashPattern.Array.Count];
+                        for (int i = 0; i < lineDashPattern.Array.Count; i++)
+                        {
+                            var v = (float)lineDashPattern.Array[i] * scale;
+                            if (v == 0)
+                            {
+                                pattern[i] = oneOver72;
+                            }
+                            else
+                            {
+                                pattern[i] = v;
+                            }
+                        }
+
+                        return SKPathEffect.CreateDash(pattern, phase);
                     }
-                }
-
-                return SKPathEffect.CreateDash(pattern, phase);
+                default:
+                    return SKPathEffect.CreateDash([0, 0], phase);
             }
-
-            return SKPathEffect.CreateDash(new float[] { 0, 0 }, phase);
         }
 
         public static bool? IsStroke(this TextRenderingMode textRenderingMode)
@@ -144,48 +131,39 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             {
                 case TextRenderingMode.Stroke:
                 case TextRenderingMode.StrokeClip:
-                    return true;
-
-                case TextRenderingMode.Fill:
-                case TextRenderingMode.FillClip:
-                    return false;
-
                 case TextRenderingMode.FillThenStroke:
                 case TextRenderingMode.FillThenStrokeClip:
                     return true;
 
+                case TextRenderingMode.Fill:
+                case TextRenderingMode.FillClip:
                 case TextRenderingMode.NeitherClip:
-                    return true; // TODO - Very not correct
-
                 case TextRenderingMode.Neither:
+                    return false;
+
                 default:
-                    return null;
+                    return false;
             }
         }
 
-        public static bool? IsFill(this TextRenderingMode textRenderingMode)
+        public static bool IsFill(this TextRenderingMode textRenderingMode)
         {
-            // TODO - to finish, not correct
             switch (textRenderingMode)
             {
-                case TextRenderingMode.Stroke:
-                case TextRenderingMode.StrokeClip:
-                    return false;
-
                 case TextRenderingMode.Fill:
                 case TextRenderingMode.FillClip:
-                    return true;
-
                 case TextRenderingMode.FillThenStroke:
                 case TextRenderingMode.FillThenStrokeClip:
                     return true;
 
+                case TextRenderingMode.Stroke:
+                case TextRenderingMode.StrokeClip:
                 case TextRenderingMode.NeitherClip:
-                    return false; // TODO - Very not correct
-
                 case TextRenderingMode.Neither:
+                    return false;
+
                 default:
-                    return null;
+                    return false;
             }
         }
 
@@ -207,8 +185,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     return SKPaintStyle.StrokeAndFill;
 
                 case TextRenderingMode.NeitherClip:
-                    return SKPaintStyle.Stroke; // TODO - Very not correct
-
                 case TextRenderingMode.Neither:
                 default:
                     return null;
@@ -223,7 +199,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         public static SKColor ToSKColor(this IColor pdfColor, double alpha)
         {
             var color = SKColors.Black;
-            if (pdfColor != null)
+            if (pdfColor is not null)
             {
                 var (r, g, b) = pdfColor.ToRGBValues();
                 color = new SKColor(Convert.ToByte(r * 255), Convert.ToByte(g * 255), Convert.ToByte(b * 255));
@@ -236,7 +212,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         {
             return new SKMatrix((float)transformationMatrix.A, (float)transformationMatrix.C, (float)transformationMatrix.E,
                                 (float)transformationMatrix.B, (float)transformationMatrix.D, (float)transformationMatrix.F,
-                                0, 0, 1); // could use the actual values, but should always be 0, 0, 1 (?)
+                                0, 0, 1);
         }
 
         /*

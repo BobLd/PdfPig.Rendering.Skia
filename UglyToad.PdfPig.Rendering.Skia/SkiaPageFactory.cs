@@ -67,7 +67,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             var context = new SkiaStreamProcessor(pageNumber, ResourceStore, PdfScanner, PageContentParser,
                 FilterProvider, effectiveCropBox, userSpaceUnit, rotation, initialMatrix, ParsingOptions,
-                annotationProvider, dictionary, _fontCache);
+                annotationProvider, _fontCache);
 
             return context.Process(pageNumber, operations);
         }
