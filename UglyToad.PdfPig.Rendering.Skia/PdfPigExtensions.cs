@@ -47,7 +47,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             using (var picture = document.GetPage<SKPicture>(pageNumber))
             {
-                var size = new SKSizeI((int)(picture.CullRect.Width * scale), (int)(picture.CullRect.Height * scale));
+                var size = new SKSizeI((int)Math.Ceiling(picture.CullRect.Width * scale), (int)Math.Ceiling(picture.CullRect.Height * scale));
                 var scaleMatrix = SKMatrix.CreateScale(scale, scale);
 
                 var bitmap = new SKBitmap(size.Width, size.Height);
