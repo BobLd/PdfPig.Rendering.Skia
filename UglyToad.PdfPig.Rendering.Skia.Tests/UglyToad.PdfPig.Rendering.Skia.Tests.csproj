@@ -195,6 +195,46 @@
 	  <None Update="Documents\PDFBOX-1869-4.pdf">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	  <None Update="ExpectedImages\Apitron.PDF.Kit.Samples_patternFill-mupdf-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\Apitron.PDF.Kit.Samples_patternFill-pdfium-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\cat-genetics-mupdf-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\cat-genetics-pdfium-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\cat-genetics_bobld-mupdf-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\cat-genetics_bobld-pdfium-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\fseprd1102849-mupdf-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\fseprd1102849-pdfium-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\GHOSTSCRIPT-696547-0.zip-7-mupdf-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\GHOSTSCRIPT-696547-0.zip-7-pdfium-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\GHOSTSCRIPT-699554-0.zip-4-mupdf-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\GHOSTSCRIPT-699554-0.zip-4-pdfium-1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="ExpectedImages\" />
 	</ItemGroup>
 
 </Project>

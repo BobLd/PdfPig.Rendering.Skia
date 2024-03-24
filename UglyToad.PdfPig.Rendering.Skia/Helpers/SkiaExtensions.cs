@@ -55,7 +55,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return fontName;
         }
 
-        public static SKPoint ToSKPoint(this PdfPoint pdfPoint, int height)
+        public static SKPoint ToSKPoint(this PdfPoint pdfPoint, float height)
         {
             return new SKPoint((float)pdfPoint.X, (float)(height - pdfPoint.Y));
         }
