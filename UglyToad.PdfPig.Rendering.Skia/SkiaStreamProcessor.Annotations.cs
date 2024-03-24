@@ -55,6 +55,19 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
+        private static bool ShouldRender(Annotation annotation)
+        {
+            // cf. ISO 32000-2:2020(E) - Table 167 — Annotation flags
+            if (annotation.Flags.HasFlag(AnnotationFlags.Invisible) ||
+                annotation.Flags.HasFlag(AnnotationFlags.Hidden) ||
+                annotation.Flags.HasFlag(AnnotationFlags.NoView))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         private readonly Lazy<Annotation[]> _annotations;
 
         private void DrawAnnotations(bool isBelowText)
@@ -64,6 +77,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
             foreach (Annotation annotation in _annotations.Value.Where(a => IsAnnotationBelowText(a) == isBelowText))
             {
                 // Check if visible
+                if (!ShouldRender(annotation))
+                {
+                    continue;
+                }
 
                 // Get appearance
                 StreamToken appearance = GetNormalAppearanceAsStream(annotation);
@@ -813,14 +830,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     {
                         // spec is unclear, but black is what Adobe does
                         //color = new decimal[] { 0 }; // DeviceGray black (from Pdfbox)
-                        color = []; // Empty array, transparent
+                        color = [0]; // Empty array, transparent
                     }
 
-                    GetAnnotationStrokeColorOperation(color)?.Write(ms);
-
                     double lineWidth = ab.BorderWidth;
-
-                    new Graphics.Operations.General.SetLineWidth(lineWidth).Write(ms);
 
                     // Acrobat applies a padding to each side of the bbox so the line is completely within
                     // the bbox.
@@ -872,10 +885,16 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         if (annotation.AnnotationDictionary.TryGet<DictionaryToken>(NameToken.Bs, PdfScanner,
                                 out var borderStyleToken))
                         {
+                            // (PDF 1.2) The dictionaries for some annotation types (such as free text and
+                            // polygon annotations) can include the BS entry. That entry specifies a border
+                            // style dictionary that has more settings than the array specified for the Border
+                            // entry. If an annotation dictionary includes the BS entry, then the Border entry
+                            // is ignored.
+
                             if (borderStyleToken.TryGet<NameToken>(NameToken.S, PdfScanner, out var styleToken))
                             {
                                 underlined = styleToken.Data.Equals("U");
-                                // Optional) The border style:
+                                // (Optional) The border style:
                                 // S   (Solid) A solid rectangle surrounding the annotation.
                                 // D   (Dashed) A dashed rectangle surrounding the annotation. The dash pattern may be specified by the D entry.
                                 // B   (Beveled) A simulated embossed rectangle that appears to be raised above the surface of the page.
@@ -883,26 +902,41 @@ namespace UglyToad.PdfPig.Rendering.Skia
                                 // U   (Underline) A single line along the bottom of the annotation rectangle.
                                 // A conforming reader shall tolerate other border styles that it does not recognize and shall use the default value.
                             }
-                        }
-                    }
 
-                    int of = 0;
-                    while (of + 7 < pathsArray.Length)
-                    {
-                        new BeginNewSubpath(pathsArray[of], pathsArray[of + 1]).Write(ms);
-                        new AppendStraightLineSegment(pathsArray[of + 2], pathsArray[of + 3]).Write(ms);
-                        if (!underlined)
-                        {
-                            new AppendStraightLineSegment(pathsArray[of + 4], pathsArray[of + 5]).Write(ms);
-                            new AppendStraightLineSegment(pathsArray[of + 6], pathsArray[of + 7]).Write(ms);
-                            Graphics.Operations.PathConstruction.CloseSubpath.Value.Write(ms);
+                            if (borderStyleToken.TryGet<NumericToken>(NameToken.W, PdfScanner, out var borderWidthToken))
+                            {
+                                // (Optional) The border width in points. If this value is 0, no border shall be
+                                // drawn. Default value: 1.
+                                lineWidth = borderWidthToken.Data;
+                            }
+                            else
+                            {
+                                lineWidth = 1;
+                            }
                         }
-
-                        of += 8;
                     }
 
                     if (lineWidth > 0 && color.Length > 0) // TODO - TO CHECK
                     {
+                        GetAnnotationStrokeColorOperation(color)?.Write(ms);
+
+                        new Graphics.Operations.General.SetLineWidth(lineWidth).Write(ms);
+
+                        int of = 0;
+                        while (of + 7 < pathsArray.Length)
+                        {
+                            new BeginNewSubpath(pathsArray[of], pathsArray[of + 1]).Write(ms);
+                            new AppendStraightLineSegment(pathsArray[of + 2], pathsArray[of + 3]).Write(ms);
+                            if (!underlined)
+                            {
+                                new AppendStraightLineSegment(pathsArray[of + 4], pathsArray[of + 5]).Write(ms);
+                                new AppendStraightLineSegment(pathsArray[of + 6], pathsArray[of + 7]).Write(ms);
+                                Graphics.Operations.PathConstruction.CloseSubpath.Value.Write(ms);
+                            }
+
+                            of += 8;
+                        }
+
                         Graphics.Operations.PathPainting.StrokePath.Value.Write(ms);
                     }
                     //contentStream.drawShape(lineWidth, hasStroke, false);
