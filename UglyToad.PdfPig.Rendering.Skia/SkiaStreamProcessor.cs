@@ -33,13 +33,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
     internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
     {
         private readonly bool _renderAnnotations = true; // TODO - param
+        private const bool _antiAliasing = true;
 
-        private readonly int _height;
-        private readonly int _width;
+        private readonly float _height;
+        private readonly float _width;
 
         private SKCanvas _canvas;
 
-        private const bool _antiAliasing = true;
+        private const float _minimumLineWidth = 0.25f;
 
         /// <summary>
         /// Inverse direction of y-axis
@@ -81,8 +82,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             _fontCache = fontCache;
 
-            _width = (int)cropBox.Bounds.Width;
-            _height = (int)cropBox.Bounds.Height;
+            _width = (float)cropBox.Bounds.Width;
+            _height = (float)cropBox.Bounds.Height;
 
             _yAxisFlipMatrix = SKMatrix.CreateScale(1, -1, 0, _height / 2f);
         }
@@ -154,6 +155,31 @@ namespace UglyToad.PdfPig.Rendering.Skia
         public override void EndMarkedContent()
         {
             // No op
+        }
+
+        private float GetScaledLineWidth()
+        {
+            // https://stackoverflow.com/questions/25690496/how-does-pdf-line-width-interact-with-the-ctm-in-both-horizontal-and-vertical-di
+            // TODO - a hack but works so far
+
+            var currentState = GetCurrentState();
+
+            /*
+            double A = currentState.CurrentTransformationMatrix.A;
+            double B = currentState.CurrentTransformationMatrix.B;
+            double C = currentState.CurrentTransformationMatrix.C;
+            double D = currentState.CurrentTransformationMatrix.D;
+
+            double x = -(double)currentState.LineWidth/2;
+            double y = -x/2;
+
+            double scaleX = A * x + C * y;
+            double scaleY = B * x + D * y;
+
+            return (float)Math.Sqrt(scaleX * scaleX + scaleY * scaleY);
+            */
+
+            return (float)(currentState.LineWidth * currentState.CurrentTransformationMatrix.A);
         }
     }
 }

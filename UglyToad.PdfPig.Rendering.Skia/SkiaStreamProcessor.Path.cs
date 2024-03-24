@@ -23,8 +23,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
 {
     internal partial class SkiaStreamProcessor
     {
-        private const float _minimumLineWidth = 0.25f;
-
         private SKPath _currentPath;
 
         public override void BeginSubpath()
@@ -146,31 +144,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             float right = (float)upperRight.x;
             float bottom = (float)(this._height - lowerLeft.y);
             _currentPath.AddRect(new SKRect(left, top, right, bottom));
-        }
-
-        private float GetScaledLineWidth()
-        {
-            // https://stackoverflow.com/questions/25690496/how-does-pdf-line-width-interact-with-the-ctm-in-both-horizontal-and-vertical-di
-            // TODO - a hack but works so far
-
-            var currentState = GetCurrentState();
-
-            /*
-            double A = currentState.CurrentTransformationMatrix.A;
-            double B = currentState.CurrentTransformationMatrix.B;
-            double C = currentState.CurrentTransformationMatrix.C;
-            double D = currentState.CurrentTransformationMatrix.D;
-
-            double x = -(double)currentState.LineWidth/2;
-            double y = -x/2;
-
-            double scaleX = A * x + C * y;
-            double scaleY = B * x + D * y;
-
-            return (float)Math.Sqrt(scaleX * scaleX + scaleY * scaleY);
-            */
-
-            return (float)((double)currentState.LineWidth * currentState.CurrentTransformationMatrix.A);
         }
 
         public override void StrokePath(bool close)
