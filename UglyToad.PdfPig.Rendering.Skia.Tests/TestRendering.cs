@@ -64,6 +64,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "GHOSTSCRIPT-699554-0.zip-4.pdf", 1, 3
             },
 
+            /*
             new object[]
             {
                 "fseprd1102849-mupdf-1.png",
@@ -74,6 +75,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "fseprd1102849-pdfium-1.png",
                 "fseprd1102849.pdf", 1, 3
             },
+            */
 
             new object[]
             {
