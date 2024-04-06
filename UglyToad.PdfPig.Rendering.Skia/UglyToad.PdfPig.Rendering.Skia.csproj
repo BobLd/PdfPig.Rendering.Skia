@@ -35,7 +35,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="PdfPig" Version="0.1.9-alpha-20240318-69e2b" />
+		<PackageReference Include="PdfPig" Version="0.1.9-alpha-20240406-2d6cb" />
 		<PackageReference Include="SkiaSharp" Version="2.88.7" />
 	</ItemGroup>
 

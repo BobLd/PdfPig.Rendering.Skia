@@ -155,23 +155,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                                 {
                                     gp.LineTo((float)line.To.X, (float)line.To.Y);
                                 }
-                                else if (command is PdfSubpath.BezierCurve curve)
+                                else if (command is PdfSubpath.CubicBezierCurve cubic)
                                 {
-                                    // TODO - PdfPig needs to be fixed to properly handle Quad / Cubic curves
-                                    // See https://github.com/UglyToad/PdfPig/issues/625
-                                    if (curve.StartPoint.Equals(curve.FirstControlPoint))
-                                    {
-                                        // Quad curve
-                                        gp.QuadTo((float)curve.SecondControlPoint.X, (float)curve.SecondControlPoint.Y,
-                                            (float)curve.EndPoint.X, (float)curve.EndPoint.Y);
-                                    }
-                                    else
-                                    {
-                                        // Cubic curve
-                                        gp.CubicTo((float)curve.FirstControlPoint.X, (float)curve.FirstControlPoint.Y,
-                                            (float)curve.SecondControlPoint.X, (float)curve.SecondControlPoint.Y,
-                                            (float)curve.EndPoint.X, (float)curve.EndPoint.Y);
-                                    }
+                                    gp.CubicTo((float)cubic.FirstControlPoint.X, (float)cubic.FirstControlPoint.Y,
+                                                (float)cubic.SecondControlPoint.X, (float)cubic.SecondControlPoint.Y,
+                                                (float)cubic.EndPoint.X, (float)cubic.EndPoint.Y);
+                                }
+                                else if (command is PdfSubpath.QuadraticBezierCurve quadratic)
+                                {
+                                    gp.QuadTo((float)quadratic.ControlPoint.X, (float)quadratic.ControlPoint.Y,
+                                                (float)quadratic.EndPoint.X, (float)quadratic.EndPoint.Y);
                                 }
                                 else if (command is PdfSubpath.Close)
                                 {

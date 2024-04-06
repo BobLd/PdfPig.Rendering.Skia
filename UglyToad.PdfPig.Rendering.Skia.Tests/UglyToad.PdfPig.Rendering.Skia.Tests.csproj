@@ -192,6 +192,12 @@
 	  <None Update="Documents\gs-bugzilla694385.pdf">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	  <None Update="Documents\journal.pone.0196757.pdf">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\Judgement Document.pdf">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
 	  <None Update="Documents\PDFBOX-1869-4.pdf">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
