@@ -35,6 +35,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
     public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
     {
         private readonly FontCache _fontCache;
+        static SkiaPageFactory()
+        {
+            // Temporary fix - to remove once 817 is merged in PdfPig
+#if NET6_0_OR_GREATER
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+#endif
+        }
 
         /// <summary>
         /// <see cref="SkiaPageFactory"/> constructor.
