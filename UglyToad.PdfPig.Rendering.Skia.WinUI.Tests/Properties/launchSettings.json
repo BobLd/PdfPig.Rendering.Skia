@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "UglyToad.PdfPig.Rendering.Skia.WinUI.Tests (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "UglyToad.PdfPig.Rendering.Skia.WinUI.Tests (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

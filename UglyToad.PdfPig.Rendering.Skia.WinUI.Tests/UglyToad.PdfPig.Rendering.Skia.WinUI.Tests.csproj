@@ -1,0 +1,299 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net6.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>UglyToad.PdfPig.Rendering.Skia.WinUI.Tests</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
+    <PublishProfile>win10-$(Platform).pubxml</PublishProfile>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="Documents\22060_A1_01_Plans-1.pdf" />
+    <None Remove="Documents\AcroFormsBasicFields.pdf" />
+    <None Remove="Documents\APISmap1.pdf" />
+    <None Remove="Documents\Apitron.PDF.Kit.Samples_patternFill.pdf" />
+    <None Remove="Documents\cat-genetics.pdf" />
+    <None Remove="Documents\cat-genetics_bobld.pdf" />
+    <None Remove="Documents\digitally_signed_3D_Portfolio.pdf" />
+    <None Remove="Documents\fseprd1102849.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-692307-2.zip-3.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-692564-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-692958-0.zip-2.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-693073-1.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-693120-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-693154-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-693295-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-693534-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-693664-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-694454-0.zip-36.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-695241-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-695269-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-695513-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-695681-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-696116-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-696178-1.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-696547-0.zip-10.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-696547-0.zip-7.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-696547-0.zip-9.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-696562-6.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-696720-1.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-696874-0.zip-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-696984-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-697047-1.zip-2.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-697234-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-697507-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-697682-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-697984-3.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-698168-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-698340-0.zip-3.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-698363-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-698471-3.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-698721-0.zip-6.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-698721-1.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-699178-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-699375-5.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-699488-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-699554-0.zip-4.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-700139-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-700288-1.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-700300-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-700370-2.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-700500-0.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-700931-0.7z-5.pdf" />
+    <None Remove="Documents\GHOSTSCRIPT-702013-1.pdf" />
+    <None Remove="Documents\gs-bugzilla694385.pdf" />
+    <None Remove="Documents\journal.pone.0196757.pdf" />
+    <None Remove="Documents\Judgement Document.pdf" />
+    <None Remove="Documents\PDFBOX-1869-4.pdf" />
+    <None Remove="Documents\Watermarking PLMs by Combining.pdf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectCapability Include="TestContainer" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <Content Include="Assets\SplashScreen.scale-200.png" />
+    <Content Include="Assets\LockScreenLogo.scale-200.png" />
+    <Content Include="Assets\Square150x150Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+    <Content Include="Assets\StoreLogo.png" />
+    <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+    <Content Include="Documents\22060_A1_01_Plans-1.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\AcroFormsBasicFields.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\APISmap1.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\Apitron.PDF.Kit.Samples_patternFill.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\cat-genetics.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\cat-genetics_bobld.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\digitally_signed_3D_Portfolio.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\fseprd1102849.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-692307-2.zip-3.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-692564-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-692958-0.zip-2.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-693073-1.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-693120-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-693154-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-693295-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-693534-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-693664-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-694454-0.zip-36.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-695241-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-695269-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-695513-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-695681-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-696116-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-696178-1.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-696547-0.zip-10.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-696547-0.zip-7.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-696547-0.zip-9.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-696562-6.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-696720-1.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-696874-0.zip-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-696984-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-697047-1.zip-2.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-697234-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-697507-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-697682-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-697984-3.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-698168-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-698340-0.zip-3.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-698363-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-698471-3.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-698721-0.zip-6.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-698721-1.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-699178-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-699375-5.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-699488-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-699554-0.zip-4.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-700139-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-700288-1.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-700300-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-700370-2.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-700500-0.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-700931-0.7z-5.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\GHOSTSCRIPT-702013-1.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\gs-bugzilla694385.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\journal.pone.0196757.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\Judgement Document.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\PDFBOX-1869-4.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Documents\Watermarking PLMs by Combining.pdf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="13.6.0" />
+    <PackageReference Include="Magick.NET.Core" Version="13.6.0" />
+    <PackageReference Include="Microsoft.TestPlatform.TestHost" Version="17.9.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.5.240311000" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.3233" />
+    <PackageReference Include="MSTest.TestAdapter" Version="3.3.1" />
+    <PackageReference Include="MSTest.TestFramework" Version="3.3.1" />
+    <PackageReference Include="OpenCvSharp4" Version="4.9.0.20240103" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.9.0.20240103" />
+    <PackageReference Include="OpenCvSharp4.Windows" Version="4.9.0.20240103" />
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <!-- 
+    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
+    Tools extension to be activated for this project even if the Windows App SDK Nuget
+    package has not yet been restored.
+  -->
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\UglyToad.PdfPig.Rendering.Skia\UglyToad.PdfPig.Rendering.Skia.csproj" />
+  </ItemGroup>
+
+  <!-- 
+    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution 
+    Explorer "Package and Publish" context menu entry to be enabled for this project even if 
+    the Windows App SDK Nuget package has not yet been restored.
+  -->
+  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+</Project>
