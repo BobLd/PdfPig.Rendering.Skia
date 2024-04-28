@@ -24,11 +24,23 @@ namespace UglyToad.PdfPig.Rendering.Skia
 {
     internal partial class SkiaStreamProcessor
     {
-        public override void RenderGlyph(IFont font, IColor strokingColor, IColor nonStrokingColor, TextRenderingMode textRenderingMode, double fontSize, double pointSize, int code, string unicode, long currentOffset,
-            TransformationMatrix renderingMatrix, TransformationMatrix textMatrix, TransformationMatrix transformationMatrix, CharacterBoundingBox characterBoundingBox)
+        public override void RenderGlyph(IFont font,
+            IColor strokingColor,
+            IColor nonStrokingColor,
+            TextRenderingMode textRenderingMode,
+            double fontSize,
+            double pointSize,
+            int code,
+            string unicode,
+            long currentOffset,
+            in TransformationMatrix renderingMatrix,
+            in TransformationMatrix textMatrix,
+            in TransformationMatrix transformationMatrix,
+            CharacterBoundingBox characterBoundingBox)
         {
-            if (textRenderingMode == TextRenderingMode.Neither)
+            if (!textRenderingMode.IsFill() && !textRenderingMode.IsStroke())
             {
+                // No stroke and no fill -> nothing to do
                 return;
             }
 
@@ -53,23 +65,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
             TextRenderingMode textRenderingMode, TransformationMatrix renderingMatrix, TransformationMatrix textMatrix,
             TransformationMatrix transformationMatrix)
         {
-            bool? stroke = textRenderingMode.IsStroke();
-            if (!stroke.HasValue)
-            {
-                return;
-            }
-
-            bool? fill = textRenderingMode.IsFill();
-            if (!fill.HasValue)
-            {
-                return;
-            }
-
-            if (!fill.Value && !stroke.Value)
-            {
-                // No stroke and no fill -> nothing to do
-                return;
-            }
+            bool stroke = textRenderingMode.IsStroke();
+            bool fill = textRenderingMode.IsFill();
 
             var transformMatrix = renderingMatrix.ToSkMatrix()
                 .PostConcat(textMatrix.ToSkMatrix())
@@ -81,7 +78,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
             using (var transformedPath = new SKPath())
             {
                 path.Transform(transformMatrix, transformedPath);
-                if (fill.Value)
+
+                if (_canvas.QuickReject(transformedPath))
+                {
+                    return;
+                }
+
+                if (fill)
                 {
                     // Do fill first
                     if (nonStrokingColor != null && nonStrokingColor.ColorSpace == ColorSpace.Pattern)
@@ -116,7 +119,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
                 }
 
-                if (stroke.Value)
+                if (stroke)
                 {
                     // Then stroke
                     var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
@@ -161,17 +164,23 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            var color = style == SKPaintStyle.Stroke ? strokingColor : nonStrokingColor; // TODO - very not correct
-
             var transformedPdfBounds = PerformantRectangleTransformer
                 .Transform(renderingMatrix, textMatrix, transformationMatrix,
                     new PdfRectangle(0, 0, characterBoundingBox.Width, UserSpaceUnit.PointMultiples));
+
             var startBaseLine = transformedPdfBounds.BottomLeft.ToSKPoint(_height);
 
             if (transformedPdfBounds.Rotation != 0)
             {
                 _canvas.RotateDegrees((float)-transformedPdfBounds.Rotation, startBaseLine.X, startBaseLine.Y);
             }
+
+            if (_canvas.QuickReject(transformedPdfBounds.ToSKRect(_height)))
+            {
+                return;
+            }
+
+            var color = style == SKPaintStyle.Stroke ? strokingColor : nonStrokingColor; // TODO - very not correct
 
             float skew = ComputeSkewX(transformedPdfBounds);
 

@@ -267,7 +267,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 var contentStream = appearanceStream.Decode(FilterProvider, PdfScanner);
                 var tokens = PageContentParser
-                    .Parse(PageNumber, new ByteArrayInputBytes(contentStream), ParsingOptions.Logger).ToList();
+                    .Parse(PageNumber, new MemoryInputBytes(contentStream), ParsingOptions.Logger).ToList();
 
                 int bmcIndex = tokens.FindIndex(x => x is BeginMarkedContent);
 

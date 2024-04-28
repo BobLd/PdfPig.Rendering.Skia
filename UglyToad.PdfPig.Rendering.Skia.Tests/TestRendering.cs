@@ -94,7 +94,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         public void TestWithResize(string expectedImage, string pdfFile, int pageNumber, int scale)
         {
             bool success = PdfToImageHelper.TestResizeSinglePage(pdfFile, pageNumber, expectedImage, scale);
-           Assert.True(success);
+            Assert.True(success);
         }
 
         [Theory]
