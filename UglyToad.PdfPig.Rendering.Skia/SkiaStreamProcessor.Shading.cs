@@ -403,7 +403,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
 
             var operations =
-                PageContentParser.Parse(PageNumber, new ByteArrayInputBytes(pattern.Data), ParsingOptions.Logger);
+                PageContentParser.Parse(PageNumber, new MemoryInputBytes(pattern.Data), ParsingOptions.Logger);
 
             SKMatrix transformMatrix = CurrentTransformationMatrix.ToSkMatrix()
                 .PostConcat(pattern.Matrix.ToSkMatrix())
@@ -448,15 +448,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // flip a -ve YStep around its own axis (see gs-bugzilla694385.pdf)
             if (pattern.YStep < 0)
             {
-                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateTranslation(0, (float)pattern.BBox.Height)); //graphics.translate(0, rasterHeight);
-                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateScale(1, -1)); //graphics.scale(1, -1);
+                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateTranslation(0, (float)pattern.BBox.Height));
+                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateScale(1, -1));
             }
 
             // flip a -ve XStep around its own axis
             if (pattern.XStep < 0)
             {
-                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateTranslation((float)pattern.BBox.Width, 0)); //graphics.translate(rasterWidth, 0);
-                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateScale(-1, 1)); //graphics.scale(-1, 1);
+                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateTranslation((float)pattern.BBox.Width, 0));
+                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateScale(-1, 1));
             }
 
             SKRect rect = SKRect.Create(Math.Abs((float)xStep), Math.Abs((float)yStep));
