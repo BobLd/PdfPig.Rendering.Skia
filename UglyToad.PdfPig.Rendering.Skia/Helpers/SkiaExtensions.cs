@@ -13,7 +13,6 @@
 // limitations under the License.
 
 using System;
-using System.Linq;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
@@ -53,6 +52,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
 
             return fontName;
+        }
+
+        public static SKRect ToSKRect(this PdfRectangle rect, float height)
+        {
+            float left = (float)rect.Left;
+            float top = (float)(height - rect.Top);
+            float right = left + (float)rect.Width;
+            float bottom = top + (float)rect.Height;
+            return new SKRect(left, top, right, bottom);
         }
 
         public static SKPoint ToSKPoint(this PdfPoint pdfPoint, float height)
@@ -125,7 +133,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
         }
 
-        public static bool? IsStroke(this TextRenderingMode textRenderingMode)
+        public static bool IsStroke(this TextRenderingMode textRenderingMode)
         {
             switch (textRenderingMode)
             {
@@ -315,31 +323,22 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         }
         */
 
-        public static byte[] GetImageBytes(this IPdfImage pdfImage)
+        public static ReadOnlySpan<byte> GetImageBytes(this IPdfImage pdfImage)
         {
             // Try get png bytes
-            if (pdfImage.TryGetPng(out byte[] bytes) && bytes?.Length > 0)
+            if (pdfImage.TryGetPng(out byte[]? bytes) && bytes?.Length > 0)
             {
                 return bytes;
             }
 
             // Fallback to bytes
-            if (pdfImage.TryGetBytes(out var bytesL) && bytesL?.Count > 0)
+            if (pdfImage.TryGetBytesAsMemory(out var bytesL) && bytesL.Length > 0)
             {
-                if (bytesL is byte[] bytesA)
-                {
-                    return bytesA;
-                }
-                return bytesL.ToArray();
+                return bytesL.Span;
             }
 
             // Fallback to raw bytes
-            if (pdfImage.RawBytes is byte[] rawBytesA)
-            {
-                return rawBytesA;
-            }
-
-            return pdfImage.RawBytes.ToArray();
+            return pdfImage.RawBytes;
         }
     }
 }

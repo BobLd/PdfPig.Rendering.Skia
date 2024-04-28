@@ -45,11 +45,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            float left = (float)image.Bounds.Left;
-            float top = (float)(_height - image.Bounds.Top);
-            float right = left + (float)image.Bounds.Width;
-            float bottom = top + (float)image.Bounds.Height;
-            var destRect = new SKRect(left, top, right, bottom);
+            //float left = (float)image.Bounds.Left;
+            //float top = (float)(_height - image.Bounds.Top);
+            //float right = left + (float)image.Bounds.Width;
+            //float bottom = top + (float)image.Bounds.Height;
+            var destRect = image.Bounds.ToSKRect(_height); //new SKRect(left, top, right, bottom);
 
             try
             {

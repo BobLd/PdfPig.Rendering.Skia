@@ -403,7 +403,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
 
             var operations =
-                PageContentParser.Parse(PageNumber, new ByteArrayInputBytes(pattern.Data), ParsingOptions.Logger);
+                PageContentParser.Parse(PageNumber, new MemoryInputBytes(pattern.Data), ParsingOptions.Logger);
 
             SKMatrix transformMatrix = CurrentTransformationMatrix.ToSkMatrix()
                 .PostConcat(pattern.Matrix.ToSkMatrix())
