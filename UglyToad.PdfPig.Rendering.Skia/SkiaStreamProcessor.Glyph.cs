@@ -46,8 +46,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             if (_fontCache.TryGetPath(font, code, out SKPath path))
             {
-                ShowVectorFontGlyph(path, strokingColor, nonStrokingColor, textRenderingMode, renderingMatrix,
-                    textMatrix, transformationMatrix);
+                ShowVectorFontGlyph(path, strokingColor, nonStrokingColor, textRenderingMode, in renderingMatrix,
+                    in textMatrix, in transformationMatrix);
             }
             else
             {
@@ -57,13 +57,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 }
 
                 ShowNonVectorFontGlyph(font, strokingColor, nonStrokingColor, textRenderingMode, pointSize, unicode,
-                    renderingMatrix, textMatrix, transformationMatrix, characterBoundingBox);
+                    in renderingMatrix, in textMatrix, in transformationMatrix, characterBoundingBox);
             }
         }
 
         private void ShowVectorFontGlyph(SKPath path, IColor strokingColor, IColor nonStrokingColor,
-            TextRenderingMode textRenderingMode, TransformationMatrix renderingMatrix, TransformationMatrix textMatrix,
-            TransformationMatrix transformationMatrix)
+            TextRenderingMode textRenderingMode, in TransformationMatrix renderingMatrix,
+            in TransformationMatrix textMatrix, in TransformationMatrix transformationMatrix)
         {
             bool stroke = textRenderingMode.IsStroke();
             bool fill = textRenderingMode.IsFill();
@@ -128,33 +128,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     _canvas.DrawPath(transformedPath, strokePaint);
                 }
             }
-
-            /* // No caching method
-            var style = textRenderingMode.ToSKPaintStyle();
-            if (!style.HasValue)
-            {
-                return;
-            }
-
-            var color = style == SKPaintStyle.Stroke ? strokingColor : nonStrokingColor; // TODO - very not correct
-
-            using (var transformedPath = new SKPath())
-            using (var fillBrush = new SKPaint())
-            {
-                //BlendMode = GetCurrentState().BlendMode.ToSKBlendMode(), // TODO - check if correct
-                fillBrush.Style = style.Value;
-                fillBrush.Color = color.ToSKColor(GetCurrentState().AlphaConstantNonStroking);
-                fillBrush.IsAntialias = _antiAliasing;
-                path.Transform(transformMatrix, transformedPath);
-                _canvas!.DrawPath(transformedPath, fillBrush);
-            }
-            */
         }
 
         private void ShowNonVectorFontGlyph(IFont font, IColor strokingColor, IColor nonStrokingColor,
             TextRenderingMode textRenderingMode,
-            double pointSize, string unicode, TransformationMatrix renderingMatrix, TransformationMatrix textMatrix,
-            TransformationMatrix transformationMatrix, CharacterBoundingBox characterBoundingBox)
+            double pointSize, string unicode, in TransformationMatrix renderingMatrix,
+            in TransformationMatrix textMatrix, in TransformationMatrix transformationMatrix,
+            CharacterBoundingBox characterBoundingBox)
         {
             // TODO - Handle Fill
 
