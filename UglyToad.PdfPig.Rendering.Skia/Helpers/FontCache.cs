@@ -79,7 +79,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         return drawTypeface;
                     }
 
-                    drawTypeface = skFontManager.MatchTypeface(drawTypeface, style);
+                    drawTypeface = skFontManager.MatchFamily(drawTypeface.FamilyName, style); // TODO - Check Skia 2 vs 3
 
                     if (drawTypeface != null)
                     {
@@ -112,7 +112,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     if (fallback != null)
                     {
                         drawTypeface.Dispose();
-                        drawTypeface = skFontManager.MatchTypeface(fallback, style);
+                        drawTypeface = skFontManager.MatchFamily(fallback.FamilyName, style); // TODO - Check Skia 2 vs 3 (Or use matchChar?)
                     }
                 }
 
