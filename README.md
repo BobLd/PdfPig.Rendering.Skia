@@ -1,6 +1,6 @@
 # PdfPig.Rendering.Skia
 
-Render pdf documents as images with `PdfPig` using `SkiaSharp`.
+Cross-platform library to render pdf documents as images with `PdfPig` using `SkiaSharp`.
 
 **This is a very early version and not everything is supported (more to come).**
 
