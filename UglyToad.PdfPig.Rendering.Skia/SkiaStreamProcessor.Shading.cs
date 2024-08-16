@@ -44,8 +44,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     break;
 
                 case ShadingType.FunctionBased:
-                    RenderFunctionBasedShading(shading as FunctionBasedShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
-                    break;
+                    //RenderFunctionBasedShading(shading as FunctionBasedShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
+                    //break;
 
                 case ShadingType.FreeFormGouraud:
                 case ShadingType.LatticeFormGouraud:
@@ -85,7 +85,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <summary>
         /// This is very hackish, should never happen.
         /// </summary>
-        private static void fixIncorretValues(double[] v, double[] domain)
+        private static void fixIncorrectValues(double[] v, double[] domain)
         {
             for (int i = 0; i < v.Length; i++)
             {
@@ -140,7 +140,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 double tx = t0 + (t / (double)factor * t1);
                 double[] v = shading.Eval(tx);
 
-                fixIncorretValues(v, domain); // This is a hack, this should never happen
+                fixIncorrectValues(v, domain); // This is a hack, this should never happen
 
                 colors[t] = shading.ColorSpace.GetColor(v).ToSKColor(currentState.AlphaConstantNonStroking);
                 // TODO - is it non stroking??
@@ -228,7 +228,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 double tx = t0 + (t / (double)factor * t1);
                 double[] v = shading.Eval(tx);
 
-                fixIncorretValues(v, domain); // This is a hack, this should never happen, see GHOSTSCRIPT-693154-0
+                fixIncorrectValues(v, domain); // This is a hack, this should never happen, see GHOSTSCRIPT-693154-0
 
                 colors[t] = shading.ColorSpace.GetColor(v).ToSKColor(currentState.AlphaConstantNonStroking); // TODO - is it non stroking??
                 colorPos[t] = (float)tx;
@@ -306,7 +306,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     double ty = ymin + (y / (double)factor * ymax);
                     double[] v = shading.Eval(tx, ty);
 
-                    fixIncorretValues(v, domain); // This is a hack, this should never happen
+                    fixIncorrectValues(v, domain); // This is a hack, this should never happen
 
                     colors[y + x * (factor + 1)] = shading.ColorSpace.GetColor(v).ToSKColor(currentState.AlphaConstantNonStroking); // TODO - is it non stroking??
 
@@ -337,7 +337,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     paint.StrokeWidth = 5;
 
                     _canvas.DrawVertices(SKVertexMode.TriangleStrip, colorPos, colors, paint);
-                    _canvas.DrawPoints(SKPointMode.Points, colorPos, new SKPaint() { Color = SKColors.Black });
+                    //_canvas.DrawPoints(SKPointMode.Points, colorPos, new SKPaint() { Color = SKColors.Black });
                 }
             }
         }
@@ -372,8 +372,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     break;
 
                 case ShadingType.FunctionBased:
-                    RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
-                    break;
+                    //RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
+                    //break;
 
                 case ShadingType.FreeFormGouraud:
                 case ShadingType.LatticeFormGouraud:
