@@ -181,5 +181,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             return (float)(currentState.LineWidth * currentState.CurrentTransformationMatrix.A);
         }
+
+        public override void SetNamedGraphicsState(NameToken stateName)
+        {
+            if (ResourceStore.GetExtendedGraphicsStateDictionary(stateName) is null) // This will be fixed by https://github.com/UglyToad/PdfPig/pull/879
+            {
+                return;
+            }
+
+            base.SetNamedGraphicsState(stateName);
+        }
     }
 }
