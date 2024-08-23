@@ -44,7 +44,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             }
         }
 
-        private const byte _threshold = 3;
+        private const byte _threshold = 2;
 
         private static SKBitmap diffImages(SKBitmap bim1, SKBitmap bim2)
         {
@@ -206,10 +206,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
                         // Save error
                         string rootName = expectedFile.Substring(0, expectedFile.Length - 4);
-                        Directory.CreateDirectory(_errorFolder);
-                        using (var fs = new FileStream(
-                                   Path.Combine(_errorFolder, $"{rootName}_{pageNumber}_diff.png"),
-                                   FileMode.Create))
+
+                        string errorToSaveFile = Path.Combine(_errorFolder, $"{rootName}_{pageNumber}_diff.png");
+
+                        Directory.CreateDirectory(Path.GetDirectoryName(errorToSaveFile));
+                        using (var fs = new FileStream(errorToSaveFile, FileMode.Create))
                         {
                             bim3.Encode(fs, SKEncodedImageFormat.Png, 100);
                         }
