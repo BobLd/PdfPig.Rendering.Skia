@@ -14,6 +14,7 @@
 
 using System;
 using SkiaSharp;
+using SkiaSharp.HarfBuzz;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
@@ -165,13 +166,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
             float skew = ComputeSkewX(transformedPdfBounds);
 
             using (var drawTypeface = _fontCache.GetTypefaceOrFallback(font, unicode))
-            using (var fontPaint = new SKPaint(drawTypeface.ToFont((float)pointSize, 1f, -skew)))
+            using (var skFont = drawTypeface.ToFont((float)pointSize, 1f, -skew))
+            using (var fontPaint = new SKPaint(skFont))
             {
                 fontPaint.Style = style.Value;
                 fontPaint.Color = color.ToSKColor(GetCurrentState().AlphaConstantNonStroking);
                 fontPaint.IsAntialias = _antiAliasing;
 
-                _canvas.DrawText(unicode, startBaseLine, fontPaint);
+                _canvas.DrawShapedText(unicode, startBaseLine, fontPaint);
                 _canvas.ResetMatrix();
             }
         }

@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Text;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Fonts.SystemFonts;
@@ -70,9 +71,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         {
             using (var style = font.Details.GetFontStyle())
             {
+                var codepoint = BitConverter.ToInt32(Encoding.UTF32.GetBytes(unicode), 0);
+
                 if (_typefaces.TryGetValue(font.Name, out SKTypeface drawTypeface) && drawTypeface != null &&
                     (string.IsNullOrWhiteSpace(unicode) ||
-                     drawTypeface.ContainsGlyph(unicode[0]))) // Check if can render
+                     drawTypeface.ContainsGlyph(codepoint))) // Check if can render
                 {
                     if (FontStyleEquals(drawTypeface.FontStyle, style))
                     {
@@ -106,9 +109,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 // Fallback font
                 // https://github.com/mono/SkiaSharp/issues/232
-                if (!string.IsNullOrWhiteSpace(unicode) && !drawTypeface.ContainsGlyph(unicode[0]))
+                if (!string.IsNullOrWhiteSpace(unicode) && !drawTypeface.ContainsGlyph(codepoint))
                 {
-                    var fallback = skFontManager.MatchCharacter(unicode[0]);
+                    var fallback = skFontManager.MatchCharacter(codepoint);
                     if (fallback != null)
                     {
                         drawTypeface.Dispose();
