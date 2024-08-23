@@ -231,6 +231,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "PDFBOX-1869-4_1.png",
                 "PDFBOX-1869-4.pdf", 1, 2
             },
+            new object[]
+            {
+                "Grapheme clusters emoji_1.png",
+                "Grapheme clusters emoji.pdf", 1, 2
+            },
         };
 
 

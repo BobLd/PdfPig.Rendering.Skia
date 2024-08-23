@@ -189,6 +189,9 @@
 	  <None Update="Documents\GHOSTSCRIPT-702013-1.pdf">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	  <None Update="Documents\Grapheme clusters emoji.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	  <None Update="Documents\gs-bugzilla694385.pdf">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
@@ -306,6 +309,9 @@
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-700931-0.7z-5_2.png">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\Grapheme clusters emoji_1.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\journal.pone.0196757_1.png">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
@@ -318,10 +324,6 @@
 	  <None Update="ExpectedImages\pdfpig_skia\PDFBOX-1869-4_1.png">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="ExpectedImages\" />
 	</ItemGroup>
 
 </Project>
