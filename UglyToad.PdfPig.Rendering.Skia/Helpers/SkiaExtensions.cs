@@ -41,17 +41,26 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         public static string GetCleanFontName(this IFont font)
         {
-            string fontName = font.Name;
-            if (fontName.Length > 7 && fontName[6].Equals('+'))
+            string fontName = font.Name?.Data;
+            if (fontName is null)
             {
-                string subset = fontName.Substring(0, 6);
-                if (subset.Equals(subset.ToUpper()))
+                return null;
+            }
+
+            if (fontName.Length <= 7 || !fontName[6].Equals('+'))
+            {
+                return fontName;
+            }
+
+            for (int c = 0; c < 6; ++c)
+            {
+                if (!char.IsUpper(fontName[c]))
                 {
-                    return fontName.Split('+')[1];
+                    return fontName;
                 }
             }
 
-            return fontName;
+            return fontName.Substring(7);
         }
 
         public static SKRect ToSKRect(this PdfRectangle rect, float height)
