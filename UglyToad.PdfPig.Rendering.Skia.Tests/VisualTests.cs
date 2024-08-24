@@ -25,9 +25,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         private const int _scale = 2;
         private const string _outputPath = "Output";
 
+        private static readonly HashSet<string> _documentsToIgnore = new HashSet<string>
+        {
+            "GHOSTSCRIPT-699178-0.pdf",
+            "SPARC - v9 Architecture Manual.pdf",
+            "TIKA-1552-0.pdf"
+        };
+
         public static IEnumerable<object[]> GetAllDocuments => Directory.EnumerateFiles("Documents", "*.pdf")
             .Select(Path.GetFileName)
-            .Where(p => !p.EndsWith("GHOSTSCRIPT-699178-0.pdf")) // Seems to be an issue with PdfPig
+            .Where(p => !_documentsToIgnore.Contains(p))
             .Select(p => new object[] { p });
 
         public VisualTests()

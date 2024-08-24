@@ -93,7 +93,146 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         public static readonly object[][] documentsPdfPig = new object[][]
         {
             // These are not perfect yet and can be updated once the rendering is improved
-
+            new object[]
+            {
+                "68-1990-01_A_10.png",
+                "68-1990-01_A.pdf", 10, 2
+            },
+            new object[]
+            {
+                "68-1990-01_A_19.png",
+                "68-1990-01_A.pdf", 19, 2
+            },
+            new object[]
+            {
+                "68-1990-01_A_2.png",
+                "68-1990-01_A.pdf", 2, 2
+            },
+            new object[]
+            {
+                "68-1990-01_A_31.png",
+                "68-1990-01_A.pdf", 31, 2
+            },
+            new object[]
+            {
+                "68-1990-01_A_41.png",
+                "68-1990-01_A.pdf", 41, 2
+            },
+            new object[]
+            {
+                "68-1990-01_A_7.png",
+                "68-1990-01_A.pdf", 7, 2
+            },
+            new object[]
+            {
+                "11194059_2017-11_de_s_1.png",
+                "11194059_2017-11_de_s.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2108.11480_1.png",
+                "2108.11480.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2108.11480_4.png",
+                "2108.11480.pdf", 4, 2
+            },
+            new object[]
+            {
+                "bold-italic_1.png",
+                "bold-italic.pdf", 1, 2
+            },
+            new object[]
+            {
+                "DeviceN_CS_test_6.png",
+                "DeviceN_CS_test.pdf", 6, 2
+            },
+            new object[]
+            {
+                "hex_0x0006_1.png",
+                "hex_0x0006.pdf", 1, 2
+            },
+            new object[]
+            {
+                "ICML03-081_4.png",
+                "ICML03-081.pdf", 4, 2
+            },
+            new object[]
+            {
+                "ICML03-081_6.png",
+                "ICML03-081.pdf", 6, 2
+            },
+            new object[]
+            {
+                "Layer pdf - 322_High_Holborn_building_Brochure_1.png",
+                "Layer pdf - 322_High_Holborn_building_Brochure.pdf", 1, 2
+            },
+            new object[]
+            {
+                "Motor Insurance claim form_1.png",
+                "Motor Insurance claim form.pdf", 1, 2
+            },
+            new object[]
+            {
+                "path_ext_oddeven_1.png",
+                "path_ext_oddeven.pdf", 1, 2
+            },
+            new object[]
+            {
+                "Pig Production Handbook_15.png",
+                "Pig Production Handbook.pdf", 15, 2
+            },
+            new object[]
+            {
+                "Pig Production Handbook_17.png",
+                "Pig Production Handbook.pdf", 17, 2
+            },
+            new object[]
+            {
+                "Pig Production Handbook_9.png",
+                "Pig Production Handbook.pdf", 9, 2
+            },
+            new object[]
+            {
+                "Rotated Text Libre Office_1.png",
+                "Rotated Text Libre Office.pdf", 1, 2
+            },
+            new object[]
+            {
+                "SPARC - v9 Architecture Manual_1.png",
+                "SPARC - v9 Architecture Manual.pdf", 1, 2
+            },
+            new object[]
+            {
+                "TIKA-1552-0_1.png",
+                "TIKA-1552-0.pdf", 1, 2
+            },
+            new object[]
+            {
+                "TIKA-1552-0_3.png",
+                "TIKA-1552-0.pdf", 3, 2
+            },
+            new object[]
+            {
+                "TIKA-1552-0_68.png",
+                "TIKA-1552-0.pdf", 68, 2
+            },
+            new object[]
+            {
+                "TIKA-1552-0_75.png",
+                "TIKA-1552-0.pdf", 75, 2
+            },
+            new object[]
+            {
+                "Type0 Font_1.png",
+                "Type0 Font.pdf", 1, 2
+            },
+            new object[]
+            {
+                "Why.does.this.not.work_1.png",
+                "Why.does.this.not.work.pdf", 1, 2
+            },
             new object[]
             {
                 "AcroFormsBasicFields_1.png",
@@ -238,15 +377,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             },
         };
 
-
-        [Theory(Skip = "for debugging purpose.")]
-        [MemberData(nameof(documents))]
-        public void TestWithResize(string expectedImage, string pdfFile, int pageNumber, int scale)
-        {
-            bool success = PdfToImageHelper.TestResizeSinglePage(pdfFile, pageNumber, expectedImage, scale);
-            Assert.True(success);
-        }
-
         [Theory(Skip = "for debugging purpose.")]
         [MemberData(nameof(documents))]
         public void TestAtScale(string expectedImage, string pdfFile, int pageNumber, int scale)
@@ -259,6 +389,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         [MemberData(nameof(documentsPdfPig))]
         public void PdfPigSkiaTest(string expectedImage, string pdfFile, int pageNumber, int scale)
         {
+#if DEBUG
+            throw new ArgumentException("PdfPigSkiaTest needs to run in Release mode.");
+#endif
+
             expectedImage = Path.Combine("pdfpig_skia", expectedImage);
             bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale);
             Assert.True(success);
