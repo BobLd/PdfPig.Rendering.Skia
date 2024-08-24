@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System;
+using System.Runtime.CompilerServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics;
@@ -158,57 +159,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 _currentPath.Close();
             }
 
-            var currentState = GetCurrentState();
-
-            PaintStrokePath(currentState);
+            if (!_currentPath.IsEmpty)
+            {
+                var currentState = GetCurrentState();
+                PaintStrokePath(_currentPath, currentState);
+            }
 
             _currentPath.Dispose();
             _currentPath = null;
-        }
-
-        private void PaintStrokePath(CurrentGraphicsState currentState)
-        {
-            if (currentState.CurrentStrokingColor?.ColorSpace == ColorSpace.Pattern)
-            {
-                if (!(currentState.CurrentStrokingColor is PatternColor pattern))
-                {
-                    throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got {currentState.CurrentStrokingColor.GetType()}");
-                }
-
-                switch (pattern.PatternType)
-                {
-                    case PatternType.Tiling:
-                        RenderTilingPatternCurrentPath(pattern as TilingPatternColor, true);
-                        break;
-
-                    case PatternType.Shading:
-                        RenderShadingPatternCurrentPath(pattern as ShadingPatternColor, true);
-                        break;
-                }
-            }
-            else
-            {
-                var paint = _paintCache.GetPaint(currentState.CurrentStrokingColor, currentState.AlphaConstantStroking, true,
-                    (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
-                    currentState.LineDashPattern, currentState.CurrentTransformationMatrix);
-                _canvas.DrawPath(_currentPath, paint);
-
-                /* No cache method
-                using (var paint = new SKPaint())
-                using (var dash = currentState.LineDashPattern.ToSKPathEffect((float)currentState.LineWidth))
-                {
-                    paint.IsAntialias = _antiAliasing;
-                    paint.Color = currentState.GetCurrentStrokingColorSKColor();
-                    paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = MathF.Max(_minimumLinwWidth, GetScaledLineWidth()); // A guess
-                    paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
-                    paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    paint.PathEffect = dash;
-                    //paint.BlendMode = currentGraphicsState.BlendMode.ToSKBlendMode();
-                    _canvas.DrawPath(CurrentPath, paint);
-                }
-                */
-            }
         }
 
         public override void FillPath(FillingRule fillingRule, bool close)
@@ -223,60 +181,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 _currentPath.Close();
             }
 
-            var currentState = GetCurrentState();
-
-            PaintFillPath(currentState, fillingRule);
+            if (!_currentPath.IsEmpty)
+            {
+                var currentState = GetCurrentState();
+                PaintFillPath(_currentPath, currentState, fillingRule);
+            }
 
             _currentPath.Dispose();
             _currentPath = null;
-        }
-
-        private void PaintFillPath(CurrentGraphicsState currentState, FillingRule fillingRule)
-        {
-            if (_currentPath == null)
-            {
-                return;
-            }
-
-            _currentPath.FillType = fillingRule.ToSKPathFillType();
-
-            if (currentState.CurrentNonStrokingColor?.ColorSpace == ColorSpace.Pattern)
-            {
-                if (!(currentState.CurrentNonStrokingColor is PatternColor pattern))
-                {
-                    throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got {currentState.CurrentStrokingColor.GetType()}");
-                }
-
-                switch (pattern.PatternType)
-                {
-                    case PatternType.Tiling:
-                        RenderTilingPatternCurrentPath(pattern as TilingPatternColor, false);
-                        break;
-
-                    case PatternType.Shading:
-                        RenderShadingPatternCurrentPath(pattern as ShadingPatternColor, false);
-                        break;
-                }
-            }
-            else
-            {
-                var paint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
-                    currentState.AlphaConstantNonStroking, false, null, null, null, null, null);
-                _canvas.DrawPath(_currentPath, paint);
-
-                /* No cache method
-                using (SKPaint paint = new SKPaint()
-                {
-                    IsAntialias = _antiAliasing,
-                    Color = currentState.GetCurrentNonStrokingColorSKColor(),
-                    Style = SKPaintStyle.Fill
-                })
-                {
-                    //paint.BlendMode = currentGraphicsState.BlendMode.ToSKBlendMode();
-                    _canvas!.DrawPath(CurrentPath, paint);
-                }
-                */
-            }
         }
 
         public override void FillStrokePath(FillingRule fillingRule, bool close)
@@ -291,13 +203,128 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 _currentPath.Close();
             }
 
-            var currentState = GetCurrentState();
-
-            PaintFillPath(currentState, fillingRule);
-            PaintStrokePath(currentState);
+            if (!_currentPath.IsEmpty)
+            {
+                var currentState = GetCurrentState();
+                PaintFillPath(_currentPath, currentState, fillingRule);
+                PaintStrokePath(_currentPath, currentState);
+            }
 
             _currentPath.Dispose();
             _currentPath = null;
+        }
+
+        private void PaintStrokePath(SKPath path, CurrentGraphicsState currentState)
+        {
+            if (currentState.CurrentStrokingColor?.ColorSpace == ColorSpace.Pattern)
+            {
+                if (!(currentState.CurrentStrokingColor is PatternColor pattern))
+                {
+                    throw new ArgumentNullException(
+                        $"Expecting a {nameof(PatternColor)} but got {currentState.CurrentStrokingColor.GetType()}");
+                }
+
+                switch (pattern.PatternType)
+                {
+                    case PatternType.Tiling:
+                        RenderTilingPatternCurrentPath(path, pattern as TilingPatternColor, true);
+                        break;
+
+                    case PatternType.Shading:
+                        RenderShadingPatternCurrentPath(path, pattern as ShadingPatternColor, true);
+                        break;
+                }
+            }
+            else
+            {
+                var paint = _paintCache.GetPaint(currentState.CurrentStrokingColor, currentState.AlphaConstantStroking,
+                    true, (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
+                    currentState.LineDashPattern, currentState.CurrentTransformationMatrix);
+
+                DrawPath(_canvas, path, paint);
+            }
+        }
+
+        private void PaintFillPath(SKPath path, CurrentGraphicsState currentState, FillingRule fillingRule)
+        {
+            if (path == null)
+            {
+                return;
+            }
+
+            path.FillType = fillingRule.ToSKPathFillType();
+
+            if (currentState.CurrentNonStrokingColor?.ColorSpace == ColorSpace.Pattern)
+            {
+                if (!(currentState.CurrentNonStrokingColor is PatternColor pattern))
+                {
+                    throw new ArgumentNullException(
+                        $"Expecting a {nameof(PatternColor)} but got {currentState.CurrentStrokingColor.GetType()}");
+                }
+
+                switch (pattern.PatternType)
+                {
+                    case PatternType.Tiling:
+                        RenderTilingPatternCurrentPath(path, pattern as TilingPatternColor, false);
+                        break;
+
+                    case PatternType.Shading:
+                        RenderShadingPatternCurrentPath(path, pattern as ShadingPatternColor, false);
+                        break;
+                }
+            }
+            else
+            {
+                var paint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
+                    currentState.AlphaConstantNonStroking, false, null, null, null, null, null);
+
+                DrawPath(_canvas, path, paint);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void DrawPath(SKCanvas canvas, SKPath path, SKPaint paint)
+        {
+            // https://groups.google.com/g/skia-discuss/c/Ko6JbkvN1fQ
+            if (path.IsLine)
+            {
+                var line = path.GetLine();
+                System.Diagnostics.Debug.Assert(line.Length == 2);
+                canvas.DrawLine(line[0], line[1], paint);
+            }
+            else if (path.IsRect)
+            {
+                canvas.DrawRect(path.GetRect(), paint);
+            }
+            else if (path.IsRoundRect)
+            {
+                canvas.DrawRoundRect(path.GetRoundRect(), paint);
+            }
+            else if (path.IsOval)
+            {
+                canvas.DrawOval(path.GetOvalBounds(), paint);
+            }
+            else
+            {
+                canvas.DrawPath(path, paint);
+
+                /*
+                using (var measure = new SKPathMeasure(path))
+                {
+                    if (measure.IsClosed)
+                    {
+                        using (var simplified = path.Simplify())
+                        {
+                            canvas.DrawPath(simplified, paint);
+                        }
+                    }
+                    else
+                    {
+                        canvas.DrawPath(path, paint);
+                    }
+                }
+                */
+            }
         }
     }
 }

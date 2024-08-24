@@ -44,8 +44,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     break;
 
                 case ShadingType.FunctionBased:
-                    //RenderFunctionBasedShading(shading as FunctionBasedShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
-                    //break;
+                //RenderFunctionBasedShading(shading as FunctionBasedShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
+                //break;
 
                 case ShadingType.FreeFormGouraud:
                 case ShadingType.LatticeFormGouraud:
@@ -260,7 +260,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 }
                 else
                 {
-                    _canvas.DrawPath(path, paint);
+                    DrawPath(_canvas, path, paint);
                 }
 
                 dash?.Dispose();
@@ -342,9 +342,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private void RenderShadingPatternCurrentPath(ShadingPatternColor pattern, bool isStroke)
+        private void RenderShadingPatternCurrentPath(SKPath currentPath, ShadingPatternColor pattern, bool isStroke)
         {
-            RenderShadingPattern(_currentPath, pattern, isStroke);
+            RenderShadingPattern(currentPath, pattern, isStroke);
         }
 
         private void RenderShadingPattern(SKPath path, ShadingPatternColor pattern, bool isStroke)
@@ -372,8 +372,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     break;
 
                 case ShadingType.FunctionBased:
-                    //RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
-                    //break;
+                //RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
+                //break;
 
                 case ShadingType.FreeFormGouraud:
                 case ShadingType.LatticeFormGouraud:
@@ -385,9 +385,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private void RenderTilingPatternCurrentPath(TilingPatternColor pattern, bool isStroke)
+        private void RenderTilingPatternCurrentPath(SKPath currentPath, TilingPatternColor pattern, bool isStroke)
         {
-            RenderTilingPattern(_currentPath, pattern, isStroke);
+            RenderTilingPattern(currentPath, pattern, isStroke);
         }
 
         private void RenderTilingPattern(SKPath path, TilingPatternColor pattern, bool isStroke)
@@ -471,7 +471,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 // TODO - check if bbox not null
 
-                _canvas.DrawPath(path, paint);
+                DrawPath(_canvas, path, paint);
             }
 
             if (hasResources)
