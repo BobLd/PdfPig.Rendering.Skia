@@ -35,6 +35,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         private void RenderImage(IPdfImage image)
         {
+            /*
+             * See https://groups.google.com/g/skia-discuss/c/Y5OUBx0_eHY
+             *
+             * Brian Osman:
+             * '''
+             * Sorry, forgot one thing: If you have an SkImage and want to make sure that it's fully decoded (so it will be fast to draw), you can do:
+             *      image = image->makeRasterImage();   // Produces an image that will be fully decoded and fast to draw on the CPU
+             * -or-
+             *      image = image->makeTextureImage(context);  // Produces an image that will be fully decoded and uploaded to a texture, so it's fast to draw on the GPU
+             * '''
+             */
+
             if (image.WidthInSamples == 0 || image.HeightInSamples == 0)
             {
                 return;
@@ -52,9 +64,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 if (CurrentTransformationMatrix.A > 0 && CurrentTransformationMatrix.D > 0)
                 {
                     // No transformation to do
-                    using (var bitmap = SKBitmap.Decode(image.GetImageBytes()))
+                    using (var skImage = SKImage.FromEncodedData(image.GetImageBytes()))
                     {
-                        _canvas.DrawBitmap(bitmap, destRect, _paintCache.GetAntialiasing());
+                        _canvas.DrawImage(skImage, destRect, _paintCache.GetAntialiasing());
                     }
                 }
                 else
@@ -63,25 +75,23 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         Math.Sign(CurrentTransformationMatrix.A),
                         Math.Sign(CurrentTransformationMatrix.D));
 
-                    using (var bitmap = SKBitmap.Decode(image.GetImageBytes()))
+                    using (var skImage = SKImage.FromEncodedData(image.GetImageBytes()))
                     using (new SKAutoCanvasRestore(_canvas, true))
                     {
                         _canvas.SetMatrix(matrix);
-                        _canvas.DrawBitmap(bitmap, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
+                        _canvas.DrawImage(skImage, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
                     }
                 }
-
-                return;
             }
             catch (Exception ex)
             {
+#if DEBUG
+
                 // We have no way so far to know if skia will be able to draw the picture
                 System.Diagnostics.Debug.WriteLine($"Render image attempt #1: {ex.Message}");
-            }
-
-#if DEBUG
-            _canvas.DrawRect(destRect, _paintCache.GetImageDebug());
+                _canvas.DrawRect(destRect, _paintCache.GetImageDebug());
 #endif
+            }
         }
     }
 }
