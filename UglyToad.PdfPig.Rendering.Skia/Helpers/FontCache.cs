@@ -24,48 +24,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
     internal sealed class FontCache : IDisposable
     {
-        private readonly ConcurrentDictionary<int, ConcurrentDictionary<int, Lazy<SKPath>>> _cache =
-            new ConcurrentDictionary<int, ConcurrentDictionary<int, Lazy<SKPath>>>();
+        private readonly ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath>>> _cache =
+            new ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath>>>();
 
         private readonly ConcurrentDictionary<string, SKTypeface> _typefaces =
             new ConcurrentDictionary<string, SKTypeface>();
 
-        private readonly SKFontManager skFontManager;
-
-        public FontCache()
-        {
-            skFontManager = SKFontManager.CreateDefault();
-        }
-
-        public void Dispose()
-        {
-            skFontManager.Dispose();
-
-            foreach (var key in _cache.Keys)
-            {
-                if (_cache.TryRemove(key, out var fontCache))
-                {
-                    foreach (var value in fontCache.Values)
-                    {
-                        value?.Value?.Dispose();
-                    }
-
-                    fontCache.Clear();
-                }
-            }
-
-            _cache.Clear();
-
-            foreach (string key in _typefaces.Keys)
-            {
-                if (_typefaces.TryRemove(key, out var typeface))
-                {
-                    typeface?.Dispose();
-                }
-            }
-
-            _typefaces.Clear();
-        }
+        private readonly SKFontManager _skFontManager = SKFontManager.CreateDefault();
 
         public SKTypeface GetTypefaceOrFallback(IFont font, string unicode)
         {
@@ -82,7 +47,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         return drawTypeface;
                     }
 
-                    drawTypeface = skFontManager.MatchTypeface(drawTypeface, style);
+                    drawTypeface = _skFontManager.MatchTypeface(drawTypeface, style);
 
                     if (drawTypeface != null)
                     {
@@ -111,11 +76,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 // https://github.com/mono/SkiaSharp/issues/232
                 if (!string.IsNullOrWhiteSpace(unicode) && !drawTypeface.ContainsGlyph(codepoint))
                 {
-                    var fallback = skFontManager.MatchCharacter(codepoint);
+                    var fallback = _skFontManager.MatchCharacter(codepoint);
                     if (fallback != null)
                     {
                         drawTypeface.Dispose();
-                        drawTypeface = skFontManager.MatchTypeface(fallback, style);
+                        drawTypeface = _skFontManager.MatchTypeface(fallback, style);
                     }
                 }
 
@@ -132,80 +97,103 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                    fontStyle1.Slant == fontStyle2.Slant;
         }
 
-        public bool TryGetPath(IFont font, int code, out SKPath path)
+        private static SKPath GetPathInternal(IFont font, int code)
         {
             // TODO - check if font can even have path info
 
-            var fontCache = _cache.GetOrAdd(GetFontKey(font), new ConcurrentDictionary<int, Lazy<SKPath>>());
-
-            Lazy<SKPath> glyph = fontCache.GetOrAdd(code, c =>
+            if (font.TryGetNormalisedPath(code, out var nPath))
             {
-                return new Lazy<SKPath>(() =>
+                var gp = new SKPath() { FillType = SKPathFillType.EvenOdd };
+
+                foreach (var subpath in nPath)
                 {
-                    if (font.TryGetNormalisedPath(c, out var nPath))
+                    foreach (var command in subpath.Commands)
                     {
-                        var gp = new SKPath() { FillType = SKPathFillType.EvenOdd };
-
-                        foreach (var subpath in nPath)
+                        if (command is PdfSubpath.Move move)
                         {
-                            foreach (var command in subpath.Commands)
-                            {
-                                if (command is PdfSubpath.Move move)
-                                {
-                                    gp.MoveTo((float)move.Location.X, (float)move.Location.Y);
-                                }
-                                else if (command is PdfSubpath.Line line)
-                                {
-                                    gp.LineTo((float)line.To.X, (float)line.To.Y);
-                                }
-                                else if (command is PdfSubpath.CubicBezierCurve cubic)
-                                {
-                                    gp.CubicTo((float)cubic.FirstControlPoint.X, (float)cubic.FirstControlPoint.Y,
-                                                (float)cubic.SecondControlPoint.X, (float)cubic.SecondControlPoint.Y,
-                                                (float)cubic.EndPoint.X, (float)cubic.EndPoint.Y);
-                                }
-                                else if (command is PdfSubpath.QuadraticBezierCurve quadratic)
-                                {
-                                    gp.QuadTo((float)quadratic.ControlPoint.X, (float)quadratic.ControlPoint.Y,
-                                                (float)quadratic.EndPoint.X, (float)quadratic.EndPoint.Y);
-                                }
-                                else if (command is PdfSubpath.Close)
-                                {
-                                    gp.Close();
-                                }
-                            }
+                            gp.MoveTo((float)move.Location.X, (float)move.Location.Y);
                         }
-
-                        // TODO - check/benchmark if useful to Simplify()
-                        var simplified = new SKPath();
-                        if (gp.Simplify(simplified))
+                        else if (command is PdfSubpath.Line line)
                         {
-                            gp.Dispose();
-                            return simplified;
+                            gp.LineTo((float)line.To.X, (float)line.To.Y);
                         }
-
-                        simplified.Dispose();
-                        return gp;
+                        else if (command is PdfSubpath.CubicBezierCurve cubic)
+                        {
+                            gp.CubicTo((float)cubic.FirstControlPoint.X, (float)cubic.FirstControlPoint.Y,
+                                (float)cubic.SecondControlPoint.X, (float)cubic.SecondControlPoint.Y,
+                                (float)cubic.EndPoint.X, (float)cubic.EndPoint.Y);
+                        }
+                        else if (command is PdfSubpath.QuadraticBezierCurve quadratic)
+                        {
+                            gp.QuadTo((float)quadratic.ControlPoint.X, (float)quadratic.ControlPoint.Y,
+                                (float)quadratic.EndPoint.X, (float)quadratic.EndPoint.Y);
+                        }
+                        else if (command is PdfSubpath.Close)
+                        {
+                            gp.Close();
+                        }
                     }
+                }
 
-                    return null;
-                });
-            });
+                // TODO - check/benchmark if useful to Simplify()
+                var simplified = new SKPath();
+                if (gp.Simplify(simplified))
+                {
+                    gp.Dispose();
+                    return simplified;
+                }
 
-            if (glyph.Value != null)
-            {
-                path = glyph.Value;
-                return true;
+                simplified.Dispose();
+                return gp;
             }
 
-            path = null;
-            return false;
+            return null;
         }
 
-        private static int GetFontKey(IFont font)
+        public bool TryGetPath(IFont font, int code, out SKPath path)
         {
-            return HashCode.Combine(font.Name, font.GetType().Name, font.IsVertical, font.Details.IsItalic,
-                font.Details.IsBold, font.Details.Weight);
+            ConcurrentDictionary<int, Lazy<SKPath>> fontCache = _cache.GetOrAdd(font, new ConcurrentDictionary<int, Lazy<SKPath>>());
+
+            Lazy<SKPath> glyph = fontCache.GetOrAdd(code, c => new Lazy<SKPath>(() => GetPathInternal(font, c)));
+
+            if (glyph.Value is null)
+            {
+                path = null;
+                return false;
+            }
+
+            path = glyph.Value;
+            return true;
+        }
+
+        public void Dispose()
+        {
+            _skFontManager.Dispose();
+
+            foreach (var key in _cache.Keys)
+            {
+                if (_cache.TryRemove(key, out var fontCache))
+                {
+                    foreach (var value in fontCache.Values)
+                    {
+                        value?.Value?.Dispose();
+                    }
+
+                    fontCache.Clear();
+                }
+            }
+
+            _cache.Clear();
+
+            foreach (string key in _typefaces.Keys)
+            {
+                if (_typefaces.TryRemove(key, out var typeface))
+                {
+                    typeface?.Dispose();
+                }
+            }
+
+            _typefaces.Clear();
         }
     }
 }
