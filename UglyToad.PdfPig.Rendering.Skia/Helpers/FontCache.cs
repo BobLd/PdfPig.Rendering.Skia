@@ -47,7 +47,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         return drawTypeface;
                     }
 
-                    drawTypeface = _skFontManager.MatchTypeface(drawTypeface, style);
+                    drawTypeface = _skFontManager.MatchFamily(drawTypeface.FamilyName, style);
 
                     if (drawTypeface != null)
                     {
@@ -80,7 +80,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     if (fallback != null)
                     {
                         drawTypeface.Dispose();
-                        drawTypeface = _skFontManager.MatchTypeface(fallback, style);
+                        drawTypeface = _skFontManager.MatchFamily(fallback.FamilyName, style);
                     }
                 }
 
