@@ -396,6 +396,9 @@
 	  <None Update="ExpectedImages\pdfpig_skia\Grapheme clusters emoji_1.png">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\Grapheme clusters emoji_1_win11.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\hex_0x0006_1.png">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
