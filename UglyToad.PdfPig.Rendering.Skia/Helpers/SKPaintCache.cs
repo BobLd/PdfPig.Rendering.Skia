@@ -39,7 +39,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         {
             _isAntialias = isAntialias;
             _minimumLineWidth = minimumLineWidth;
-            _antialiasingPaint = new SKPaint() { IsAntialias = _isAntialias };
+            _antialiasingPaint = new SKPaint() { IsAntialias = _isAntialias, FilterQuality = SKFilterQuality.High };
 #if DEBUG
             _imageDebugPaint = new SKPaint()
             {

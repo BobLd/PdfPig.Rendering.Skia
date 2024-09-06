@@ -53,8 +53,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 {
                     // No transformation to do
                     using (var bitmap = SKBitmap.Decode(image.GetImageBytes()))
+                    using (var p = _paintCache.GetAntialiasing().Clone())
                     {
-                        _canvas.DrawBitmap(bitmap, destRect, _paintCache.GetAntialiasing());
+                        //if (image.SoftMaskImage is not null)
+                        //{
+                        //    using (var softMaskBitmap = SKBitmap.Decode(image.SoftMaskImage.GetImageBytes()))
+                        //    {
+                        //        bitmap.ApplySoftMask(softMaskBitmap);
+                        //    }
+                        //}
+
+                        p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
+                        _canvas.DrawBitmap(bitmap, destRect, p);
                     }
                 }
                 else
@@ -65,9 +75,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     using (var bitmap = SKBitmap.Decode(image.GetImageBytes()))
                     using (new SKAutoCanvasRestore(_canvas, true))
+                    using (var p = _paintCache.GetAntialiasing().Clone())
                     {
+                        p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
                         _canvas.SetMatrix(matrix);
-                        _canvas.DrawBitmap(bitmap, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
+                        _canvas.DrawBitmap(bitmap, matrix.MapRect(destRect), p);
                     }
                 }
 

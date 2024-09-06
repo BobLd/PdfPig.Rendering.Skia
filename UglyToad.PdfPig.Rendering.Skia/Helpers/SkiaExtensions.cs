@@ -215,14 +215,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         public static SKColor ToSKColor(this IColor pdfColor, double alpha)
         {
-            var color = SKColors.Black;
             if (pdfColor is not null)
             {
                 var (r, g, b) = pdfColor.ToRGBValues();
-                color = new SKColor(Convert.ToByte(r * 255), Convert.ToByte(g * 255), Convert.ToByte(b * 255));
+                return new SKColor(Convert.ToByte(r * 255), Convert.ToByte(g * 255), Convert.ToByte(b * 255), Convert.ToByte(alpha * 255));
             }
 
-            return color.WithAlpha(Convert.ToByte(alpha * 255));
+            return SKColors.Black.WithAlpha(Convert.ToByte(alpha * 255));
         }
 
         public static SKMatrix ToSkMatrix(this TransformationMatrix transformationMatrix)
@@ -232,8 +231,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                                 0, 0, 1);
         }
 
-        /*
-        private static bool doBlending = false;
+        
+        private static bool doBlending = true;
 
         public static SKBlendMode ToSKBlendMode(this BlendMode blendMode)
         {
@@ -242,12 +241,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 return SKBlendMode.SrcOver;
             }
 
+            // https://pdfium.googlesource.com/pdfium/+/refs/heads/main/core/fxge/skia/fx_skia_device.cpp
             switch (blendMode)
             {
-                // Standard separable blend modes
-                case BlendMode.Normal:
-                case BlendMode.Compatible:
-                    return SKBlendMode.SrcOver; // TODO - Check if correct
+                // 11.3.5.2 Separable blend modes
+                case BlendMode.Normal: // aka Compatible
+                    return SKBlendMode.SrcOver;
 
                 case BlendMode.Multiply:
                     return SKBlendMode.Multiply;
@@ -282,7 +281,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 case BlendMode.Exclusion:
                     return SKBlendMode.Exclusion;
 
-                // Standard nonseparable blend modes
+                // 11.3.5.3 Non-separable blend modes
                 case BlendMode.Hue:
                     return SKBlendMode.Hue;
 
@@ -299,10 +298,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     throw new NotImplementedException($"Cannot convert blend mode '{blendMode}' to SKBlendMode.");
             }
         }
-        */
 
-        /*
-        public static void ApplySMask(this SKBitmap image, SKBitmap smask)
+        public static void ApplySoftMask(this SKBitmap image, SKBitmap smask)
         {
             // What about 'Alpha source' flag?
             SKBitmap scaled;
@@ -330,7 +327,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
             scaled.Dispose();
         }
-        */
 
         public static ReadOnlySpan<byte> GetImageBytes(this IPdfImage pdfImage)
         {

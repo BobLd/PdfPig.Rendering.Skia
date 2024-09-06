@@ -168,6 +168,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         private void PaintStrokePath(CurrentGraphicsState currentState)
         {
+            var softMask = currentState.SoftMask;
+            if (softMask is not null)
+            {
+
+            }
+
             if (currentState.CurrentStrokingColor?.ColorSpace == ColorSpace.Pattern)
             {
                 if (!(currentState.CurrentStrokingColor is PatternColor pattern))
@@ -191,7 +197,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 var paint = _paintCache.GetPaint(currentState.CurrentStrokingColor, currentState.AlphaConstantStroking, true,
                     (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
                     currentState.LineDashPattern, currentState.CurrentTransformationMatrix);
-                _canvas.DrawPath(_currentPath, paint);
+
+                using (var p = paint.Clone())
+                {
+                    p.BlendMode = currentState.BlendMode.ToSKBlendMode();
+                    _canvas.DrawPath(_currentPath, p);
+                }
 
                 /* No cache method
                 using (var paint = new SKPaint())
@@ -238,6 +249,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
+            var softMask = currentState.SoftMask;
+            if (softMask is not null)
+            {
+
+            }
+
             _currentPath.FillType = fillingRule.ToSKPathFillType();
 
             if (currentState.CurrentNonStrokingColor?.ColorSpace == ColorSpace.Pattern)
@@ -261,8 +278,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
             else
             {
                 var paint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
-                    currentState.AlphaConstantNonStroking, false, null, null, null, null, null);
-                _canvas.DrawPath(_currentPath, paint);
+                    currentState.AlphaConstantNonStroking, false, null, null, null, null, null);                
+
+                using (var p = paint.Clone())
+                {
+                    p.BlendMode = currentState.BlendMode.ToSKBlendMode();
+                    _canvas.DrawPath(_currentPath, p);
+                }
 
                 /* No cache method
                 using (SKPaint paint = new SKPaint()
