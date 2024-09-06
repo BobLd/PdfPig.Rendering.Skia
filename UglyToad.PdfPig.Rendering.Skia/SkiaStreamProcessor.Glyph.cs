@@ -143,7 +143,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     {
                         var fillBrush = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
                             null, null, null, null, null);
-                        _canvas.DrawPath(transformedPath, fillBrush);
+
+                        using (var p = fillBrush.Clone())
+                        {
+                            p.BlendMode = currentState.BlendMode.ToSKBlendMode();
+                            _canvas.DrawPath(transformedPath, p);
+                        }                       
                     }
                 }
 
@@ -153,7 +158,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
                         (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
                         currentState.LineDashPattern, currentState.CurrentTransformationMatrix);
-                    _canvas.DrawPath(transformedPath, strokePaint);
+
+                    using (var p = strokePaint.Clone())
+                    {
+                        p.BlendMode = currentState.BlendMode.ToSKBlendMode();
+                        _canvas.DrawPath(transformedPath, p);
+                    }            
                 }
             }
         }
@@ -200,6 +210,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 fontPaint.Style = style.Value;
                 fontPaint.Color = color.ToSKColor(GetCurrentState().AlphaConstantNonStroking);
                 fontPaint.IsAntialias = _antiAliasing;
+                fontPaint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
 
                 // TODO - Benchmark with SPARC - v9 Architecture Manual.pdf
                 // as _canvas.DrawShapedText(unicode, startBaseLine, fontPaint); as very slow without 'Shaper' caching

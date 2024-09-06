@@ -65,7 +65,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     using (var bitmap = image.GetSKImage())
                     using (new SKAutoCanvasRestore(_canvas, true))
+                    using (var p = _paintCache.GetAntialiasing().Clone())
                     {
+                        p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
                         _canvas.SetMatrix(matrix);
                         _canvas.DrawImage(bitmap, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
                     }
