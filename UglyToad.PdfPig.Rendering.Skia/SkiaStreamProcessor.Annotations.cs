@@ -91,7 +91,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     continue;
                 }
 
-                if (!appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Rect, out var rectToken))
+                if (!appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Rect, PdfScanner, out var rectToken))
                 {
                     // TODO - log
                     continue; // Should never happen
@@ -102,7 +102,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 PdfRectangle rect = new PdfRectangle(rectPoints[0], rectPoints[1], rectPoints[2], rectPoints[3]);
 
                 PdfRectangle? bbox = null;
-                if (appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Bbox, out var bboxToken))
+                if (appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Bbox, PdfScanner, out var bboxToken))
                 {
                     var points = bboxToken.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
                     bbox = new PdfRectangle(points[0], points[1], points[2], points[3]);
@@ -113,7 +113,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     bbox.HasValue && bbox.Value.Width > 0 && bbox.Value.Height > 0)
                 {
                     var matrix = TransformationMatrix.Identity;
-                    if (appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Matrix, out var matrixToken))
+                    if (appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Matrix, PdfScanner, out var matrixToken))
                     {
                         matrix = TransformationMatrix.FromArray(matrixToken.Data.OfType<NumericToken>()
                             .Select(x => x.Double).ToArray());
@@ -203,8 +203,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
             else if (data is DictionaryToken dictionaryToken)
             {
-                if (annotation.AnnotationDictionary.TryGet<NameToken>(NameToken.As, PdfScanner,
-                        out var appearanceState))
+                if (annotation.AnnotationDictionary.TryGet<NameToken>(NameToken.As, PdfScanner, out var appearanceState))
                 {
                     if (!dictionaryToken.TryGet(appearanceState, PdfScanner, out normalAppearance))
                     {
@@ -221,8 +220,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 }
                 else if (objectToken.Data is DictionaryToken dictionaryToken2)
                 {
-                    if (annotation.AnnotationDictionary.TryGet<NameToken>(NameToken.As, PdfScanner,
-                            out var appearanceState))
+                    if (annotation.AnnotationDictionary.TryGet<NameToken>(NameToken.As, PdfScanner, out var appearanceState))
                     {
                         if (!dictionaryToken2.TryGet(appearanceState, PdfScanner, out normalAppearance))
                         {
@@ -295,7 +293,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
 
                 PdfRectangle bbox = widget.Rectangle;
-                if (widget.AnnotationDictionary.TryGet(NameToken.Rect, out ArrayToken rect))
+                if (widget.AnnotationDictionary.TryGet(NameToken.Rect, PdfScanner, out ArrayToken rect))
                 {
                     var points = rect.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
                     bbox = new PdfRectangle(points[0], points[1], points[2], points[3]);
@@ -377,8 +375,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             PdfRectangle rect = annotation.Rectangle;
 
-            if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner,
-                    out var quadPoints))
+            if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadPoints))
             {
                 return null;
             }
@@ -501,8 +498,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDHighlightAppearanceHandler.java
             PdfRectangle rect = annotation.Rectangle;
 
-            if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner,
-                    out var quadpoints))
+            if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadpoints))
             {
                 return null;
             }
@@ -694,8 +690,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             PdfRectangle rect = annotation.Rectangle;
 
-            if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner,
-                    out var quadpoints))
+            if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadpoints))
             {
                 return null;
             }
@@ -821,8 +816,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 using (var ms = new MemoryStream())
                 {
                     double[] color = null;
-                    if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.C, PdfScanner,
-                            out var colorToken) && colorToken.Data.Count > 0)
+                    if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.C, PdfScanner, out var colorToken) &&
+                        colorToken.Data.Count > 0)
                     {
                         color = colorToken.Data.OfType<NumericToken>().Select(x => x.Data).ToArray();
                     }
@@ -840,8 +835,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     PdfRectangle borderEdge = GetPaddedRectangle(rect, (float)(lineWidth / 2.0));
 
                     float[] pathsArray = null;
-                    if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner,
-                            out var quadpoints))
+                    if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadpoints))
                     {
                         pathsArray = quadpoints?.Data?.OfType<NumericToken>().Select(x => (float)x.Double)?.ToArray();
                     }
@@ -882,8 +876,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     if (pathsArray.Length >= 8)
                     {
                         // Get border style
-                        if (annotation.AnnotationDictionary.TryGet<DictionaryToken>(NameToken.Bs, PdfScanner,
-                                out var borderStyleToken))
+                        if (annotation.AnnotationDictionary.TryGet<DictionaryToken>(NameToken.Bs, PdfScanner, out var borderStyleToken))
                         {
                             // (PDF 1.2) The dictionaries for some annotation types (such as free text and
                             // polygon annotations) can include the BS entry. That entry specifies a border
@@ -970,8 +963,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
 
                 float[] pathsArray = null;
-                if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner,
-                        out var quadpoints))
+                if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadpoints))
                 {
                     pathsArray = quadpoints.Data?.OfType<NumericToken>().Select(x => (float)x.Double)?.ToArray();
                 }

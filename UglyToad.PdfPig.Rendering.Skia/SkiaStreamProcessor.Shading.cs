@@ -412,7 +412,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var m = pattern.Matrix;
             var bbox = m.Transform(pattern.BBox);
 
-            bool hasResources = pattern.PatternStream.StreamDictionary.TryGet(NameToken.Resources, out DictionaryToken resourcesDictionary);
+            bool hasResources = pattern.PatternStream.StreamDictionary.TryGet(NameToken.Resources, PdfScanner, out DictionaryToken resourcesDictionary);
 
             if (hasResources)
             {
