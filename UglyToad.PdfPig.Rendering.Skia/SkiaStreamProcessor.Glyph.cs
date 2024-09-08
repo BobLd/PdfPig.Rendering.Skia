@@ -26,9 +26,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
     internal partial class SkiaStreamProcessor
     {
         public override void RenderGlyph(IFont font,
-            IColor strokingColor,
-            IColor nonStrokingColor,
-            TextRenderingMode textRenderingMode,
+            CurrentGraphicsState currentState,
             double fontSize,
             double pointSize,
             int code,
@@ -39,11 +37,16 @@ namespace UglyToad.PdfPig.Rendering.Skia
             in TransformationMatrix transformationMatrix,
             CharacterBoundingBox characterBoundingBox)
         {
+            var textRenderingMode = currentState.FontState.TextRenderingMode;
+
             if (!textRenderingMode.IsFill() && !textRenderingMode.IsStroke())
             {
                 // No stroke and no fill -> nothing to do
                 return;
             }
+
+            var strokingColor = currentState.CurrentStrokingColor!;
+            var nonStrokingColor = currentState.CurrentNonStrokingColor!;
 
             if (_fontCache.TryGetPath(font, code, out SKPath path))
             {
