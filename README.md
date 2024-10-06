@@ -4,7 +4,7 @@ Cross-platform library to render pdf documents as images with `PdfPig` using `Sk
 
 **This is a very early version and not everything is supported (more to come).**
 
-Available as a *Prerelease* Nuget package https://www.nuget.org/packages/PdfPig.Rendering.Skia/
+Available as a Nuget package https://www.nuget.org/packages/PdfPig.Rendering.Skia/
 
 Uses parts of [PDFBox](https://github.com/apache/pdfbox) code.
 
