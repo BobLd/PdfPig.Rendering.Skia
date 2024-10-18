@@ -23,11 +23,15 @@
 		<PackageId>PdfPig.Rendering.Skia</PackageId>
 		<Title>PdfPig.Rendering.Skia</Title>
 		<Product>PdfPig.Rendering.Skia</Product>
-		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<PackageIcon>pdfpig.png</PackageIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
+		<None Include="..\documentation\pdfpig.png">
+		  <Pack>True</Pack>
+		  <PackagePath>\</PackagePath>
+		</None>
 		<None Include="..\README.md">
 			<Pack>True</Pack>
 			<PackagePath>\</PackagePath>
