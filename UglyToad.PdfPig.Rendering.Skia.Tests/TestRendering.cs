@@ -135,6 +135,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             },
             new object[]
             {
+                "2108.11480_2.png",
+                "2108.11480.pdf", 2, 2
+            },
+            new object[]
+            {
                 "2108.11480_4.png",
                 "2108.11480.pdf", 4, 2
             },

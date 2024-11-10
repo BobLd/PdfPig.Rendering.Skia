@@ -42,6 +42,40 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             Directory.CreateDirectory(_outputPath);
         }
 
+        [Fact]
+        public void FallBackGlyphs()
+        {
+            using (var document = PdfDocument.Open(Path.Combine("Documents", "2108.11480.pdf")))
+            {
+                document.AddSkiaPageFactory();
+
+                int p = 2;
+
+                using (var fs = new FileStream(Path.Combine(_outputPath, $"2108.11480_{p}.png"), FileMode.Create))
+                using (var ms = document.GetPageAsPng(p, _scale, RGBColor.White))
+                {
+                    ms.WriteTo(fs);
+                }
+            }
+        }
+
+        [Fact]
+        public void FallBackGlyphs2()
+        {
+            using (var document = PdfDocument.Open(Path.Combine("Documents", "GHOSTSCRIPT-693073-1.pdf")))
+            {
+                document.AddSkiaPageFactory();
+
+                int p = 1;
+
+                using (var fs = new FileStream(Path.Combine(_outputPath, $"GHOSTSCRIPT-693073-1_{p}.png"), FileMode.Create))
+                using (var ms = document.GetPageAsPng(p, _scale, RGBColor.White))
+                {
+                    ms.WriteTo(fs);
+                }
+            }
+        }
+
         [Theory]
         [MemberData(nameof(GetAllDocuments))]
         public void RenderToFolder(string docPath)

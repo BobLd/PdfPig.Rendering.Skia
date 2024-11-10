@@ -50,8 +50,32 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             if (_fontCache.TryGetPath(font, code, out SKPath path))
             {
-                ShowVectorFontGlyph(path, strokingColor, nonStrokingColor, textRenderingMode, in renderingMatrix,
-                    in textMatrix, in transformationMatrix);
+                if (path.IsEmpty)
+                {
+                    // If null or whitespace, ignore
+                    if (string.IsNullOrWhiteSpace(unicode))
+                    {
+                        return;
+                    }
+
+                    // If control char, ignore
+                    for (int i = 0; i < unicode.Length; ++i)
+                    {
+                        if (char.IsControl(unicode, i))
+                        {
+                            return;
+                        }
+                    }
+
+                    ParsingOptions.Logger.Debug($"RenderGlyph: VectorFontGlyph path is empty for '{unicode}' ({font.Details}), falling back to NonVectorFontGlyph.");
+                    ShowNonVectorFontGlyph(font, strokingColor, nonStrokingColor, textRenderingMode, pointSize, unicode,
+                        in renderingMatrix, in textMatrix, in transformationMatrix, characterBoundingBox);
+                }
+                else
+                {
+                    ShowVectorFontGlyph(path, strokingColor, nonStrokingColor, textRenderingMode, in renderingMatrix,
+                        in textMatrix, in transformationMatrix);
+                }
             }
             else
             {
