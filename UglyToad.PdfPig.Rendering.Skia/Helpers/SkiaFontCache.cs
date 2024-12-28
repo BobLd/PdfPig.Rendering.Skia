@@ -17,29 +17,64 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Threading;
 using SkiaSharp;
+using SkiaSharp.HarfBuzz;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Fonts.SystemFonts;
 using UglyToad.PdfPig.PdfFonts;
 
 namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
-    internal sealed class FontCache : IDisposable
+    internal sealed class SkiaFontCache : IDisposable
     {
         private readonly ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath>>> _cache =
             new ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath>>>();
 
-        private readonly ConcurrentDictionary<string, SKTypeface> _typefaces =
-            new ConcurrentDictionary<string, SKTypeface>();
+        private readonly ConcurrentDictionary<string, SkiaFontCacheItem> _typefaces =
+            new ConcurrentDictionary<string, SkiaFontCacheItem>();
 
         private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
 
         private readonly SKFontManager _skFontManager = SKFontManager.CreateDefault();
 
-        public SKTypeface GetTypefaceOrFallback(IFont font, string unicode)
+        internal sealed class SkiaFontCacheItem : IDisposable
+        {
+            public SkiaFontCacheItem(SKTypeface typeface)
+            {
+                if (typeface is null)
+                {
+                    throw new ArgumentNullException(nameof(typeface));
+                }
+
+                Typeface = typeface;
+                Shaper = new SKShaper(Typeface);
+            }
+
+            public SKTypeface Typeface { get; }
+
+            public SKShaper Shaper { get; }
+
+            public void Dispose()
+            {
+                Typeface.Dispose();
+                Shaper.Dispose();
+            }
+        }
+
+        private static string GetFontKey(IFont font)
+        {
+            if (string.IsNullOrEmpty(font.Name?.Data))
+            {
+                throw new NullReferenceException("The font's name is null.");
+            }
+
+            return $"{font.Name.Data}|{(font.Details.IsBold ? (byte)1 : (byte)0)}|{(font.Details.IsItalic ? (byte)1 : (byte)0)}";
+        }
+
+        public SkiaFontCacheItem GetTypefaceOrFallback(IFont font, string unicode)
         {
             if (IsDisposed())
             {
-                throw new ObjectDisposedException(nameof(FontCache));
+                throw new ObjectDisposedException(nameof(SkiaFontCache));
             }
 
             _lock.EnterReadLock();
@@ -47,62 +82,56 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             {
                 if (IsDisposed())
                 {
-                    throw new ObjectDisposedException(nameof(FontCache));
+                    throw new ObjectDisposedException(nameof(SkiaFontCache));
+                }
+
+                string fontKey = GetFontKey(font);
+
+                var codepoint = BitConverter.ToInt32(Encoding.UTF32.GetBytes(unicode), 0);
+
+                if (_typefaces.TryGetValue(fontKey, out SkiaFontCacheItem skiaFontCacheItem) &&
+                    (string.IsNullOrWhiteSpace(unicode) || skiaFontCacheItem.Typeface.ContainsGlyph(codepoint))) // Check if can render
+                {
+                    return skiaFontCacheItem;
                 }
 
                 using (var style = font.Details.GetFontStyle())
                 {
-                    var codepoint = BitConverter.ToInt32(Encoding.UTF32.GetBytes(unicode), 0);
-
-                    if (_typefaces.TryGetValue(font.Name, out SKTypeface drawTypeface) && drawTypeface != null &&
-                        (string.IsNullOrWhiteSpace(unicode) ||
-                         drawTypeface.ContainsGlyph(codepoint))) // Check if can render
-                    {
-                        if (FontStyleEquals(drawTypeface.FontStyle, style))
-                        {
-                            return drawTypeface;
-                        }
-
-                        drawTypeface = _skFontManager.MatchFamily(drawTypeface.FamilyName, style);
-
-                        if (drawTypeface != null)
-                        {
-                            return drawTypeface;
-                        }
-                    }
-
                     string cleanFontName = font.GetCleanFontName();
 
-                    drawTypeface = SKTypeface.FromFamilyName(cleanFontName, style);
-
-                    if (drawTypeface.FamilyName.Equals(SKTypeface.Default.FamilyName))
+                    var typeface = SKTypeface.FromFamilyName(cleanFontName, style);
+                    if (typeface.FamilyName.Equals(SKTypeface.Default.FamilyName))
                     {
                         var trueTypeFont = SystemFontFinder.Instance.GetTrueTypeFont(cleanFontName);
 
-                        if (trueTypeFont != null &&
-                            !string.IsNullOrEmpty(trueTypeFont.TableRegister.NameTable.FontFamilyName))
+                        string? fontFamilyName = trueTypeFont?.TableRegister?.NameTable?.FontFamilyName;
+
+                        if (!string.IsNullOrEmpty(fontFamilyName))
                         {
-                            drawTypeface.Dispose();
-                            drawTypeface =
-                                SKTypeface.FromFamilyName(trueTypeFont.TableRegister.NameTable.FontFamilyName, style);
+                            typeface.Dispose();
+                            typeface = SKTypeface.FromFamilyName(fontFamilyName, style);
                         }
                     }
 
                     // Fallback font
                     // https://github.com/mono/SkiaSharp/issues/232
-                    if (!string.IsNullOrWhiteSpace(unicode) && !drawTypeface.ContainsGlyph(codepoint))
+                    if (!string.IsNullOrWhiteSpace(unicode) && !typeface.ContainsGlyph(codepoint))
                     {
                         var fallback = _skFontManager.MatchCharacter(codepoint); // Access violation here
                         if (fallback != null)
                         {
-                            drawTypeface.Dispose();
-                            drawTypeface = _skFontManager.MatchFamily(fallback.FamilyName, style);
+                            typeface.Dispose();
+                            typeface = _skFontManager.MatchFamily(fallback.FamilyName, style);
                         }
                     }
 
-                    _typefaces[font.Name] = drawTypeface;
+                    skiaFontCacheItem = new SkiaFontCacheItem(typeface);
 
-                    return drawTypeface;
+                    System.Diagnostics.Debug.Assert(!_typefaces.ContainsKey(fontKey));
+
+                    _typefaces[fontKey] = skiaFontCacheItem;
+
+                    return skiaFontCacheItem;
                 }
             }
             finally
@@ -112,13 +141,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     _lock.ExitReadLock();
                 }
             }
-        }
-
-        private static bool FontStyleEquals(SKFontStyle fontStyle1, SKFontStyle fontStyle2)
-        {
-            return fontStyle1.Width == fontStyle2.Width &&
-                   fontStyle1.Weight == fontStyle2.Weight &&
-                   fontStyle1.Slant == fontStyle2.Slant;
         }
 
         private static SKPath GetPathInternal(IFont font, int code)

@@ -34,7 +34,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
     /// </summary>
     public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
     {
-        private readonly FontCache _fontCache;
+        private readonly SkiaFontCache _fontCache;
 
         /// <summary>
         /// <see cref="SkiaPageFactory"/> constructor.
@@ -47,7 +47,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             ParsingOptions parsingOptions)
             : base(pdfScanner, resourceStore, filterProvider, pageContentParser, parsingOptions)
         {
-            _fontCache = new FontCache();
+            _fontCache = new SkiaFontCache();
         }
 
         /// <inheritdoc/>

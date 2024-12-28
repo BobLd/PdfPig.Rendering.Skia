@@ -192,15 +192,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             float skew = ComputeSkewX(transformedPdfBounds);
 
-            using (var drawTypeface = _fontCache.GetTypefaceOrFallback(font, unicode))
-            using (var skFont = drawTypeface.ToFont((float)pointSize, 1f, -skew))
+            var drawTypeface = _fontCache.GetTypefaceOrFallback(font, unicode);
+
+            using (var skFont = drawTypeface.Typeface.ToFont((float)pointSize, 1f, -skew))
             using (var fontPaint = new SKPaint(skFont))
             {
                 fontPaint.Style = style.Value;
                 fontPaint.Color = color.ToSKColor(GetCurrentState().AlphaConstantNonStroking);
                 fontPaint.IsAntialias = _antiAliasing;
 
-                _canvas.DrawShapedText(unicode, startBaseLine, fontPaint);
+                // TODO - Benchmark with SPARC - v9 Architecture Manual.pdf
+                // as _canvas.DrawShapedText(unicode, startBaseLine, fontPaint); as very slow without 'Shaper' caching
+                _canvas.DrawShapedText(drawTypeface.Shaper, unicode, startBaseLine, fontPaint);
                 _canvas.ResetMatrix();
             }
         }

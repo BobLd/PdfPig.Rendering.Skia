@@ -47,7 +47,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </summary>
         private readonly SKMatrix _yAxisFlipMatrix;
 
-        private readonly FontCache _fontCache;
+        private readonly SkiaFontCache _fontCache;
         private readonly SKPaintCache _paintCache = new SKPaintCache(_antiAliasing, _minimumLineWidth);
 
         private readonly AnnotationProvider _annotationProvider;
@@ -64,7 +64,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             TransformationMatrix initialMatrix,
             ParsingOptions parsingOptions,
             AnnotationProvider annotationProvider,
-            FontCache fontCache)
+            SkiaFontCache fontCache)
             : base(pageNumber,
                 resourceStore,
                 pdfScanner,
