@@ -125,9 +125,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         }
                     }
 
+                    if (skiaFontCacheItem is not null && typeface.Equals(skiaFontCacheItem.Typeface))
+                    {
+                        // TODO - We might want to improve the equality check here
+                        // This is the best we could find, might not render properly though (see MOZILLA-3136-0.pdf)
+                        return skiaFontCacheItem;
+                    }
+
                     skiaFontCacheItem = new SkiaFontCacheItem(typeface);
 
-                    System.Diagnostics.Debug.Assert(!_typefaces.ContainsKey(fontKey));
+                    System.Diagnostics.Debug.Assert(!_typefaces.ContainsKey(fontKey)); // Issue with MOZILLA-3136-0.pdf
 
                     _typefaces[fontKey] = skiaFontCacheItem;
 
