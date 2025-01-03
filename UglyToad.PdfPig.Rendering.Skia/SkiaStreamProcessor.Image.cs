@@ -52,9 +52,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 if (CurrentTransformationMatrix.A > 0 && CurrentTransformationMatrix.D > 0)
                 {
                     // No transformation to do
-                    using (var bitmap = SKBitmap.Decode(image.GetImageBytes()))
+                    using (var bitmap = image.GetSKImage())
                     {
-                        _canvas.DrawBitmap(bitmap, destRect, _paintCache.GetAntialiasing());
+                        _canvas.DrawImage(bitmap, destRect, _paintCache.GetAntialiasing());
                     }
                 }
                 else
@@ -63,11 +63,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         Math.Sign(CurrentTransformationMatrix.A),
                         Math.Sign(CurrentTransformationMatrix.D));
 
-                    using (var bitmap = SKBitmap.Decode(image.GetImageBytes()))
+                    using (var bitmap = image.GetSKImage())
                     using (new SKAutoCanvasRestore(_canvas, true))
                     {
                         _canvas.SetMatrix(matrix);
-                        _canvas.DrawBitmap(bitmap, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
+                        _canvas.DrawImage(bitmap, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
                     }
                 }
 

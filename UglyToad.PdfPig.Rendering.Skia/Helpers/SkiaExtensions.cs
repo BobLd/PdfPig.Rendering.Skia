@@ -14,7 +14,6 @@
 
 using System;
 using SkiaSharp;
-using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Graphics.Core;
@@ -338,23 +337,5 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             scaled.Dispose();
         }
         */
-
-        public static ReadOnlySpan<byte> GetImageBytes(this IPdfImage pdfImage)
-        {
-            // Try get png bytes
-            if (pdfImage.TryGetPng(out byte[]? bytes) && bytes?.Length > 0)
-            {
-                return bytes;
-            }
-
-            // Fallback to bytes
-            if (pdfImage.TryGetBytesAsMemory(out var bytesL) && bytesL.Length > 0)
-            {
-                return bytesL.Span;
-            }
-
-            // Fallback to raw bytes
-            return pdfImage.RawBytes;
-        }
     }
 }
