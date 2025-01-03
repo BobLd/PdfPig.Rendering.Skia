@@ -85,7 +85,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <summary>
         /// This is very hackish, should never happen.
         /// </summary>
-        private static void fixIncorrectValues(double[] v, double[] domain)
+        private static void fixIncorrectValues(Span<double> v, double[] domain)
         {
             for (int i = 0; i < v.Length; i++)
             {
@@ -138,7 +138,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             for (int t = 0; t <= factor; t++)
             {
                 double tx = t0 + (t / (double)factor * t1);
-                double[] v = shading.Eval(tx);
+                var v = shading.Eval([tx]);
 
                 fixIncorrectValues(v, domain); // This is a hack, this should never happen
 
@@ -226,7 +226,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             for (int t = 0; t <= factor; t++)
             {
                 double tx = t0 + (t / (double)factor * t1);
-                double[] v = shading.Eval(tx);
+                var v = shading.Eval([tx]);
 
                 fixIncorrectValues(v, domain); // This is a hack, this should never happen, see GHOSTSCRIPT-693154-0
 
@@ -304,7 +304,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 for (int y = 0; y <= factor; y++)
                 {
                     double ty = ymin + (y / (double)factor * ymax);
-                    double[] v = shading.Eval(tx, ty);
+                    var v = shading.Eval([tx, ty]);
 
                     fixIncorrectValues(v, domain); // This is a hack, this should never happen
 
