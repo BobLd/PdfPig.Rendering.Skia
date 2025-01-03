@@ -24,6 +24,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
     internal static class SkiaExtensions
     {
+        private static readonly string DefaultFamilyName = SKTypeface.Default.FamilyName;
+
+        public static bool IsDefault(this SKTypeface typeface)
+        {
+            return typeface.FamilyName.Equals(DefaultFamilyName);
+        }
+
         public static SKFontStyle GetFontStyle(this FontDetails fontDetails)
         {
             if (fontDetails.IsBold && fontDetails.IsItalic)
