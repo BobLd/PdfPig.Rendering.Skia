@@ -26,7 +26,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
     internal static class SkiaImageExtensions
     {
         // https://stackoverflow.com/questions/50312937/skiasharp-tiff-support#50370515
-        private static bool TryGenerate(this IPdfImage image, [NotNullWhen(true)] out SKBitmap? bitmap)
+        private static bool TryGenerate(this IPdfImage image, [NotNullWhen(true)] out SKImage? bitmap)
         {
             bitmap = null;
 
@@ -72,10 +72,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 {
                     return TryGetGray8Bitmap(image.WidthInSamples, image.HeightInSamples, bytesPure, out bitmap);
                 }
-
-                // Output bitmap will be RGBA (for the moment, we can optimise for grayscale images)
-                bitmap = new SKBitmap();
-
+                
                 var info = new SKImageInfo(image.WidthInSamples, image.HeightInSamples, SKColorType.Rgba8888);
 
                 // create the buffer that will hold the pixels
@@ -91,12 +88,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 // get a pointer to the buffer, and give it to the bitmap
                 var ptr = GCHandle.Alloc(raster, GCHandleType.Pinned);
 
-                if (!bitmap.InstallPixels(info, ptr.AddrOfPinnedObject(), info.RowBytes, (addr, ctx) => ptr.Free()))
+                using (SKPixmap pixmap = new SKPixmap(info, ptr.AddrOfPinnedObject(), info.RowBytes))
                 {
-                    bitmap.Dispose();
-                    return false;
+                    bitmap = SKImage.FromPixels(pixmap, (addr, ctx) => ptr.Free());
                 }
-
+                
                 byte alpha = byte.MaxValue;
                 if (image.ColorSpaceDetails.BaseType == ColorSpace.DeviceCMYK || numberOfComponents == 4)
                 {
@@ -150,26 +146,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return false;
         }
 
-        private static bool TryGetGray8Bitmap(int width, int height, ReadOnlySpan<byte> bytesPure, out SKBitmap? bitmap)
+        private static bool TryGetGray8Bitmap(int width, int height, ReadOnlySpan<byte> bytesPure, out SKImage? bitmap)
         {
             bitmap = null;
 
             try
             {
-                var info = new SKImageInfo(width, height, SKColorType.Gray8);
-                // get a pointer to the buffer, and give it to the bitmap
-                //var ptr = GCHandle.Alloc(bytesPure.GetPinnableReference(), GCHandleType.Pinned);
-
-                byte[] raster = bytesPure.ToArray(); // TODO - we should aim at avoiding alloc here
-                var ptr = GCHandle.Alloc(raster, GCHandleType.Pinned);
-
-                bitmap = new SKBitmap();
-                if (!bitmap.InstallPixels(info, ptr.AddrOfPinnedObject(), info.RowBytes, (addr, ctx) => ptr.Free()))
-                {
-                    bitmap.Dispose();
-                    return false;
-                }
-
+                bitmap = SKImage.FromPixelCopy(new SKImageInfo(width, height, SKColorType.Gray8), bytesPure);
                 return true;
             }
             catch (Exception)
@@ -233,7 +216,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
         }
 
-        public static SKBitmap GetSKImage(this IPdfImage pdfImage)
+        public static SKImage GetSKImage(this IPdfImage pdfImage)
         {
             // Try get png bytes
             if (pdfImage.TryGenerate(out var bitmap))
@@ -246,7 +229,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             {
                 try
                 {
-                    return SKBitmap.Decode(bytesL.Span);
+                    return SKImage.FromEncodedData(bytesL.Span);
                 }
                 catch (Exception)
                 {
@@ -255,7 +238,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
 
             // Fallback to raw bytes
-            return SKBitmap.Decode(pdfImage.RawBytes);
+            return SKImage.FromEncodedData(pdfImage.RawBytes);
         }
 
         public static ReadOnlySpan<byte> GetImageBytes(this IPdfImage pdfImage)

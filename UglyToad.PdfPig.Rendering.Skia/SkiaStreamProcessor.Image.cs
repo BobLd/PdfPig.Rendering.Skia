@@ -54,7 +54,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     // No transformation to do
                     using (var bitmap = image.GetSKImage())
                     {
-                        _canvas.DrawBitmap(bitmap, destRect, _paintCache.GetAntialiasing());
+                        _canvas.DrawImage(bitmap, destRect, _paintCache.GetAntialiasing());
                     }
                 }
                 else
@@ -67,7 +67,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     using (new SKAutoCanvasRestore(_canvas, true))
                     {
                         _canvas.SetMatrix(matrix);
-                        _canvas.DrawBitmap(bitmap, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
+                        _canvas.DrawImage(bitmap, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
                     }
                 }
 
