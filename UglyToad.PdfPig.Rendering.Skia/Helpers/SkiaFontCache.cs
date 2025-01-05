@@ -95,6 +95,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     return skiaFontCacheItem;
                 }
 
+                // Cannot find font ZapfDingbats MOZILLA-LINK-5251-1
+
                 using (var style = font.Details.GetFontStyle())
                 {
                     string cleanFontName = font.GetCleanFontName();
@@ -134,7 +136,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                     skiaFontCacheItem = new SkiaFontCacheItem(typeface);
 
-                    System.Diagnostics.Debug.Assert(!_typefaces.ContainsKey(fontKey)); // Issue with MOZILLA-3136-0.pdf
+                    System.Diagnostics.Debug.Assert(!_typefaces.ContainsKey(fontKey)); // Issue with MOZILLA-3136-0.pdf 
+
+                    // MOZILLA-LINK-625-0 ("BVNSKD+wasy10|0|0") ; test-2_so_74165171.pdf ("NHVBQA+NotoSansHK-Thin|0|0"); cmap-parsing-exception; ssm2163
+                    // GHOSTSCRIPT-698363-0
 
                     _typefaces[fontKey] = skiaFontCacheItem;
 
