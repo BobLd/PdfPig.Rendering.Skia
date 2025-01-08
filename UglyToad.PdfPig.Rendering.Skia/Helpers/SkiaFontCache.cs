@@ -140,7 +140,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                     // MOZILLA-LINK-625-0 ("BVNSKD+wasy10|0|0") ; test-2_so_74165171.pdf ("NHVBQA+NotoSansHK-Thin|0|0"); cmap-parsing-exception; ssm2163
                     // GHOSTSCRIPT-698363-0
-
+                    // Type0_CJK_Font.pdf
                     _typefaces[fontKey] = skiaFontCacheItem;
 
                     return skiaFontCacheItem;

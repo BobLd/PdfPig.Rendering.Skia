@@ -43,6 +43,24 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             try
             {
+                SKColor[]? maskArray = null;
+                if (image.Mask is not null && image.Mask.Length == image.ColorSpaceDetails!.NumberOfColorComponents * 2)
+                {
+                    Span<byte> v = stackalloc byte[1];
+
+                    for (int i = 0; i < image.Mask.Length; i += 2)
+                    {
+                        v[0] = (byte)image.Mask[i];
+                        var min = ColorSpaceDetailsByteConverter.Convert(image.ColorSpaceDetails!, v, 8, 1, 1);
+
+                        v[0] = (byte)image.Mask[i + 1];
+                        var max = ColorSpaceDetailsByteConverter.Convert(image.ColorSpaceDetails!, v, 8, 1, 1);
+
+                        maskArray = [new SKColor(min[0], min[1], min[2]), new SKColor(max[0], max[1], max[2])];
+                        break;
+                    }
+                }
+
                 bytesPure = ColorSpaceDetailsByteConverter.Convert(image.ColorSpaceDetails!, bytesPure,
                     image.BitsPerComponent, image.WidthInSamples, image.HeightInSamples);
 
@@ -125,6 +143,37 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 if (is3Byte)
                 {
                     int i = 0;
+                    if (maskArray is not null)
+                    {
+                        // TODO - Investigate doing that the builder is done (data will always be in rgb)
+                        // NB - This is still not fully accurate as this should be applied before 
+                        // ColorSpaceDetailsByteConverter.Convert(...)
+
+                        var minColor = maskArray[0];
+                        var maxColor = maskArray[1];
+
+                        for (int col = 0; col < image.HeightInSamples; col++)
+                        {
+                            for (int row = 0; row < image.WidthInSamples; row++)
+                            {
+                                byte r = bytesPure[i++];
+                                byte g = bytesPure[i++];
+                                byte b = bytesPure[i++];
+
+                                if (IsBetween(ref r, ref g, ref b, ref minColor, ref maxColor))
+                                {
+                                    builder.SetPixel(0, 0, 0, 0, row, col);
+                                }
+                                else
+                                {
+                                    builder.SetPixel(r, g, b, alpha, row, col);
+                                }
+                            }
+                        }
+
+                        return true;
+                    }
+
                     for (int col = 0; col < image.HeightInSamples; col++)
                     {
                         for (int row = 0; row < image.WidthInSamples; row++)
@@ -132,6 +181,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             builder.SetPixel(bytesPure[i++], bytesPure[i++], bytesPure[i++], alpha, row, col);
                         }
                     }
+
                     return true;
                 }
 
@@ -144,6 +194,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             bitmap?.Dispose();
             return false;
+        }
+
+        private static bool IsBetween(ref readonly byte r, ref readonly byte g, ref readonly byte b, ref readonly SKColor min, ref readonly SKColor max)
+        {
+            return min.Red <= r && r <= max.Red &&
+                   min.Green <= g && g <= max.Green &&
+                   min.Blue <= b && b <= max.Blue;
         }
 
         private static bool TryGetGray8Bitmap(int width, int height, ReadOnlySpan<byte> bytesPure, out SKImage? bitmap)
