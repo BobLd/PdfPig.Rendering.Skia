@@ -14,6 +14,8 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using SkiaSharp;
@@ -26,16 +28,18 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
     internal sealed class SkiaFontCache : IDisposable
     {
+        private static readonly Lazy<SkiaFontCacheItem> DefaultSkiaFontCacheItem = new Lazy<SkiaFontCacheItem>(() => new SkiaFontCacheItem(SKTypeface.Default));
+
         private readonly ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath>>> _cache =
             new ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath>>>();
 
-        private readonly ConcurrentDictionary<string, SkiaFontCacheItem> _typefaces =
-            new ConcurrentDictionary<string, SkiaFontCacheItem>();
+        private readonly ConcurrentDictionary<string, List<SkiaFontCacheItem>> _typefaces =
+            new ConcurrentDictionary<string, List<SkiaFontCacheItem>>();
 
         private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
 
         private readonly SKFontManager _skFontManager = SKFontManager.CreateDefault();
-
+        
         internal sealed class SkiaFontCacheItem : IDisposable
         {
             public SkiaFontCacheItem(SKTypeface typeface)
@@ -88,13 +92,19 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 string fontKey = GetFontKey(font);
 
                 var codepoint = BitConverter.ToInt32(Encoding.UTF32.GetBytes(unicode), 0);
-
-                if (_typefaces.TryGetValue(fontKey, out SkiaFontCacheItem skiaFontCacheItem) &&
-                    (string.IsNullOrWhiteSpace(unicode) || skiaFontCacheItem.Typeface.ContainsGlyph(codepoint))) // Check if can render
+                
+                if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem> skiaFontCacheItems))
                 {
-                    return skiaFontCacheItem;
+                    // Check if can render
+                    foreach (var skiaFontCacheItem in skiaFontCacheItems)
+                    {
+                        if (string.IsNullOrWhiteSpace(unicode) || skiaFontCacheItem.Typeface.ContainsGlyph(codepoint))
+                        {
+                            return skiaFontCacheItem;
+                        }
+                    }
                 }
-
+                
                 // Cannot find font ZapfDingbats MOZILLA-LINK-5251-1
 
                 using (var style = font.Details.GetFontStyle())
@@ -124,24 +134,45 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         {
                             typeface.Dispose();
                             typeface = _skFontManager.MatchFamily(fallback.FamilyName, style);
+                            fallback.Dispose();
                         }
                     }
 
-                    if (skiaFontCacheItem is not null && typeface.Equals(skiaFontCacheItem.Typeface))
+                    SkiaFontCacheItem? skiaFontCacheItem;
+                    if (skiaFontCacheItems is not null)
                     {
-                        // TODO - We might want to improve the equality check here
-                        // This is the best we could find, might not render properly though (see MOZILLA-3136-0.pdf)
-                        return skiaFontCacheItem;
+                        skiaFontCacheItem = skiaFontCacheItems.FirstOrDefault(x => x.Typeface.Equals(typeface));
+                        if (skiaFontCacheItem != null)
+                        {
+                            // TODO - We might want to improve the equality check here
+                            // This is the best we could find, might not render properly though (see MOZILLA-3136-0.pdf)
+                            return skiaFontCacheItem;
+                        }
                     }
 
-                    skiaFontCacheItem = new SkiaFontCacheItem(typeface);
+                    if (typeface.FamilyName.Equals(SKTypeface.Default.FamilyName))
+                    {
+                        skiaFontCacheItem = DefaultSkiaFontCacheItem.Value;
+                    }
+                    else
+                    {
+                        skiaFontCacheItem = new SkiaFontCacheItem(typeface);
+                    }
 
-                    System.Diagnostics.Debug.Assert(!_typefaces.ContainsKey(fontKey)); // Issue with MOZILLA-3136-0.pdf 
-
-                    // MOZILLA-LINK-625-0 ("BVNSKD+wasy10|0|0") ; test-2_so_74165171.pdf ("NHVBQA+NotoSansHK-Thin|0|0"); cmap-parsing-exception; ssm2163
+                    // MOZILLA-LINK-625-0 ("BVNSKD+wasy10|0|0") ;
+                    // test-2_so_74165171.pdf ("NHVBQA+NotoSansHK-Thin|0|0");
+                    // cmap-parsing-exception;
+                    // ssm2163
                     // GHOSTSCRIPT-698363-0
                     // Type0_CJK_Font.pdf
-                    _typefaces[fontKey] = skiaFontCacheItem;
+
+                    if (skiaFontCacheItems is null)
+                    {
+                        skiaFontCacheItems = new List<SkiaFontCacheItem>();
+                        _typefaces[fontKey] = skiaFontCacheItems;
+                    }
+
+                    skiaFontCacheItems.Add(skiaFontCacheItem);
 
                     return skiaFontCacheItem;
                 }
@@ -265,7 +296,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 {
                     if (_typefaces.TryRemove(key, out var typeface))
                     {
-                        typeface?.Dispose();
+                        foreach (SkiaFontCacheItem item in typeface)
+                        {
+                            item.Dispose();
+                        }
                     }
                 }
 
