@@ -106,7 +106,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 // GHOSTSCRIPT-698363-0
                 // Type0_CJK_Font.pdf
 
-                return CacheTypeface(fontKey, currentTypeface);
+                return SetFontCacheItem(fontKey, currentTypeface);
             }
             finally
             {
@@ -143,7 +143,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return false;
         }
 
-        private SkiaFontCacheItem CacheTypeface(string fontKey, SKTypeface typeface)
+        private SkiaFontCacheItem SetFontCacheItem(string fontKey, SKTypeface typeface)
         {
             if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem> skiaFontCacheItems))
             {
@@ -197,8 +197,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         private bool IsDisposed()
         {
             return Interlocked.Read(ref _isDisposed) != 0;
-
         }
+
         private long _isDisposed;
 
         public void Dispose()
