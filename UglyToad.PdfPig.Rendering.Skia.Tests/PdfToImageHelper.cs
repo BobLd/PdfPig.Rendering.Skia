@@ -120,7 +120,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                     throw new NullReferenceException("Could not load expected image.");
                 }
 
-                using (var document = PdfDocument.Open(docPath))
+                using (var document = PdfDocument.Open(docPath, SkiaRenderingParsingOptions.Instance))
                 {
                     document.AddSkiaPageFactory();
                     using (var actual = document.GetPageAsSKBitmap(pageNumber, scale, RGBColor.White))
@@ -188,7 +188,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                     throw new NullReferenceException("Could not load expected image.");
                 }
 
-                using (var document = PdfDocument.Open(docPath))
+                using (var document = PdfDocument.Open(docPath, SkiaRenderingParsingOptions.Instance))
                 {
                     document.AddSkiaPageFactory();
                     using (var actual = document.GetPageAsSKBitmap(pageNumber, scale, RGBColor.White))

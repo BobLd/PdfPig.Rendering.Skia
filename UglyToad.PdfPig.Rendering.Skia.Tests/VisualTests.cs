@@ -45,7 +45,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         [Fact]
         public void FallBackGlyphs()
         {
-            using (var document = PdfDocument.Open(Path.Combine("Documents", "2108.11480.pdf")))
+            using (var document = PdfDocument.Open(Path.Combine("Documents", "2108.11480.pdf"), SkiaRenderingParsingOptions.Instance))
             {
                 document.AddSkiaPageFactory();
 
@@ -62,7 +62,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         [Fact]
         public void FallBackGlyphs2()
         {
-            using (var document = PdfDocument.Open(Path.Combine("Documents", "GHOSTSCRIPT-693073-1.pdf")))
+            using (var document = PdfDocument.Open(Path.Combine("Documents", "GHOSTSCRIPT-693073-1.pdf"), SkiaRenderingParsingOptions.Instance))
             {
                 document.AddSkiaPageFactory();
 
@@ -82,7 +82,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         {
             string rootName = docPath.Substring(0, docPath.Length - 4);
 
-            using (var document = PdfDocument.Open(Path.Combine("Documents", docPath)))
+            using (var document = PdfDocument.Open(Path.Combine("Documents", docPath), SkiaRenderingParsingOptions.Instance))
             {
                 document.AddSkiaPageFactory();
 
