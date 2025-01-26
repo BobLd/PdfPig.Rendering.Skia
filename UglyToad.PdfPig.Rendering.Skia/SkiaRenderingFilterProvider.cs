@@ -18,6 +18,14 @@ using UglyToad.PdfPig.Filters.Dct.JpegLibrary;
 using UglyToad.PdfPig.Filters.Jbig2.PdfboxJbig2;
 using UglyToad.PdfPig.Filters.Jpx.OpenJpeg;
 using UglyToad.PdfPig.Tokens;
+After:
+using UglyToad.PdfPig.Rendering;
+using UglyToad.PdfPig.Rendering.Skia;
+using UglyToad.PdfPig.Rendering.Skia;
+using UglyToad.PdfPig.Rendering.Skia.Helpers;
+using UglyToad.PdfPig.Tokens;
+*/
+using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia
 {
@@ -36,6 +44,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
         }
 
+
         private static Dictionary<string, IFilter> GetDictionary()
         {
             // New filters
@@ -47,7 +56,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var ascii85 = new Ascii85Filter();
             var asciiHex = new AsciiHexDecodeFilter();
             var ccitt = new CcittFaxDecodeFilter();
+            var dct = new JpegLibraryDctDecodeFilter(); // new filter
             var flate = new FlateFilter();
+            var jbig2 = new PdfboxJbig2DecodeFilter();
+            var jpx = new JpxDecodeFilter();
             var runLength = new RunLengthFilter();
             var lzw = new LzwFilter();
 
