@@ -54,6 +54,8 @@
 	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Tokenization\UglyToad.PdfPig.Tokenization.csproj" />
 	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Tokens\UglyToad.PdfPig.Tokens.csproj" />
 	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig\UglyToad.PdfPig.csproj" />
+	  <ProjectReference Include="..\..\UglyToad.PdfPig.Filters.Dct.JpegLibrary\UglyToad.PdfPig.Filters.Dct.JpegLibrary\UglyToad.PdfPig.Filters.Dct.JpegLibrary.csproj" />
+	  <ProjectReference Include="..\..\UglyToad.PdfPig.Filters.Jbig2.PdfboxJbig2\UglyToad.PdfPig.Filters.Jbig2.PdfboxJbig2\UglyToad.PdfPig.Filters.Jbig2.PdfboxJbig2.csproj" />
 	</ItemGroup>
 
 </Project>
