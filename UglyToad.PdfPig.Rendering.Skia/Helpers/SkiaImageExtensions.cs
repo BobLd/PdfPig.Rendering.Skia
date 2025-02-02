@@ -240,7 +240,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 if (rawData.Length != length)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(rawData.Length), "TestBuilder.Create");
+                    throw new ArgumentOutOfRangeException(nameof(rawData.Length), "ImageBuilder.Create");
                 }
 
                 return new ImageBuilder(rawData, hasAlphaChannel, width, height, bpp);
