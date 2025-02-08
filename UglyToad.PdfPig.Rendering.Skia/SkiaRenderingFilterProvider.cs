@@ -16,17 +16,6 @@ using System.Collections.Generic;
 using UglyToad.PdfPig.Filters;
 using UglyToad.PdfPig.Filters.Dct.JpegLibrary;
 using UglyToad.PdfPig.Filters.Jbig2.PdfboxJbig2;
-
-/* Unmerged change from project 'UglyToad.PdfPig.Rendering.Skia (net6.0)'
-Before:
-using UglyToad.PdfPig.Tokens;
-After:
-using UglyToad.PdfPig.Rendering;
-using UglyToad.PdfPig.Rendering.Skia;
-using UglyToad.PdfPig.Rendering.Skia;
-using UglyToad.PdfPig.Rendering.Skia.Helpers;
-using UglyToad.PdfPig.Tokens;
-*/
 using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia

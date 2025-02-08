@@ -203,7 +203,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 // TODO - Benchmark with SPARC - v9 Architecture Manual.pdf
                 // as _canvas.DrawShapedText(unicode, startBaseLine, fontPaint); as very slow without 'Shaper' caching
-                _canvas.DrawShapedText(drawTypeface.Shaper, unicode, startBaseLine, fontPaint);
+                _canvas.DrawShapedText(drawTypeface.Shaper, unicode, startBaseLine, fontPaint); // TODO - System.AccessViolationException
                 _canvas.ResetMatrix();
             }
         }
