@@ -16,6 +16,7 @@ using System.Collections.Generic;
 using UglyToad.PdfPig.Filters;
 using UglyToad.PdfPig.Filters.Dct.JpegLibrary;
 using UglyToad.PdfPig.Filters.Jbig2.PdfboxJbig2;
+using UglyToad.PdfPig.Filters.Jpx.OpenJpeg;
 using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia
@@ -44,7 +45,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var dct = new JpegLibraryDctDecodeFilter(); // new filter
             var flate = new FlateFilter();
             var jbig2 = new PdfboxJbig2DecodeFilter();
-            var jpx = new JpxDecodeFilter();
+            var jpx = new OpenJpegJpxDecodeFilter();
             var runLength = new RunLengthFilter();
             var lzw = new LzwFilter();
 
