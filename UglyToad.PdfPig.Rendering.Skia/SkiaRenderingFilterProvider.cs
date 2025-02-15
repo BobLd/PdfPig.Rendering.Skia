@@ -16,17 +16,7 @@ using System.Collections.Generic;
 using UglyToad.PdfPig.Filters;
 using UglyToad.PdfPig.Filters.Dct.JpegLibrary;
 using UglyToad.PdfPig.Filters.Jbig2.PdfboxJbig2;
-
-/* Unmerged change from project 'UglyToad.PdfPig.Rendering.Skia (net6.0)'
-Before:
-using UglyToad.PdfPig.Tokens;
-After:
-using UglyToad.PdfPig.Rendering;
-using UglyToad.PdfPig.Rendering.Skia;
-using UglyToad.PdfPig.Rendering.Skia;
-using UglyToad.PdfPig.Rendering.Skia.Helpers;
-using UglyToad.PdfPig.Tokens;
-*/
+using UglyToad.PdfPig.Filters.Jpx.OpenJpeg;
 using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia
@@ -46,16 +36,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
         }
 
-
         private static Dictionary<string, IFilter> GetDictionary()
         {
+            // New filters
+            var dct = new JpegLibraryDctDecodeFilter();
+            var jbig2 = new PdfboxJbig2DecodeFilter();
+            var jpx = new OpenJpegJpxDecodeFilter();
+
+            // Standard filters
             var ascii85 = new Ascii85Filter();
             var asciiHex = new AsciiHexDecodeFilter();
             var ccitt = new CcittFaxDecodeFilter();
-            var dct = new JpegLibraryDctDecodeFilter(); // new filter
             var flate = new FlateFilter();
-            var jbig2 = new PdfboxJbig2DecodeFilter();
-            var jpx = new JpxDecodeFilter();
             var runLength = new RunLengthFilter();
             var lzw = new LzwFilter();
 
@@ -67,11 +59,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 { NameToken.AsciiHexDecodeAbbreviation.Data, asciiHex },
                 { NameToken.CcittfaxDecode.Data, ccitt },
                 { NameToken.CcittfaxDecodeAbbreviation.Data, ccitt },
-                { NameToken.DctDecode.Data, dct }, // new filter
-                { NameToken.DctDecodeAbbreviation.Data, dct }, // new filter
+                { NameToken.DctDecode.Data, dct },
+                { NameToken.DctDecodeAbbreviation.Data, dct },
                 { NameToken.FlateDecode.Data, flate },
                 { NameToken.FlateDecodeAbbreviation.Data, flate },
-                { NameToken.Jbig2Decode.Data, jbig2 }, // new filter
+                { NameToken.Jbig2Decode.Data, jbig2 },
                 { NameToken.JpxDecode.Data, jpx },
                 { NameToken.RunLengthDecode.Data, runLength },
                 { NameToken.RunLengthDecodeAbbreviation.Data, runLength },
