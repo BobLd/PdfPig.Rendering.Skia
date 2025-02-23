@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.0;net462;net471;net6.0;net8.0</TargetFrameworks>
 		<LangVersion>12</LangVersion>
-		<Version>0.1.10.1-alpha006</Version>
+		<Version>0.1.10.1-alpha007</Version>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
 
@@ -39,10 +39,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="PdfPig" Version="0.1.10-alpha-20250222-c4a23" />
-		<PackageReference Include="PdfPig.Filters.Dct.JpegLibrary" Version="0.1.10.1-alpha002" />
-		<PackageReference Include="PdfPig.Filters.Jbig2.PdfboxJbig2" Version="0.1.10.1-alpha003" />
-		<PackageReference Include="PdfPig.Filters.Jpx.OpenJpegDotNet" Version="0.1.10.1-alpha004" />
+		<PackageReference Include="PdfPig" Version="0.1.10-alpha-20250223-f26e7" />
+		<PackageReference Include="PdfPig.Filters.Dct.JpegLibrary" Version="0.1.10.1-alpha003" />
+		<PackageReference Include="PdfPig.Filters.Jbig2.PdfboxJbig2" Version="0.1.10.1-alpha004" />
+		<PackageReference Include="PdfPig.Filters.Jpx.OpenJpegDotNet" Version="0.1.10.1-alpha005" />
 		<PackageReference Include="SkiaSharp" Version="2.88.9" />
 		<PackageReference Include="SkiaSharp.HarfBuzz" Version="2.88.9" />
 	</ItemGroup>
