@@ -114,7 +114,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 return null;
             }
 
-            float scale = lineWidth * oneOver72 / 2; // TODO - Scale is still not correct
+            float scale = 1f / lineWidth; //oneOver72 / 2; // TODO - Scale is still not correct
 
             float phase = lineDashPattern.Phase * scale;
 
@@ -130,14 +130,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         float[] pattern = new float[lineDashPattern.Array.Count];
                         for (int i = 0; i < lineDashPattern.Array.Count; i++)
                         {
-                            var v = (float)lineDashPattern.Array[i] * scale;
+                            var v = (float)lineDashPattern.Array[i];
                             if (v == 0)
                             {
-                                pattern[i] = oneOver72;
+                                pattern[i] = scale; // TODO - Need to add tests
                             }
                             else
                             {
-                                pattern[i] = v;
+                                pattern[i] = v * scale;
                             }
                         }
 
