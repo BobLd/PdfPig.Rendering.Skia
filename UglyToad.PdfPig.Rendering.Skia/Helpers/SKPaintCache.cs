@@ -42,7 +42,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             _antialiasingPaint = new SKPaint()
             {
                 IsAntialias = _isAntialias,
-                FilterQuality = SKFilterQuality.High
+                FilterQuality = SKFilterQuality.High,
+                SubpixelText = true
             };
 #if DEBUG
             _imageDebugPaint = new SKPaint()
@@ -74,7 +75,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             {
                 IsAntialias = _isAntialias,
                 Color = color.ToSKColor(alpha),
-                Style = stroke ? SKPaintStyle.Stroke : SKPaintStyle.Fill
+                Style = stroke ? SKPaintStyle.Stroke : SKPaintStyle.Fill,
+                FilterQuality = SKFilterQuality.High,
+                SubpixelText = true
             };
 
             if (stroke)
