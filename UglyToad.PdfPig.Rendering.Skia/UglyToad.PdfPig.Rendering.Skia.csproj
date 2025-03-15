@@ -25,6 +25,8 @@
 		<Product>PdfPig.Rendering.Skia</Product>
 		<PublishRepositoryUrl>true</PublishRepositoryUrl>
 		<PackageIcon>pdfpig.png</PackageIcon>
+		<SignAssembly>True</SignAssembly>
+		<AssemblyOriginatorKeyFile>UglyToad.PdfPig.Rendering.Skia.snk</AssemblyOriginatorKeyFile>
 	</PropertyGroup>
 
 	<ItemGroup>
