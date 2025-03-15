@@ -52,9 +52,30 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 if (CurrentTransformationMatrix.A > 0 && CurrentTransformationMatrix.D > 0)
                 {
                     // No transformation to do
-                    using (var bitmap = image.GetSKImage())
+                    using (var skImage = image.GetSKImage())
                     {
-                        _canvas.DrawImage(bitmap, destRect, _paintCache.GetAntialiasing());
+                        if (image.SoftMaskImage is not null)
+                        {
+                            using (var softMaskBitmap = image.SoftMaskImage.GetSKImage())
+                            {
+                                if (!skImage.Info.Rect.Equals(softMaskBitmap.Info.Rect))
+                                {
+                                    // TODO - Resize
+                                }
+
+                                var mask = softMaskBitmap.GetSKMask(softMaskBitmap);
+
+                                using (new SKAutoMaskFreeImage(mask.Image))
+                                using (var bitmap = skImage.ApplySoftMask(mask))
+                                {
+                                    _canvas.DrawBitmap(bitmap, destRect, _paintCache.GetAntialiasing());
+                                }
+                            }
+                        }
+                        else
+                        {
+                            _canvas.DrawImage(skImage, destRect, _paintCache.GetAntialiasing());
+                        }
                     }
                 }
                 else
@@ -63,13 +84,36 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         Math.Sign(CurrentTransformationMatrix.A),
                         Math.Sign(CurrentTransformationMatrix.D));
 
-                    using (var bitmap = image.GetSKImage())
+                    using (var skImage = image.GetSKImage())
                     using (new SKAutoCanvasRestore(_canvas, true))
                     using (var p = _paintCache.GetAntialiasing().Clone())
                     {
-                        p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
                         _canvas.SetMatrix(matrix);
-                        _canvas.DrawImage(bitmap, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
+                        
+                        p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
+
+                        if (image.SoftMaskImage is not null)
+                        {
+                            using (var softMaskBitmap = image.SoftMaskImage.GetSKImage())
+                            {
+                                if (!skImage.Info.Rect.Equals(softMaskBitmap.Info.Rect))
+                                {
+                                    // TODO - Resize
+                                }
+
+                                var mask = softMaskBitmap.GetSKMask(softMaskBitmap);
+                                
+                                using (new SKAutoMaskFreeImage(mask.Image))
+                                using (var bitmap = skImage.ApplySoftMask(mask))
+                                {
+                                    _canvas.DrawBitmap(bitmap, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
+                                }
+                            }
+                        }
+                        else
+                        {
+                            _canvas.DrawImage(skImage, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
+                        }
                     }
                 }
 

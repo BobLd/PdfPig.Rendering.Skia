@@ -78,6 +78,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return new SKRect(left, top, right, bottom);
         }
 
+        public static SKRectI ToSKRectI(this PdfRectangle rect, float height)
+        {
+            float left = (float)rect.Left;
+            float top = (float)(height - rect.Top);
+            float right = left + (float)rect.Width;
+            float bottom = top + (float)rect.Height;
+            return new SKRectI((int)left, (int)top, (int)right, (int)bottom); // TODO - rounding
+        }
+
+
         public static SKPoint ToSKPoint(this PdfPoint pdfPoint, float height)
         {
             return new SKPoint((float)pdfPoint.X, (float)(height - pdfPoint.Y));
@@ -304,35 +314,5 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     throw new NotImplementedException($"Cannot convert blend mode '{blendMode}' to SKBlendMode.");
             }
         }
-
-        public static void ApplySoftMask(this SKBitmap image, SKBitmap smask)
-        {
-            // What about 'Alpha source' flag?
-            SKBitmap scaled;
-            if (!image.Info.Rect.Equals(smask.Info.Rect))
-            {
-                scaled = new SKBitmap(image.Info);
-                if (!smask.ScalePixels(scaled, SKFilterQuality.High))
-                {
-                    // log
-                }
-            }
-            else
-            {
-                scaled = smask;
-            }
-
-            for (int x = 0; x < image.Width; x++)
-            {
-                for (int y = 0; y < image.Height; y++)
-                {
-                    var pix = image.GetPixel(x, y);
-                    byte alpha = scaled.GetPixel(x, y).Red; // Gray CS (r = g = b)
-                    image.SetPixel(x, y, pix.WithAlpha(alpha));
-                }
-            }
-            scaled.Dispose();
-        }
-        */
     }
 }

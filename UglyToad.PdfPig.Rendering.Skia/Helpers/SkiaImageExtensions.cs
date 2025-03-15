@@ -29,7 +29,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         {
             bitmap = null;
 
-            var hasValidDetails = image.ColorSpaceDetails != null && !(image.ColorSpaceDetails is UnsupportedColorSpaceDetails);
+            var hasValidDetails = image.ColorSpaceDetails != null &&
+                                  !(image.ColorSpaceDetails is UnsupportedColorSpaceDetails);
 
             var isColorSpaceSupported = hasValidDetails && image.ColorSpaceDetails!.BaseType != ColorSpace.Pattern;
 
@@ -53,14 +54,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 var actualSize = bytesPure.Length;
                 var isCorrectlySized = bytesPure.Length == requiredSize ||
-                    // Spec, p. 37: "...error if the stream contains too much data, with the exception that
-                    // there may be an extra end-of-line marker..."
-                    (actualSize == requiredSize + 1 && bytesPure[actualSize - 1] == ReadHelper.AsciiLineFeed) ||
-                    (actualSize == requiredSize + 1 && bytesPure[actualSize - 1] == ReadHelper.AsciiCarriageReturn) ||
-                    // The combination of a CARRIAGE RETURN followed immediately by a LINE FEED is treated as one EOL marker.
-                    (actualSize == requiredSize + 2 &&
-                        bytesPure[actualSize - 2] == ReadHelper.AsciiCarriageReturn &&
-                        bytesPure[actualSize - 1] == ReadHelper.AsciiLineFeed);
+                                       // Spec, p. 37: "...error if the stream contains too much data, with the exception that
+                                       // there may be an extra end-of-line marker..."
+                                       (actualSize == requiredSize + 1 &&
+                                        bytesPure[actualSize - 1] == ReadHelper.AsciiLineFeed) ||
+                                       (actualSize == requiredSize + 1 &&
+                                        bytesPure[actualSize - 1] == ReadHelper.AsciiCarriageReturn) ||
+                                       // The combination of a CARRIAGE RETURN followed immediately by a LINE FEED is treated as one EOL marker.
+                                       (actualSize == requiredSize + 2 &&
+                                        bytesPure[actualSize - 2] == ReadHelper.AsciiCarriageReturn &&
+                                        bytesPure[actualSize - 1] == ReadHelper.AsciiLineFeed);
 
                 if (!isCorrectlySized)
                 {
@@ -71,7 +74,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 {
                     return TryGetGray8Bitmap(image.WidthInSamples, image.HeightInSamples, bytesPure, out bitmap);
                 }
-                
+
                 var info = new SKImageInfo(image.WidthInSamples, image.HeightInSamples, SKColorType.Rgba8888);
 
                 // create the buffer that will hold the pixels
@@ -91,7 +94,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 {
                     bitmap = SKImage.FromPixels(pixmap, (addr, ctx) => ptr.Free());
                 }
-                
+
                 byte alpha = byte.MaxValue;
                 if (image.ColorSpaceDetails.BaseType == ColorSpace.DeviceCMYK || numberOfComponents == 4)
                 {
@@ -118,6 +121,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             builder.SetPixel(r, g, b, alpha, row, col);
                         }
                     }
+
                     return true;
                 }
 
@@ -131,10 +135,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             builder.SetPixel(bytesPure[i++], bytesPure[i++], bytesPure[i++], alpha, row, col);
                         }
                     }
+
                     return true;
                 }
 
-                throw new Exception($"Could not process image with ColorSpace={image.ColorSpaceDetails.BaseType}, numberOfComponents={numberOfComponents}.");
+                throw new Exception(
+                    $"Could not process image with ColorSpace={image.ColorSpaceDetails.BaseType}, numberOfComponents={numberOfComponents}.");
             }
             catch
             {
@@ -240,22 +246,29 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return SKImage.FromEncodedData(pdfImage.RawBytes);
         }
 
-        public static ReadOnlySpan<byte> GetImageBytes(this IPdfImage pdfImage)
+
+        public static SKMask GetSKMask(this SKImage skImage, SKImage softMaskBitmap)
         {
-            // Try get png bytes
-            if (pdfImage.TryGetPng(out byte[]? bytes) && bytes?.Length > 0)
+            return SKMask.Create(softMaskBitmap.PeekPixels().GetPixelSpan(),
+                new SKRectI(0, 0, softMaskBitmap.Info.Width, softMaskBitmap.Info.Height),
+                (uint)softMaskBitmap.Info.RowBytes,
+                SKMaskFormat.BW);
+        }
+
+        public static SKBitmap ApplySoftMask(this SKImage image, SKMask sMask)
+        {
+            var skBitmap = SKBitmap.FromImage(image);
+
+            for (int x = 0; x < image.Width; ++x)
             {
-                return bytes;
+                for (int y = 0; y < image.Height; ++y)
+                {
+                    var pix = skBitmap.GetPixel(x, y);
+                    skBitmap.SetPixel(x, y, pix.WithAlpha(sMask.GetAddr8(x, y)));
+                }
             }
 
-            // Fallback to bytes
-            if (pdfImage.TryGetBytesAsMemory(out var bytesL) && bytesL.Length > 0)
-            {
-                return bytesL.Span;
-            }
-
-            // Fallback to raw bytes
-            return pdfImage.RawBytes;
+            return skBitmap;
         }
     }
 }
