@@ -250,15 +250,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         public static SKMask GetSKMask(this SKImage skImage, SKImage softMaskBitmap)
         {
             return SKMask.Create(softMaskBitmap.PeekPixels().GetPixelSpan(),
-                new SKRectI(0, 0, softMaskBitmap.Info.Width, softMaskBitmap.Info.Height),
-                (uint)softMaskBitmap.Info.RowBytes,
-                SKMaskFormat.BW);
+                new SKRectI(0, 0, skImage.Info.Width, skImage.Info.Height),
+                (uint)skImage.Info.RowBytes,
+                SKMaskFormat.A8);
         }
 
         public static SKBitmap ApplySoftMask(this SKImage image, SKMask sMask)
         {
             var skBitmap = SKBitmap.FromImage(image);
-
+            
             for (int x = 0; x < image.Width; ++x)
             {
                 for (int y = 0; y < image.Height; ++y)
