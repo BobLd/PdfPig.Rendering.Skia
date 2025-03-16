@@ -73,7 +73,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 paint.IsAntialias = shading.AntiAlias;
                 paint.Shader = shader;
-                paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode(); // TODO - check if correct
+                //paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode(); // TODO - check if correct
 
                 // check if bbox not null
 
@@ -170,7 +170,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 paint.IsAntialias = shading.AntiAlias;
                 paint.Shader = shader;
-                paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
+                //paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
 
                 // check if bbox not null
 
@@ -252,7 +252,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 paint.IsAntialias = shading.AntiAlias;
                 paint.Shader = shader;
-                paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode(); 
+                //paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode(); 
                 // check if bbox not null
 
                 SKPathEffect dash = null;
@@ -481,7 +481,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 paint.IsAntialias = _antiAliasing;
                 paint.Shader = shader;
                 paint.FilterQuality = SKFilterQuality.High;
-                paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
+                //paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
 
                 // TODO - check if bbox not null
 

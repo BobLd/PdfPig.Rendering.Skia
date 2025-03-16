@@ -200,7 +200,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 using (var p = paint.Clone())
                 {
-                    p.BlendMode = currentState.BlendMode.ToSKBlendMode();
+                    //p.BlendMode = currentState.BlendMode.ToSKBlendMode();
                     _canvas.DrawPath(_currentPath, p);
                 }
 
@@ -282,7 +282,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 using (var p = paint.Clone())
                 {
-                    p.BlendMode = currentState.BlendMode.ToSKBlendMode();
+                    //p.BlendMode = currentState.BlendMode.ToSKBlendMode();
                     _canvas.DrawPath(_currentPath, p);
                 }
 
