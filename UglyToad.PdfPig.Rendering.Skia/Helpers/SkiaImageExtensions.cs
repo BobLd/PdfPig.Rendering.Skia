@@ -268,6 +268,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 }
             }
 
+            skBitmap.SetImmutable();
+
             return skBitmap;
         }
     }
