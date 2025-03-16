@@ -55,7 +55,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     using (var skImage = image.GetSKImage())
                     using (var p = _paintCache.GetAntialiasing().Clone())
                     {
-                        p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
+                        //p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
                         _canvas.DrawImage(skImage, destRect, p);
                     }
                 }
@@ -70,7 +70,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     using (var p = _paintCache.GetAntialiasing().Clone())
                     {
                         _canvas.SetMatrix(matrix);
-                        p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
+                        //p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
                         _canvas.DrawImage(skImage, matrix.MapRect(destRect), p);
                     }
                 }
