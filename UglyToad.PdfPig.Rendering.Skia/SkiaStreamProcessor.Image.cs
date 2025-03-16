@@ -53,8 +53,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 {
                     // No transformation to do
                     using (var skImage = image.GetSKImage())
+                    using (var p = _paintCache.GetAntialiasing().Clone())
                     {
-                        _canvas.DrawImage(skImage, destRect, _paintCache.GetAntialiasing());
+                        p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
+                        _canvas.DrawImage(skImage, destRect, p);
                     }
                 }
                 else
@@ -68,10 +70,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     using (var p = _paintCache.GetAntialiasing().Clone())
                     {
                         _canvas.SetMatrix(matrix);
-                        
                         p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
-
-                        _canvas.DrawImage(skImage, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
+                        _canvas.DrawImage(skImage, matrix.MapRect(destRect), p);
                     }
                 }
 
