@@ -222,18 +222,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        public override void FillRectangle(PdfRectangle rect)
-        {
-            var paint = _paintCache.GetPaint(GetCurrentState().CurrentNonStrokingColor,
-                GetCurrentState().AlphaConstantNonStroking, false, null, null, null, null, null);
-
-            using (var p = paint.Clone())
-            {
-                p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
-                _canvas.DrawRect(rect.ToSKRect(_height), p);
-            }
-        }
-
         public override void FillPath(FillingRule fillingRule, bool close)
         {
             if (_currentPath == null)
