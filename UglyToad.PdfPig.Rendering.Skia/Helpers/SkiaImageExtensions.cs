@@ -24,17 +24,38 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
     internal static class SkiaImageExtensions
     {
+        private static bool IsValidColorSpace(IPdfImage image)
+        {
+            return image.ColorSpaceDetails != null &&
+                                  !(image.ColorSpaceDetails is UnsupportedColorSpaceDetails)
+                                  && image.ColorSpaceDetails!.BaseType != ColorSpace.Pattern;
+        }
+
+
+        private static bool IsImageArrayCorrectlySized(IPdfImage image, ReadOnlySpan<byte> bytesPure)
+        {
+            var actualSize = bytesPure.Length;
+            var requiredSize = (image.WidthInSamples * image.HeightInSamples * image.ColorSpaceDetails!.BaseNumberOfColorComponents);
+            
+            return bytesPure.Length == requiredSize ||
+                                   // Spec, p. 37: "...error if the stream contains too much data, with the exception that
+                                   // there may be an extra end-of-line marker..."
+                                   (actualSize == requiredSize + 1 &&
+                                    bytesPure[actualSize - 1] == ReadHelper.AsciiLineFeed) ||
+                                   (actualSize == requiredSize + 1 &&
+                                    bytesPure[actualSize - 1] == ReadHelper.AsciiCarriageReturn) ||
+                                   // The combination of a CARRIAGE RETURN followed immediately by a LINE FEED is treated as one EOL marker.
+                                   (actualSize == requiredSize + 2 &&
+                                    bytesPure[actualSize - 2] == ReadHelper.AsciiCarriageReturn &&
+                                    bytesPure[actualSize - 1] == ReadHelper.AsciiLineFeed);
+        }
+
         // https://stackoverflow.com/questions/50312937/skiasharp-tiff-support#50370515
         private static bool TryGenerate(this IPdfImage image, out SKImage bitmap)
         {
             bitmap = null;
 
-            var hasValidDetails = image.ColorSpaceDetails != null &&
-                                  !(image.ColorSpaceDetails is UnsupportedColorSpaceDetails);
-
-            var isColorSpaceSupported = hasValidDetails && image.ColorSpaceDetails!.BaseType != ColorSpace.Pattern;
-
-            if (!isColorSpaceSupported || !image.TryGetBytesAsMemory(out var imageMemory))
+            if (!IsValidColorSpace(image) || !image.TryGetBytesAsMemory(out var imageMemory))
             {
                 return false;
             }
@@ -43,104 +64,111 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             try
             {
+                int width = image.WidthInSamples;
+                int height = image.HeightInSamples;
+
                 bytesPure = ColorSpaceDetailsByteConverter.Convert(image.ColorSpaceDetails!, bytesPure,
-                    image.BitsPerComponent, image.WidthInSamples, image.HeightInSamples);
+                    image.BitsPerComponent, width, height);
 
                 var numberOfComponents = image.ColorSpaceDetails!.BaseNumberOfColorComponents;
 
-                var is3Byte = numberOfComponents == 3;
-
-                var requiredSize = (image.WidthInSamples * image.HeightInSamples * numberOfComponents);
-
-                var actualSize = bytesPure.Length;
-                var isCorrectlySized = bytesPure.Length == requiredSize ||
-                                       // Spec, p. 37: "...error if the stream contains too much data, with the exception that
-                                       // there may be an extra end-of-line marker..."
-                                       (actualSize == requiredSize + 1 &&
-                                        bytesPure[actualSize - 1] == ReadHelper.AsciiLineFeed) ||
-                                       (actualSize == requiredSize + 1 &&
-                                        bytesPure[actualSize - 1] == ReadHelper.AsciiCarriageReturn) ||
-                                       // The combination of a CARRIAGE RETURN followed immediately by a LINE FEED is treated as one EOL marker.
-                                       (actualSize == requiredSize + 2 &&
-                                        bytesPure[actualSize - 2] == ReadHelper.AsciiCarriageReturn &&
-                                        bytesPure[actualSize - 1] == ReadHelper.AsciiLineFeed);
-
-                if (!isCorrectlySized)
+                if (!IsImageArrayCorrectlySized(image, bytesPure))
                 {
                     return false;
                 }
 
                 if (numberOfComponents == 1)
                 {
-                    return TryGetGray8Bitmap(image.WidthInSamples, image.HeightInSamples, bytesPure, out bitmap);
+                    if (image.SoftMaskImage is not null)
+                    {
+                        // TODO
+                    }
+                    
+                    return TryGetGray8Bitmap(width, height, bytesPure, out bitmap);
                 }
 
-                var info = new SKImageInfo(image.WidthInSamples, image.HeightInSamples, SKColorType.Rgba8888);
+                var info = new SKImageInfo(width, height, SKColorType.Rgba8888);
 
                 // create the buffer that will hold the pixels
-                bool hasAlphaChannel = true;
-                var bpp = hasAlphaChannel ? 4 : 3;
+                const int bytesPerPixel = 4; // 3 (RGB) + 1 (alpha)
 
-                var length = (image.HeightInSamples * image.WidthInSamples * bpp) + image.HeightInSamples;
+                var length = (height * width * bytesPerPixel) + height;
 
                 var raster = new byte[length];
 
-                var builder = ImageBuilder.Create(raster, image.WidthInSamples, image.HeightInSamples, hasAlphaChannel);
-
                 // get a pointer to the buffer, and give it to the bitmap
                 var ptr = GCHandle.Alloc(raster, GCHandleType.Pinned);
-
                 using (SKPixmap pixmap = new SKPixmap(info, ptr.AddrOfPinnedObject(), info.RowBytes))
                 {
                     bitmap = SKImage.FromPixels(pixmap, (addr, ctx) => ptr.Free());
                 }
 
-                byte alpha = byte.MaxValue;
-                if (image.ColorSpaceDetails.BaseType == ColorSpace.DeviceCMYK || numberOfComponents == 4)
+                SKMask? sMask = null;
+                if (image.SoftMaskImage?.TryGenerate(out var mask) == true)
                 {
-                    int i = 0;
-                    for (int col = 0; col < image.HeightInSamples; col++)
+                    if (!bitmap.Info.Rect.Equals(mask.Info.Rect))
                     {
-                        for (int row = 0; row < image.WidthInSamples; row++)
-                        {
-                            /*
-                             * Where CMYK in 0..1
-                             * R = 255 × (1-C) × (1-K)
-                             * G = 255 × (1-M) × (1-K)
-                             * B = 255 × (1-Y) × (1-K)
-                             */
-
-                            double c = (bytesPure[i++] / 255d);
-                            double m = (bytesPure[i++] / 255d);
-                            double y = (bytesPure[i++] / 255d);
-                            double k = (bytesPure[i++] / 255d);
-                            var r = (byte)(255 * (1 - c) * (1 - k));
-                            var g = (byte)(255 * (1 - m) * (1 - k));
-                            var b = (byte)(255 * (1 - y) * (1 - k));
-
-                            builder.SetPixel(r, g, b, alpha, row, col);
-                        }
+                        // TODO - Resize
                     }
 
-                    return true;
+                    sMask = info.GetSKMask(mask);
                 }
 
-                if (is3Byte)
+                using (var alphaProvider = new AlphaChannelProvider(sMask))
                 {
-                    int i = 0;
-                    for (int col = 0; col < image.HeightInSamples; col++)
+                    if (image.ColorSpaceDetails.BaseType == ColorSpace.DeviceCMYK || numberOfComponents == 4)
                     {
-                        for (int row = 0; row < image.WidthInSamples; row++)
+                        int i = 0;
+                        for (int col = 0; col < height; ++col)
                         {
-                            builder.SetPixel(bytesPure[i++], bytesPure[i++], bytesPure[i++], alpha, row, col);
+                            for (int row = 0; row < width; ++row)
+                            {
+                                /*
+                                 * Where CMYK in 0..1
+                                 * R = 255 × (1-C) × (1-K)
+                                 * G = 255 × (1-M) × (1-K)
+                                 * B = 255 × (1-Y) × (1-K)
+                                 */
+
+                                double c = (bytesPure[i++] / 255d);
+                                double m = (bytesPure[i++] / 255d);
+                                double y = (bytesPure[i++] / 255d);
+                                double k = (bytesPure[i++] / 255d);
+                                var r = (byte)(255 * (1 - c) * (1 - k));
+                                var g = (byte)(255 * (1 - m) * (1 - k));
+                                var b = (byte)(255 * (1 - y) * (1 - k));
+
+                                var start = (col * (width * bytesPerPixel)) + (row * bytesPerPixel);
+                                raster[start++] = r;
+                                raster[start++] = g;
+                                raster[start++] = b;
+                                raster[start] = alphaProvider.GetAlphaChannel(row, col);
+                            }
                         }
+
+                        return true;
                     }
 
-                    return true;
+                    if (numberOfComponents == 3)
+                    {
+                        int i = 0;
+                        for (int col = 0; col < height; ++col)
+                        {
+                            for (int row = 0; row < width; ++row)
+                            {
+                                var start = (col * (width * bytesPerPixel)) + (row * bytesPerPixel);
+                                raster[start++] = bytesPure[i++];
+                                raster[start++] = bytesPure[i++];
+                                raster[start++] = bytesPure[i++];
+                                raster[start] = alphaProvider.GetAlphaChannel(row, col);
+                            }
+                        }
+
+                        return true;
+                    }
                 }
 
-                throw new Exception(
-                    $"Could not process image with ColorSpace={image.ColorSpaceDetails.BaseType}, numberOfComponents={numberOfComponents}.");
+                throw new Exception($"Could not process image with ColorSpace={image.ColorSpaceDetails.BaseType}, numberOfComponents={numberOfComponents}.");
             }
             catch
             {
@@ -169,58 +197,38 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return false;
         }
 
-        private sealed class ImageBuilder
+        private sealed class AlphaChannelProvider : IDisposable
         {
-            private readonly byte[] rawData;
-            private readonly bool hasAlphaChannel;
-            private readonly int width;
-            private readonly int height;
-            private readonly int bytesPerPixel;
+            private readonly SKMask? _skMask;
+            private readonly SKAutoMaskFreeImage? _disposable;
 
-            /// <summary>
-            /// Create a builder for a PNG with the given width and size.
-            /// </summary>
-            public static ImageBuilder Create(byte[] rawData, int width, int height, bool hasAlphaChannel)
+            public readonly Func<int, int, byte> GetAlphaChannel;
+            
+            public AlphaChannelProvider(SKMask? mask)
             {
-                var bpp = hasAlphaChannel ? 4 : 3;
-
-                var length = (height * width * bpp) + height;
-
-                if (rawData.Length != length)
+                _skMask = mask;
+                if (_skMask.HasValue)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(rawData.Length), "TestBuilder.Create");
+                    if (_skMask.Value.Image == IntPtr.Zero)
+                    {
+                        throw new ArgumentNullException(nameof(mask), "The SKMask has a pointer of zero.");
+                    }
+                    
+                    GetAlphaChannel = _skMask.Value.GetAddr8;
+                    _disposable = new SKAutoMaskFreeImage(_skMask.Value.Image);
                 }
-
-                return new ImageBuilder(rawData, hasAlphaChannel, width, height, bpp);
+                else
+                {
+                    GetAlphaChannel = (x, y) => byte.MaxValue;
+                }
             }
 
-            private ImageBuilder(byte[] rawData, bool hasAlphaChannel, int width, int height, int bytesPerPixel)
+            public void Dispose()
             {
-                this.rawData = rawData;
-                this.hasAlphaChannel = hasAlphaChannel;
-                this.width = width;
-                this.height = height;
-                this.bytesPerPixel = bytesPerPixel;
-            }
-
-            /// <summary>
-            /// Set the pixel value for the given column (x) and row (y).
-            /// </summary>
-            public void SetPixel(byte r, byte g, byte b, byte a, int x, int y)
-            {
-                var start = (y * (width * bytesPerPixel)) + (x * bytesPerPixel);
-
-                rawData[start++] = r;
-                rawData[start++] = g;
-                rawData[start++] = b;
-
-                if (hasAlphaChannel)
-                {
-                    rawData[start] = a;
-                }
+                _disposable?.Dispose();
             }
         }
-
+        
         public static SKImage GetSKImage(this IPdfImage pdfImage)
         {
             // Try get png bytes
@@ -247,30 +255,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         }
 
 
-        public static SKMask GetSKMask(this SKImage skImage, SKImage softMaskBitmap)
+        public static SKMask GetSKMask(this SKImageInfo skImageInfo, SKImage softMaskBitmap)
         {
             return SKMask.Create(softMaskBitmap.PeekPixels().GetPixelSpan(),
-                new SKRectI(0, 0, skImage.Info.Width, skImage.Info.Height),
-                (uint)skImage.Info.RowBytes,
+                new SKRectI(0, 0, skImageInfo.Width, skImageInfo.Height),
+                (uint)softMaskBitmap.Info.RowBytes,
                 SKMaskFormat.A8);
-        }
-
-        public static SKBitmap ApplySoftMask(this SKImage image, SKMask sMask)
-        {
-            var skBitmap = SKBitmap.FromImage(image);
-            
-            for (int x = 0; x < image.Width; ++x)
-            {
-                for (int y = 0; y < image.Height; ++y)
-                {
-                    var pix = skBitmap.GetPixel(x, y);
-                    skBitmap.SetPixel(x, y, pix.WithAlpha(sMask.GetAddr8(x, y)));
-                }
-            }
-
-            skBitmap.SetImmutable();
-
-            return skBitmap;
         }
     }
 }
