@@ -199,23 +199,21 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         private sealed class AlphaChannelProvider : IDisposable
         {
-            private readonly SKMask? _skMask;
             private readonly SKAutoMaskFreeImage? _disposable;
 
             public readonly Func<int, int, byte> GetAlphaChannel;
             
             public AlphaChannelProvider(SKMask? mask)
             {
-                _skMask = mask;
-                if (_skMask.HasValue)
+                if (mask.HasValue)
                 {
-                    if (_skMask.Value.Image == IntPtr.Zero)
+                    if (mask.Value.Image == IntPtr.Zero)
                     {
                         throw new ArgumentNullException(nameof(mask), "The SKMask has a pointer of zero.");
                     }
                     
-                    GetAlphaChannel = _skMask.Value.GetAddr8;
-                    _disposable = new SKAutoMaskFreeImage(_skMask.Value.Image);
+                    GetAlphaChannel = mask.Value.GetAddr8;
+                    _disposable = new SKAutoMaskFreeImage(mask.Value.Image);
                 }
                 else
                 {
