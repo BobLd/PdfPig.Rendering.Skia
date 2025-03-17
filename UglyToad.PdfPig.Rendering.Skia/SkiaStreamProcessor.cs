@@ -145,6 +145,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
             _canvas.ClipPath(_currentPath, SKClipOperation.Intersect);
         }
 
+        protected override void ClipToRectangle(PdfRectangle rectangle)
+        {
+            //_canvas.DrawRect(rectangle.ToSKRect(_height), _paintCache.GetImageDebug());
+
+            // TODO - Should apply transformation matrix?
+            _canvas.ClipRect(rectangle.ToSKRect(_height), SKClipOperation.Intersect);
+        }
+
         /// <inheritdoc/>
         public override void BeginMarkedContent(NameToken name, NameToken propertyDictionaryName, DictionaryToken properties)
         {
