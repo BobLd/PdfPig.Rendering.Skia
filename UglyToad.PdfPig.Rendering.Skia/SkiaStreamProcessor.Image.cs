@@ -48,7 +48,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
 
             var destRect = image.Bounds.ToSKRect(_height);
-
+            
             try
             {
                 if (CurrentTransformationMatrix.A > 0 && CurrentTransformationMatrix.D > 0)

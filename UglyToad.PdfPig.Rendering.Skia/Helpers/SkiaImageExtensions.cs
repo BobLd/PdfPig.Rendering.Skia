@@ -187,7 +187,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             try
             {
-                bitmap = SKImage.FromPixelCopy(new SKImageInfo(width, height, SKColorType.Gray8), bytesPure);
+                // Alpha8 for mask?
+                bitmap = SKImage.FromPixelCopy(new SKImageInfo(width, height, SKColorType.Gray8), bytesPure); // Alpha8 Or Gray8
                 return true;
             }
             catch (Exception)
