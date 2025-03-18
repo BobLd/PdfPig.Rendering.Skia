@@ -33,6 +33,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
 #if DEBUG
         private readonly SKPaint _imageDebugPaint;
+        private readonly SKPaint _debugPaint;
 #endif
 
         public SKPaintCache(bool isAntialias, float minimumLineWidth)
@@ -52,6 +53,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 Color = new SKColor(SKColors.IndianRed.Red, SKColors.IndianRed.Green, SKColors.IndianRed.Blue, 150),
                 IsAntialias = _isAntialias,
                 StrokeWidth = 2
+            };
+
+            _debugPaint = new SKPaint()
+            {
+                Style = SKPaintStyle.Stroke,
+                Color = new SKColor(SKColors.DarkOrange.Red, SKColors.DarkOrange.Green, SKColors.DarkOrange.Blue, 150),
+                IsAntialias = _isAntialias,
+                StrokeWidth = 3
             };
 #endif
         }
@@ -120,6 +129,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         public SKPaint GetImageDebug()
         {
             return _imageDebugPaint;
+        }
+
+        public SKPaint GetDebug()
+        {
+            return _debugPaint;
         }
 #endif
 

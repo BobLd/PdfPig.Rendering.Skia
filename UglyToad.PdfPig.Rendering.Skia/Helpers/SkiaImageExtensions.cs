@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
@@ -83,7 +84,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     {
                         // TODO
                     }
-                    
+
                     return TryGetGray8Bitmap(width, height, bytesPure, out bitmap);
                 }
 
@@ -103,7 +104,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     bitmap = SKImage.FromPixels(pixmap, (addr, ctx) => ptr.Free());
                 }
 
-                SKMask? sMask = null;
+                Func<int, int, byte> GetAlphaChannel = (_, _) => byte.MaxValue;
                 if (image.SoftMaskImage?.TryGenerate(out var mask) == true)
                 {
                     if (!bitmap.Info.Rect.Equals(mask.Info.Rect))
@@ -111,61 +112,62 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         // TODO - Resize
                     }
 
-                    sMask = info.GetSKMask(mask);
+                    var sMaskPixmap = mask.PeekPixels();
+                    if (!sMaskPixmap.GetPixelSpan().IsEmpty)
+                    {
+                        GetAlphaChannel = (col, row) => sMaskPixmap.GetPixelSpan()[(col * width) + row];
+                    }
                 }
 
-                using (var alphaProvider = new AlphaChannelProvider(sMask))
+                if (image.ColorSpaceDetails.BaseType == ColorSpace.DeviceCMYK || numberOfComponents == 4)
                 {
-                    if (image.ColorSpaceDetails.BaseType == ColorSpace.DeviceCMYK || numberOfComponents == 4)
+                    int i = 0;
+                    for (int col = 0; col < height; ++col)
                     {
-                        int i = 0;
-                        for (int col = 0; col < height; ++col)
+                        for (int row = 0; row < width; ++row)
                         {
-                            for (int row = 0; row < width; ++row)
-                            {
-                                /*
-                                 * Where CMYK in 0..1
-                                 * R = 255 × (1-C) × (1-K)
-                                 * G = 255 × (1-M) × (1-K)
-                                 * B = 255 × (1-Y) × (1-K)
-                                 */
+                            /*
+                             * Where CMYK in 0..1
+                             * R = 255 × (1-C) × (1-K)
+                             * G = 255 × (1-M) × (1-K)
+                             * B = 255 × (1-Y) × (1-K)
+                             */
 
-                                double c = (bytesPure[i++] / 255d);
-                                double m = (bytesPure[i++] / 255d);
-                                double y = (bytesPure[i++] / 255d);
-                                double k = (bytesPure[i++] / 255d);
-                                var r = (byte)(255 * (1 - c) * (1 - k));
-                                var g = (byte)(255 * (1 - m) * (1 - k));
-                                var b = (byte)(255 * (1 - y) * (1 - k));
+                            double c = (bytesPure[i++] / 255d);
+                            double m = (bytesPure[i++] / 255d);
+                            double y = (bytesPure[i++] / 255d);
+                            double k = (bytesPure[i++] / 255d);
+                            var r = (byte)(255 * (1 - c) * (1 - k));
+                            var g = (byte)(255 * (1 - m) * (1 - k));
+                            var b = (byte)(255 * (1 - y) * (1 - k));
 
-                                var start = (col * (width * bytesPerPixel)) + (row * bytesPerPixel);
-                                raster[start++] = r;
-                                raster[start++] = g;
-                                raster[start++] = b;
-                                raster[start] = alphaProvider.GetAlphaChannel(row, col);
-                            }
+                            var start = (col * (width * bytesPerPixel)) + (row * bytesPerPixel);
+                            raster[start++] = r;
+                            raster[start++] = g;
+                            raster[start++] = b;
+                            raster[start] = GetAlphaChannel(col, row);
                         }
-
-                        return true;
                     }
 
-                    if (numberOfComponents == 3)
-                    {
-                        int i = 0;
-                        for (int col = 0; col < height; ++col)
-                        {
-                            for (int row = 0; row < width; ++row)
-                            {
-                                var start = (col * (width * bytesPerPixel)) + (row * bytesPerPixel);
-                                raster[start++] = bytesPure[i++];
-                                raster[start++] = bytesPure[i++];
-                                raster[start++] = bytesPure[i++];
-                                raster[start] = alphaProvider.GetAlphaChannel(row, col);
-                            }
-                        }
+                    return true;
+                }
 
-                        return true;
+                if (numberOfComponents == 3)
+                {
+                    int i = 0;
+                    for (int col = 0; col < height; ++col)
+                    {
+                        for (int row = 0; row < width; ++row)
+                        {
+                            var start = (col * (width * bytesPerPixel)) + (row * bytesPerPixel);
+                            raster[start++] = bytesPure[i++];
+                            raster[start++] = bytesPure[i++];
+                            raster[start++] = bytesPure[i++];
+                            raster[start] = GetAlphaChannel(col, row);
+                        }
                     }
+
+                    return true;
                 }
 
                 throw new Exception($"Could not process image with ColorSpace={image.ColorSpaceDetails.BaseType}, numberOfComponents={numberOfComponents}.");
@@ -197,36 +199,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return false;
         }
 
-        private sealed class AlphaChannelProvider : IDisposable
-        {
-            private readonly SKAutoMaskFreeImage? _disposable;
-
-            public readonly Func<int, int, byte> GetAlphaChannel;
-            
-            public AlphaChannelProvider(SKMask? mask)
-            {
-                if (mask.HasValue)
-                {
-                    if (mask.Value.Image == IntPtr.Zero)
-                    {
-                        throw new ArgumentNullException(nameof(mask), "The SKMask has a pointer of zero.");
-                    }
-                    
-                    GetAlphaChannel = mask.Value.GetAddr8;
-                    _disposable = new SKAutoMaskFreeImage(mask.Value.Image);
-                }
-                else
-                {
-                    GetAlphaChannel = (x, y) => byte.MaxValue;
-                }
-            }
-
-            public void Dispose()
-            {
-                _disposable?.Dispose();
-            }
-        }
-        
         public static SKImage GetSKImage(this IPdfImage pdfImage)
         {
             // Try get png bytes
@@ -250,15 +222,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             // Fallback to raw bytes
             return SKImage.FromEncodedData(pdfImage.RawBytes);
-        }
-
-
-        public static SKMask GetSKMask(this SKImageInfo skImageInfo, SKImage softMaskBitmap)
-        {
-            return SKMask.Create(softMaskBitmap.PeekPixels().GetPixelSpan(),
-                new SKRectI(0, 0, skImageInfo.Width, skImageInfo.Height),
-                (uint)softMaskBitmap.Info.RowBytes,
-                SKMaskFormat.A8);
         }
     }
 }

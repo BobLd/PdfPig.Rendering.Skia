@@ -147,7 +147,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         protected override void ClipToRectangle(PdfRectangle rectangle)
         {
-            //_canvas.DrawRect(rectangle.ToSKRect(_height), _paintCache.GetImageDebug());
+#if DEBUG
+            _canvas.DrawRect(rectangle.ToSKRect(_height), _paintCache.GetDebug());
+#endif
 
             // TODO - Should apply transformation matrix?
             _canvas.ClipRect(rectangle.ToSKRect(_height), SKClipOperation.Intersect);
