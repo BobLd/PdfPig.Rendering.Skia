@@ -33,6 +33,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
             RenderImage(inlineImage);
         }
 
+        private static readonly SKSamplingOptions _samplingOptions = new SKSamplingOptions(SKCubicResampler.CatmullRom);
+
         private void RenderImage(IPdfImage image)
         {
             if (image.WidthInSamples == 0 || image.HeightInSamples == 0)
@@ -56,7 +58,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     using (var p = _paintCache.GetAntialiasing().Clone())
                     {
                         //p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
-                        _canvas.DrawImage(skImage, destRect, p);
+                        _canvas.DrawImage(skImage, destRect, _samplingOptions, p);
                     }
                 }
                 else
@@ -71,7 +73,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     {
                         _canvas.SetMatrix(matrix);
                         //p.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
-                        _canvas.DrawImage(skImage, matrix.MapRect(destRect), p);
+                        _canvas.DrawImage(skImage, matrix.MapRect(destRect), _samplingOptions, p);
                     }
                 }
 

@@ -97,7 +97,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 CloneAllStates();
 
                 using (var recorder = new SKPictureRecorder())
-                using (_canvas = recorder.BeginRecording(SKRect.Create(_width, _height)))
+                using (_canvas = recorder.BeginRecording(SKRect.Create(_width, _height), true))
                 {
                     if (_renderAnnotations)
                     {
