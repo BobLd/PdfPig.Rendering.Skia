@@ -104,7 +104,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     bitmap = SKImage.FromPixels(pixmap, (addr, ctx) => ptr.Free());
                 }
 
-                Func<int, int, byte> GetAlphaChannel = (_, _) => byte.MaxValue;
+                Func<int, int, byte> getAlphaChannel = (_, _) => byte.MaxValue;
                 if (image.SoftMaskImage?.TryGenerate(out var mask) == true)
                 {
                     if (!bitmap.Info.Rect.Equals(mask.Info.Rect))
@@ -115,7 +115,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     var sMaskPixmap = mask.PeekPixels();
                     if (!sMaskPixmap.GetPixelSpan().IsEmpty)
                     {
-                        GetAlphaChannel = (col, row) => sMaskPixmap.GetPixelSpan()[(col * width) + row];
+                        getAlphaChannel = (col, row) => sMaskPixmap.GetPixelSpan()[(col * width) + row];
                     }
                 }
 
@@ -145,7 +145,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             raster[start++] = r;
                             raster[start++] = g;
                             raster[start++] = b;
-                            raster[start] = GetAlphaChannel(col, row);
+                            raster[start] = getAlphaChannel(col, row);
                         }
                     }
 
@@ -163,7 +163,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             raster[start++] = bytesPure[i++];
                             raster[start++] = bytesPure[i++];
                             raster[start++] = bytesPure[i++];
-                            raster[start] = GetAlphaChannel(col, row);
+                            raster[start] = getAlphaChannel(col, row);
                         }
                     }
 
