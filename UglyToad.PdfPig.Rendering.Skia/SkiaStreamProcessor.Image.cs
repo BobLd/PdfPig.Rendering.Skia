@@ -35,6 +35,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         private static readonly SKSamplingOptions _samplingOptions = new SKSamplingOptions(SKCubicResampler.CatmullRom);
 
+        // Mask clipping https://groups.google.com/g/skia-discuss/c/ewpuYlM-X3o
+
         private void RenderImage(IPdfImage image)
         {
             if (image.WidthInSamples == 0 || image.HeightInSamples == 0)
