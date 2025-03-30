@@ -48,9 +48,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 #if DEBUG
             _imageDebugPaint = new SKPaint()
             {
-                Style = SKPaintStyle.Fill,
+                Style = SKPaintStyle.StrokeAndFill,
                 Color = new SKColor(SKColors.IndianRed.Red, SKColors.IndianRed.Green, SKColors.IndianRed.Blue, 150),
-                IsAntialias = _isAntialias
+                IsAntialias = _isAntialias,
+                StrokeWidth = 2
             };
 #endif
         }
