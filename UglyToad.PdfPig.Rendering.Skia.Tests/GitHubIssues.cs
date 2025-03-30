@@ -28,6 +28,23 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             Directory.CreateDirectory(_outputPath);
         }
 
+        [Fact]
+        public void IssuePdfPig775()
+        {
+            using (var document = PdfDocument.Open(Path.Combine("SpecificTestDocuments", "Shadows.at.Sundown.-.Lvl.11_removed.pdf"), SkiaRenderingParsingOptions.Instance))
+            {
+                document.AddSkiaPageFactory();
+
+                for (int p = 1; p <= document.NumberOfPages; ++p)
+                {
+                    using (var fs = new FileStream(Path.Combine(_outputPath, $"Shadows.at.Sundown.-.Lvl.11_removed_{p}.png"), FileMode.Create))
+                    using (var ms = document.GetPageAsPng(p, _scale, RGBColor.White))
+                    {
+                        ms.WriteTo(fs);
+                    }
+                }
+            }
+        }
 
         [Fact]
         public void Issue27_1()

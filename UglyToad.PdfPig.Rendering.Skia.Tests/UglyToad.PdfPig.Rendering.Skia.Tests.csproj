@@ -482,6 +482,9 @@
 	  <None Update="SpecificTestDocuments\new.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
+	  <None Update="SpecificTestDocuments\Shadows.at.Sundown.-.Lvl.11_removed.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	</ItemGroup>
 
 </Project>
