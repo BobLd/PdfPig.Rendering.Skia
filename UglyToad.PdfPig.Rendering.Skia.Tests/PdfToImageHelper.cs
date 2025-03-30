@@ -82,7 +82,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                             bim3 = createEmptyDiffImage(minWidth, minHeight, maxWidth, maxHeight);
                         }
 
-                        bim3.SetPixel(x, y, new SKColor(rDiff, gDiff, bDiff));
+                        bim3.SetPixel(x, y, new SKColor(Math.Min((byte)125, rDiff), Math.Min((byte)125, gDiff), Math.Min((byte)125, bDiff)));
                     }
                     else
                     {

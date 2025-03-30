@@ -78,6 +78,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return new SKRect(left, top, right, bottom);
         }
 
+        public static SKRectI ToSKRectI(this PdfRectangle rect, float height)
+        {
+            double left = rect.Left;
+            double top = height - rect.Top;
+            double right = left + rect.Width;
+            double bottom = top + rect.Height;
+            return new SKRectI((int)left, (int)top, (int)right, (int)bottom); // TODO - rounding
+        }
+
         public static SKPoint ToSKPoint(this PdfPoint pdfPoint, float height)
         {
             return new SKPoint((float)pdfPoint.X, (float)(height - pdfPoint.Y));
@@ -221,24 +230,24 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         public static SKColor ToSKColor(this IColor pdfColor, double alpha)
         {
-            var color = SKColors.Black;
             if (pdfColor is not null)
             {
                 var (r, g, b) = pdfColor.ToRGBValues();
-                color = new SKColor(Convert.ToByte(r * 255), Convert.ToByte(g * 255), Convert.ToByte(b * 255));
+                return new SKColor(Convert.ToByte(r * 255), Convert.ToByte(g * 255), Convert.ToByte(b * 255),
+                    Convert.ToByte(alpha * 255));
             }
 
-            return color.WithAlpha(Convert.ToByte(alpha * 255));
+            return SKColors.Black.WithAlpha(Convert.ToByte(alpha * 255));
         }
 
         public static SKMatrix ToSkMatrix(this TransformationMatrix transformationMatrix)
         {
-            return new SKMatrix((float)transformationMatrix.A, (float)transformationMatrix.C, (float)transformationMatrix.E,
-                                (float)transformationMatrix.B, (float)transformationMatrix.D, (float)transformationMatrix.F,
-                                0, 0, 1);
+            return new SKMatrix((float)transformationMatrix.A, (float)transformationMatrix.C,
+                (float)transformationMatrix.E,
+                (float)transformationMatrix.B, (float)transformationMatrix.D, (float)transformationMatrix.F,
+                0, 0, 1);
         }
 
-        /*
         private static bool doBlending = false;
 
         public static SKBlendMode ToSKBlendMode(this BlendMode blendMode)
@@ -248,12 +257,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 return SKBlendMode.SrcOver;
             }
 
+            // https://pdfium.googlesource.com/pdfium/+/refs/heads/main/core/fxge/skia/fx_skia_device.cpp
             switch (blendMode)
             {
-                // Standard separable blend modes
-                case BlendMode.Normal:
-                case BlendMode.Compatible:
-                    return SKBlendMode.SrcOver; // TODO - Check if correct
+                // 11.3.5.2 Separable blend modes
+                case BlendMode.Normal: // aka Compatible
+                    return SKBlendMode.SrcOver;
 
                 case BlendMode.Multiply:
                     return SKBlendMode.Multiply;
@@ -288,7 +297,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 case BlendMode.Exclusion:
                     return SKBlendMode.Exclusion;
 
-                // Standard nonseparable blend modes
+                // 11.3.5.3 Non-separable blend modes
                 case BlendMode.Hue:
                     return SKBlendMode.Hue;
 
@@ -305,37 +314,5 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     throw new NotImplementedException($"Cannot convert blend mode '{blendMode}' to SKBlendMode.");
             }
         }
-        */
-
-        /*
-        public static void ApplySMask(this SKBitmap image, SKBitmap smask)
-        {
-            // What about 'Alpha source' flag?
-            SKBitmap scaled;
-            if (!image.Info.Rect.Equals(smask.Info.Rect))
-            {
-                scaled = new SKBitmap(image.Info);
-                if (!smask.ScalePixels(scaled, SKFilterQuality.High))
-                {
-                    // log
-                }
-            }
-            else
-            {
-                scaled = smask;
-            }
-
-            for (int x = 0; x < image.Width; x++)
-            {
-                for (int y = 0; y < image.Height; y++)
-                {
-                    var pix = image.GetPixel(x, y);
-                    byte alpha = scaled.GetPixel(x, y).Red; // Gray CS (r = g = b)
-                    image.SetPixel(x, y, pix.WithAlpha(alpha));
-                }
-            }
-            scaled.Dispose();
-        }
-        */
     }
 }
