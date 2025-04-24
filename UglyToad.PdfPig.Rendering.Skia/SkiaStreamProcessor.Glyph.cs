@@ -58,15 +58,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         return;
                     }
 
-                    // If control char, ignore
-                    for (int i = 0; i < unicode.Length; ++i)
-                    {
-                        if (char.IsControl(unicode, i))
-                        {
-                            return;
-                        }
-                    }
-
                     ParsingOptions.Logger.Debug($"RenderGlyph: VectorFontGlyph path is empty for '{unicode}' ({font.Details}), falling back to NonVectorFontGlyph.");
                     ShowNonVectorFontGlyph(font, strokingColor, nonStrokingColor, textRenderingMode, pointSize, unicode,
                         in renderingMatrix, in textMatrix, in transformationMatrix, characterBoundingBox);
@@ -79,11 +70,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
             else
             {
-                if (!CanRender(unicode))
-                {
-                    return;
-                }
-
                 ShowNonVectorFontGlyph(font, strokingColor, nonStrokingColor, textRenderingMode, pointSize, unicode,
                     in renderingMatrix, in textMatrix, in transformationMatrix, characterBoundingBox);
             }
@@ -164,6 +150,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             in TransformationMatrix textMatrix, in TransformationMatrix transformationMatrix,
             CharacterBoundingBox characterBoundingBox)
         {
+            if (!CanRender(unicode))
+            {
+                return;
+            }
+
             // TODO - Handle Fill
 
             var style = textRenderingMode.ToSKPaintStyle();
@@ -225,7 +216,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         private static bool CanRender(string unicode)
         {
-            // We always render glyphs for the moment
+            ReadOnlySpan<char> chars = unicode.AsSpan();
+            for (int i = 0; i < chars.Length; ++i)
+            {
+                if (char.IsControl(chars[i]))
+                {
+                    return false;
+                }
+            }
             return true;
         }
     }
