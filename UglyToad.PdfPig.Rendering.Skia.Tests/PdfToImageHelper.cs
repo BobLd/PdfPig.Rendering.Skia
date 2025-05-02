@@ -215,6 +215,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                             bim3.Encode(fs, SKEncodedImageFormat.Png, 100);
                         }
 
+                        string renderToSaveFile = Path.Combine(_errorFolder, $"{rootName}_{pageNumber}_rendered.png");
+
+                        Directory.CreateDirectory(Path.GetDirectoryName(renderToSaveFile));
+                        using (var fs = new FileStream(renderToSaveFile, FileMode.Create))
+                        {
+                            actual.Encode(fs, SKEncodedImageFormat.Png, 100);
+                        }
+
                         return false;
                     }
                 }
