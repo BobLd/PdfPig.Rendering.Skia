@@ -49,7 +49,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             try
             {
-
                 using (new SKAutoCanvasRestore(_canvas, true))
                 using (var skImage = image.GetSKImage())
                 {
@@ -73,24 +72,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         byte refByte = image.Decode.Count == 2 &&
                                        (int)image.Decode[0] == 1 &&
                                        (int)image.Decode[1] == 0 ? byte.MaxValue : byte.MinValue;
-
+                        
+                        using (var skImagePixels = skImage.PeekPixels())
                         using (var alphaMask = new SKBitmap(skImage.Width, skImage.Height, SKColorType.Bgra8888, SKAlphaType.Premul))
                         {
-                            var span = skImage.PeekPixels().GetPixelSpan();
+                            var span = skImagePixels.GetPixelSpan();
 
-                            for (int y = 0; y < skImage.Height; y++)
+                            for (int y = 0; y < skImage.Height; ++y)
                             {
-                                for (int x = 0; x < skImage.Width; x++)
+                                for (int x = 0; x < skImage.Width; ++x)
                                 {
                                     byte pixel = span[(y * skImage.Width) + x];
                                     if (pixel == refByte)
                                     {
                                         alphaMask.SetPixel(x, y, colour);
                                     }
-                                    else
-                                    {
-                                        alphaMask.SetPixel(x, y, SKColors.Transparent);
-                                    }
+                                    //else
+                                    //{
+                                    //    alphaMask.SetPixel(x, y, SKColors.Transparent);
+                                    //}
                                 }
                             }
 
