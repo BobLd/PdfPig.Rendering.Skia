@@ -96,6 +96,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             new object[]
             {
                 // Output image is wrong - but renders JPX image
+                "1_1.png",
+                "1.pdf", 1, 2
+            },
+            new object[]
+            {
+                // Output image is wrong - but renders JPX image
                 "68-1990-01_A_1.png",
                 "68-1990-01_A.pdf", 1, 2
             },
@@ -401,7 +407,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         public void PdfPigSkiaTest(string expectedImage, string pdfFile, int pageNumber, int scale)
         {
 #if DEBUG
-            //throw new System.ArgumentException("PdfPigSkiaTest needs to run in Release mode.");
+            throw new System.ArgumentException("PdfPigSkiaTest needs to run in Release mode.");
 #endif
 
             expectedImage = Path.Combine("pdfpig_skia", expectedImage);

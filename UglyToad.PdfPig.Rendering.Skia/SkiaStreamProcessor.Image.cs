@@ -49,25 +49,53 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             try
             {
-                if (CurrentTransformationMatrix.A > 0 && CurrentTransformationMatrix.D > 0)
-                {
-                    // No transformation to do
-                    using (var bitmap = image.GetSKImage())
-                    {
-                        _canvas.DrawImage(bitmap, destRect, _paintCache.GetAntialiasing());
-                    }
-                }
-                else
-                {
-                    SKMatrix matrix = SKMatrix.CreateScale(
-                        Math.Sign(CurrentTransformationMatrix.A),
-                        Math.Sign(CurrentTransformationMatrix.D));
 
-                    using (var bitmap = image.GetSKImage())
-                    using (new SKAutoCanvasRestore(_canvas, true))
+                using (new SKAutoCanvasRestore(_canvas, true))
+                using (var skImage = image.GetSKImage())
+                {
+                    if (!(CurrentTransformationMatrix.A > 0) || !(CurrentTransformationMatrix.D > 0))
                     {
+                        var matrix = SKMatrix.CreateScale(Math.Sign(CurrentTransformationMatrix.A), Math.Sign(CurrentTransformationMatrix.D));
+                        
                         _canvas.SetMatrix(matrix);
-                        _canvas.DrawImage(bitmap, matrix.MapRect(destRect), _paintCache.GetAntialiasing());
+                        destRect = matrix.MapRect(destRect);
+                    }
+
+                    if (!image.IsImageMask)
+                    {
+                        _canvas.DrawImage(skImage, destRect, _paintCache.GetAntialiasing());
+                    }
+                    else
+                    {
+                        // Draw image mask
+                        var colour = GetCurrentState().CurrentNonStrokingColor.ToSKColor(1);
+
+                        byte refByte = image.Decode.Count == 2 &&
+                                       (int)image.Decode[0] == 1 &&
+                                       (int)image.Decode[1] == 0 ? byte.MaxValue : byte.MinValue;
+
+                        using (var alphaMask = new SKBitmap(skImage.Width, skImage.Height, SKColorType.Bgra8888, SKAlphaType.Premul))
+                        {
+                            var span = skImage.PeekPixels().GetPixelSpan();
+
+                            for (int y = 0; y < skImage.Height; y++)
+                            {
+                                for (int x = 0; x < skImage.Width; x++)
+                                {
+                                    byte pixel = span[(y * skImage.Width) + x];
+                                    if (pixel == refByte)
+                                    {
+                                        alphaMask.SetPixel(x, y, colour);
+                                    }
+                                    else
+                                    {
+                                        alphaMask.SetPixel(x, y, SKColors.Transparent);
+                                    }
+                                }
+                            }
+
+                            _canvas.DrawBitmap(alphaMask, destRect, _paintCache.GetAntialiasing());
+                        }
                     }
                 }
 
