@@ -461,6 +461,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             SKRect rect = SKRect.Create(Math.Abs((float)xStep), Math.Abs((float)yStep));
 
+            /*
             using (var picture = processor.Process(PageNumber, operations))
             using (var shader = SKShader.CreatePicture(picture, SKShaderTileMode.Repeat, SKShaderTileMode.Repeat, transformMatrix, rect))
             using (var paint = new SKPaint())
@@ -473,6 +474,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 _canvas.DrawPath(path, paint);
             }
+            */
 
             if (hasResources)
             {

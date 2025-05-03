@@ -13,8 +13,10 @@
 // limitations under the License.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using SkiaSharp;
 using UglyToad.PdfPig.Annotations;
 using UglyToad.PdfPig.Content;
@@ -30,7 +32,7 @@ using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia
 {
-    internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
+    internal partial class SkiaStreamProcessor : BaseStreamProcessor<IAsyncEnumerable<SKPicture>>
     {
         private readonly bool _renderAnnotations = true; // TODO - param
         private const bool _antiAliasing = true;
@@ -51,6 +53,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private readonly SKPaintCache _paintCache = new SKPaintCache(_antiAliasing, _minimumLineWidth);
 
         private readonly AnnotationProvider _annotationProvider;
+
+        private readonly Stack<SKPictureRecorder> builderStack = new();
+        private readonly BlockingCollection<SKPicture> _cache = new();
+
+        private SKCanvas getCanvas() => builderStack.Peek().RecordingCanvas;
 
         public SkiaStreamProcessor(
             int pageNumber,
@@ -88,33 +95,47 @@ namespace UglyToad.PdfPig.Rendering.Skia
             _yAxisFlipMatrix = SKMatrix.CreateScale(1, -1, 0, _height / 2f);
         }
 
-        public override SKPicture Process(int pageNumberCurrent, IReadOnlyList<IGraphicsStateOperation> operations)
+        public override async IAsyncEnumerable<SKPicture> Process(int pageNumberCurrent, IReadOnlyList<IGraphicsStateOperation> operations)
         {
             try
             {
                 // https://github.com/apache/pdfbox/blob/94b3d15fd24b9840abccece261173593625ff85c/pdfbox/src/main/java/org/apache/pdfbox/rendering/PDFRenderer.java#L274
 
-                CloneAllStates();
 
-                using (var recorder = new SKPictureRecorder())
-                using (_canvas = recorder.BeginRecording(SKRect.Create(_width, _height)))
+                var task = Task.Factory.StartNew(() =>
                 {
-                    if (_renderAnnotations)
-                    {
-                        DrawAnnotations(true);
-                    }
+                    CloneAllStates();
+
+                    var recorder = new SKPictureRecorder();
+                    recorder.BeginRecording(SKRect.Create(_width, _height));
+                    builderStack.Push(recorder);
+
+                    //getCanvas().Clear(SKColors.White);
 
                     ProcessOperations(operations);
 
-                    if (_renderAnnotations)
-                    {
-                        DrawAnnotations(false);
-                    }
+                    getCanvas().Flush();
 
-                    _canvas.Flush();
+                    var r = builderStack.Pop();
 
-                    return recorder.EndRecording();
+                    var drawable = r.EndRecording();
+                    r.RecordingCanvas?.Dispose();
+                    r.Dispose();
+                    _cache.Add(drawable);
+
+                    _cache.CompleteAdding();
+                }, TaskCreationOptions.LongRunning);
+
+                foreach (var item in _cache.GetConsumingEnumerable())
+                {
+                    yield return item;
                 }
+
+                await task;
+
+
+                _cache.Dispose();
+            
             }
             finally
             {
@@ -152,15 +173,41 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <inheritdoc/>
-        public override void BeginMarkedContent(NameToken name, NameToken propertyDictionaryName, DictionaryToken properties)
+        public override void BeginMarkedContent(NameToken name, NameToken propertyDictionaryName,
+            DictionaryToken properties)
         {
-            // No op
+            if (propertyDictionaryName is not null)
+            {
+                var actual = ResourceStore.GetMarkedContentPropertiesDictionary(propertyDictionaryName);
+
+                properties = actual ?? properties;
+            }
+
+            var recorder = new SKPictureRecorder();
+
+            recorder.BeginRecording(SKRect.Create(_width, _height));
+
+            builderStack.Push(recorder);
+
+            if (_currentPath is not null)
+            {
+                getCanvas().ClipPath(_currentPath, SKClipOperation.Intersect);
+            }
         }
 
         /// <inheritdoc/>
         public override void EndMarkedContent()
         {
-            // No op
+            getCanvas().Flush();
+
+            var recorder = builderStack.Pop();
+
+            var skPicture = recorder.EndRecording();
+
+            recorder.RecordingCanvas?.Dispose();
+
+            recorder.Dispose();
+            _cache.Add(skPicture);
         }
 
         private float GetScaledLineWidth()

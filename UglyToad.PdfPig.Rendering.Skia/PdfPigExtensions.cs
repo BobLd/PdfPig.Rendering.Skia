@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
@@ -32,7 +33,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </summary>
         public static void AddSkiaPageFactory(this PdfDocument document)
         {
-            document.AddPageFactory<SKPicture, SkiaPageFactory>();
+            document.AddPageFactory<IAsyncEnumerable<SKPicture>, SkiaPageFactory>();
         }
 
         /// <summary>

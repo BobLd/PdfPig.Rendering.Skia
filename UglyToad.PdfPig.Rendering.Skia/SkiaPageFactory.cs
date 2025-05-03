@@ -32,7 +32,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
     /// <summary>
     /// The Skia page factory to render pages as images.
     /// </summary>
-    public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
+    public sealed class SkiaPageFactory : BasePageFactory<IAsyncEnumerable<SKPicture>>, IDisposable
     {
         private readonly SkiaFontCache _fontCache;
 
@@ -51,7 +51,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <inheritdoc/>
-        protected override SKPicture ProcessPage(int pageNumber, DictionaryToken dictionary,
+        protected override IAsyncEnumerable<SKPicture> ProcessPage(int pageNumber, DictionaryToken dictionary,
             NamedDestinations namedDestinations, MediaBox mediaBox, CropBox cropBox, UserSpaceUnit userSpaceUnit,
             PageRotationDegrees rotation, TransformationMatrix initialMatrix,
             IReadOnlyList<IGraphicsStateOperation> operations)
