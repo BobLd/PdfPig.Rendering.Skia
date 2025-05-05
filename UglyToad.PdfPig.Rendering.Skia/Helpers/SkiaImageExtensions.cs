@@ -127,12 +127,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         if (isInvertedMask)
                         {
                             // TODO - Untested
-                            getAlphaChannel = (col, row) =>
-                                Convert.ToByte(255 - sMaskPixmap.GetPixelSpan()[(col * width) + row]);
+                            getAlphaChannel = (row, col) =>
+                                Convert.ToByte(255 - sMaskPixmap.GetPixelSpan()[(row * width) + col]);
                         }
                         else
                         {
-                            getAlphaChannel = (col, row) => sMaskPixmap.GetPixelSpan()[(col * width) + row];
+                            getAlphaChannel = (row, col) => sMaskPixmap.GetPixelSpan()[(row * width) + col];
                         }
                     }
                 }
@@ -140,9 +140,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 if (pdfImage.ColorSpaceDetails.BaseType == ColorSpace.DeviceCMYK || numberOfComponents == 4)
                 {
                     int i = 0;
-                    for (int col = 0; col < height; ++col)
+                    for (int row = 0; row < height; ++row)
                     {
-                        for (int row = 0; row < width; ++row)
+                        for (int col = 0; col < width; ++col)
                         {
                             /*
                              * Where CMYK in 0..1
@@ -159,11 +159,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             var g = (byte)(255 * (1 - m) * (1 - k));
                             var b = (byte)(255 * (1 - y) * (1 - k));
 
-                            var start = (col * (width * bytesPerPixel)) + (row * bytesPerPixel);
+                            var start = (row * (width * bytesPerPixel)) + (col * bytesPerPixel);
                             raster[start++] = r;
                             raster[start++] = g;
                             raster[start++] = b;
-                            raster[start] = getAlphaChannel(col, row);
+                            raster[start] = getAlphaChannel(row, col);
                         }
                     }
 
@@ -173,15 +173,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 if (numberOfComponents == 3)
                 {
                     int i = 0;
-                    for (int col = 0; col < height; ++col)
+                    for (int row = 0; row < height; ++row)
                     {
-                        for (int row = 0; row < width; ++row)
+                        for (int col = 0; col < width; ++col)
                         {
-                            var start = (col * (width * bytesPerPixel)) + (row * bytesPerPixel);
+                            var start = (row * (width * bytesPerPixel)) + (col * bytesPerPixel);
                             raster[start++] = bytesPure[i++];
                             raster[start++] = bytesPure[i++];
                             raster[start++] = bytesPure[i++];
-                            raster[start] = getAlphaChannel(col, row);
+                            raster[start] = getAlphaChannel(row, col);
                         }
                     }
 
