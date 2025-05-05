@@ -96,8 +96,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             new object[]
             {
                 // Output image is wrong - but renders JPX image
-                "1_1.png",
-                "1.pdf", 1, 2
+                "caly-issues-56-1_1.png",
+                "caly-issues-56-1.pdf", 1, 2
+            },
+            new object[]
+            {
+                // Output image is wrong - but renders JPX image
+                "caly-issues-58-2_1.png",
+                "caly-issues-58-2.pdf", 1, 2
             },
             new object[]
             {

@@ -169,13 +169,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 matrix[2, 0], matrix[2, 1], matrix[2, 2]);
         }
 
-        private StreamToken GetNormalAppearanceAsStream(Annotation annotation)
+        private StreamToken? GetNormalAppearanceAsStream(Annotation annotation)
         {
             var appearanceDict = GetAppearance(annotation);
 
             // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/form/AppearanceGeneratorHelper.java
 
-            if (appearanceDict == null)
+            if (appearanceDict is null)
             {
                 return GenerateNormalAppearanceAsStream(annotation);
             }
@@ -242,7 +242,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             if (annotation.Type == AnnotationType.Widget)
             {
-                normalAppearance = setAppearanceContent(annotation, normalAppearance);
+                normalAppearance = SetAppearanceContent(annotation, normalAppearance);
             }
 
             var dict = normalAppearance.StreamDictionary
@@ -251,10 +251,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
             return new StreamToken(dict, normalAppearance.Data);
         }
 
+        private bool ShouldPaintWidgetBackground(Annotation widget)
+        {
+            // This is a guess, some widget annotations do not need background colors to be added
+
+            if (!widget.AnnotationDictionary.TryGet(NameToken.Ft, out NameToken fieldTypeToken) ||
+                !fieldTypeToken.Equals(NameToken.Sig))
+            {
+                return true; // Default
+            }
+
+            // We have a Signature dictionary
+            // Do not paint background for signature annotation with signature dictionary (V)
+            return !widget.AnnotationDictionary.TryGet<DictionaryToken>(NameToken.V, PdfScanner, out _);
+        }
+
         /// <summary>
         /// Constructs and sets new contents for given appearance stream.
         /// </summary>
-        private StreamToken setAppearanceContent(Annotation widget, StreamToken appearanceStream)
+        private StreamToken SetAppearanceContent(Annotation widget, StreamToken appearanceStream)
         {
             // first copy any needed resources from the document’s DR dictionary into
             // the stream’s Resources dictionary
@@ -289,18 +304,21 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 // insert field contents
                 // TODO - To finish, does not follow PdfBox
-                var (r, g, b) = DefaultFieldsHighlightColor.ToRGBValues();
-                GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
-
-                PdfRectangle bbox = widget.Rectangle;
-                if (widget.AnnotationDictionary.TryGet(NameToken.Rect, PdfScanner, out ArrayToken rect))
+                if (ShouldPaintWidgetBackground(widget))
                 {
-                    var points = rect.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
-                    bbox = new PdfRectangle(points[0], points[1], points[2], points[3]);
-                }
+                    var (r, g, b) = DefaultFieldsHighlightColor.ToRGBValues();
+                    GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
 
-                new AppendRectangle(0,0, bbox.Width, bbox.Height).Write(ms);
-                PdfPig.Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Write(ms);
+                    PdfRectangle bbox = widget.Rectangle;
+                    if (widget.AnnotationDictionary.TryGet(NameToken.Rect, PdfScanner, out ArrayToken rect))
+                    {
+                        var points = rect.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
+                        bbox = new PdfRectangle(points[0], points[1], points[2], points[3]);
+                    }
+
+                    new AppendRectangle(0, 0, bbox.Width, bbox.Height).Write(ms);
+                    PdfPig.Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Write(ms);
+                }
 
                 int emcIndex = tokens.FindIndex(x => x is EndMarkedContent);
 
@@ -354,7 +372,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 : null;
         }
 
-        private StreamToken GenerateNormalAppearanceAsStream(Annotation annotation)
+        private StreamToken? GenerateNormalAppearanceAsStream(Annotation annotation)
         {
             // https://github.com/apache/pdfbox/blob/c4b212ecf42a1c0a55529873b132ea338a8ba901/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDAbstractAppearanceHandler.java#L479
 
@@ -959,6 +977,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 double lineWidth = ab.BorderWidth;
 
+                // TODO - handle no background color filling required, see `SetAppearanceContent(Annotation widget, StreamToken appearanceStream)`
                 var (r, g, b) = DefaultFieldsHighlightColor.ToRGBValues();
                 GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
 
