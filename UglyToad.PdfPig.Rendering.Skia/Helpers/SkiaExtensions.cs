@@ -105,24 +105,22 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             };
         }
 
-        public static SKPathEffect ToSKPathEffect(this LineDashPattern lineDashPattern, float lineWidth)
+        public static SKPathEffect ToSKPathEffect(this LineDashPattern lineDashPattern, float scale)
         {
-            const float oneOver72 = (float)(1.0 / 72.0);
+            //const float oneOver72 = (float)(1.0 / 72.0);
 
             if (lineDashPattern.Phase == 0 && !(lineDashPattern.Array?.Count > 0))
             {
                 return null;
             }
 
-            float scale = 1f / lineWidth; //oneOver72 / 2; // TODO - Scale is still not correct
-
-            float phase = lineDashPattern.Phase * scale;
+            float phase = lineDashPattern.Phase / scale; // Divide
 
             switch (lineDashPattern.Array.Count)
             {
                 case 1:
                     {
-                        var v = (float)lineDashPattern.Array[0] * scale;
+                        var v = (float)lineDashPattern.Array[0] * scale; // Multiply
                         return SKPathEffect.CreateDash([v, v], phase);
                     }
                 case > 0:
@@ -137,7 +135,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             }
                             else
                             {
-                                pattern[i] = v * scale;
+                                pattern[i] = v * scale; // Multiply
                             }
                         }
 

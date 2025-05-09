@@ -156,11 +156,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 // TODO
             }
-
+            
             using (var shader = SKShader.CreateTwoPointConicalGradient(new SKPoint(x0, y0), r0, new SKPoint(x1, y1), r1,
                        colors, colorPos, SKShaderTileMode.Clamp, transformMatrix))
             using (var paint = new SKPaint())
-            using (var dash = currentState.LineDashPattern.ToSKPathEffect((float)currentState.LineWidth))
             {
                 paint.IsAntialias = shading.AntiAlias;
                 paint.Shader = shader;
@@ -169,12 +168,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 if (isStroke)
                 {
+                    float scalingFactor = currentState.CurrentTransformationMatrix.GetScalingFactor();
+
                     // TODO - To finish
                     paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = Math.Max(_minimumLineWidth, GetScaledLineWidth()); // A guess
+                    paint.StrokeWidth = (float)currentState.LineWidth * scalingFactor; // A guess
                     paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
                     paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    paint.PathEffect = dash;
+                    paint.PathEffect = currentState.LineDashPattern.ToSKPathEffect(scalingFactor);
                 }
 
                 if (path is null)
@@ -245,12 +246,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 SKPathEffect dash = null;
                 if (isStroke)
                 {
+                    float scalingFactor = currentState.CurrentTransformationMatrix.GetScalingFactor();
+
                     // TODO - To Check
                     paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = Math.Max(_minimumLineWidth, GetScaledLineWidth()); // A guess
+                    paint.StrokeWidth = (float)currentState.LineWidth * scalingFactor; // A guess
                     paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
                     paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    dash = currentState.LineDashPattern.ToSKPathEffect((float)currentState.LineWidth);
+                    dash = currentState.LineDashPattern.ToSKPathEffect(scalingFactor);
                     paint.PathEffect = dash;
                 }
 

@@ -192,22 +192,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
                     currentState.LineDashPattern, currentState.CurrentTransformationMatrix);
                 _canvas.DrawPath(_currentPath, paint);
-
-                /* No cache method
-                using (var paint = new SKPaint())
-                using (var dash = currentState.LineDashPattern.ToSKPathEffect((float)currentState.LineWidth))
-                {
-                    paint.IsAntialias = _antiAliasing;
-                    paint.Color = currentState.GetCurrentStrokingColorSKColor();
-                    paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = MathF.Max(_minimumLinwWidth, GetScaledLineWidth()); // A guess
-                    paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
-                    paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    paint.PathEffect = dash;
-                    //paint.BlendMode = currentGraphicsState.BlendMode.ToSKBlendMode();
-                    _canvas.DrawPath(CurrentPath, paint);
-                }
-                */
             }
         }
 

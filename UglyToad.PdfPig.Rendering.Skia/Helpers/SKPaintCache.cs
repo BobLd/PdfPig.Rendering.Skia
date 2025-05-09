@@ -25,8 +25,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
     {
         private readonly bool _isAntialias;
 
-        private readonly float _minimumLineWidth;
-
         private readonly Dictionary<int, SKPaint> _cache = new Dictionary<int, SKPaint>();
 
         private readonly SKPaint _antialiasingPaint;
@@ -38,7 +36,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         public SKPaintCache(bool isAntialias, float minimumLineWidth)
         {
             _isAntialias = isAntialias;
-            _minimumLineWidth = minimumLineWidth;
+            // minimumLineWidth not in use
             _antialiasingPaint = new SKPaint()
             {
                 IsAntialias = _isAntialias,
@@ -58,7 +56,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         private static int GetPaintKey(IColor color, double alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,
             LineCapStyle? capStyle, LineDashPattern? dashPattern)
         {
-            return HashCode.Combine(color, alpha, stroke, strokeWidth, joinStyle, capStyle, getHash(dashPattern));
+            return HashCode.Combine(color, alpha, stroke, strokeWidth, joinStyle, capStyle, GetHash(dashPattern));
         }
 
         public SKPaint GetPaint(IColor color, double alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,
@@ -79,15 +77,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 FilterQuality = SKFilterQuality.High,
                 SubpixelText = true
             };
-
+            
             if (stroke)
             {
+                float scalingFactor = matrix.Value.GetScalingFactor();
+                
                 // Careful - we assume they all have values if stroke!
-                float scaledWidth = (float)(strokeWidth.Value * matrix.Value.A); // A guess
-                paint.StrokeWidth = Math.Max(_minimumLineWidth, scaledWidth);
+                paint.StrokeWidth = strokeWidth.Value * scalingFactor;
                 paint.StrokeJoin = joinStyle.Value.ToSKStrokeJoin();
                 paint.StrokeCap = capStyle.Value.ToSKStrokeCap();
-                paint.PathEffect = dashPattern.Value.ToSKPathEffect(strokeWidth.Value);
+                paint.PathEffect = dashPattern.Value.ToSKPathEffect(scalingFactor);
             }
 
             _cache[key] = paint;
@@ -95,7 +94,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return paint;
         }
 
-        private static int getHash(LineDashPattern? dashPattern)
+        private static int GetHash(LineDashPattern? dashPattern)
         {
             if (!dashPattern.HasValue)
             {
