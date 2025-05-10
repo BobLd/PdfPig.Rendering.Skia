@@ -23,6 +23,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
     internal static class SkiaExtensions
     {
+        private const float OneOver72 = (float)(1.0 / 72.0);
+
         private static readonly string DefaultFamilyName = SKTypeface.Default.FamilyName;
 
         public static bool IsDefault(this SKTypeface typeface)
@@ -121,6 +123,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 case 1:
                     {
                         var v = (float)lineDashPattern.Array[0] * scale; // Multiply
+                        if (v == 0)
+                        {
+                            v = OneOver72; // TODO - Add tests
+                        }
                         return SKPathEffect.CreateDash([v, v], phase);
                     }
                 case > 0:
@@ -131,7 +137,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             var v = (float)lineDashPattern.Array[i];
                             if (v == 0)
                             {
-                                pattern[i] = scale; // TODO - Need to add tests
+                                pattern[i] = OneOver72; // See APISmap1.pdf
                             }
                             else
                             {
