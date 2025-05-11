@@ -54,7 +54,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 {
                     if (!(CurrentTransformationMatrix.A > 0) || !(CurrentTransformationMatrix.D > 0))
                     {
-                        var matrix = SKMatrix.CreateScale(Math.Sign(CurrentTransformationMatrix.A), Math.Sign(CurrentTransformationMatrix.D));
+                        int sx = Math.Sign(CurrentTransformationMatrix.A);
+                        int sy = Math.Sign(CurrentTransformationMatrix.D);
+
+                        // Avoid passing a scale of 0
+                        var matrix = SKMatrix.CreateScale(sx == 0 ? 1 : sx, sy == 0 ? 1 : sy);
 
                         _canvas.SetMatrix(matrix);
                         destRect = matrix.MapRect(destRect);
