@@ -95,13 +95,34 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             // These are not perfect yet and can be updated once the rendering is improved
             new object[]
             {
-                // Output image is wrong - but renders JPX image
+                // https://github.com/BobLd/PdfPig.Rendering.Skia/issues/26
+                "Page_28_1.png",
+                "Page_28.pdf", 1, 2
+            },
+
+            new object[]
+            {
+                "MOZILLA-LINK-3264-0_1.png",
+                "MOZILLA-LINK-3264-0.pdf", 1, 2
+            },
+            new object[]
+            {
+                "MOZILLA-LINK-3264-0_3.png",
+                "MOZILLA-LINK-3264-0.pdf", 3, 2
+            },
+            new object[]
+            {
+                "MOZILLA-LINK-3264-0_4.png",
+                "MOZILLA-LINK-3264-0.pdf", 4, 2
+            },
+
+            new object[]
+            {
                 "caly-issues-56-1_1.png",
                 "caly-issues-56-1.pdf", 1, 2
             },
             new object[]
             {
-                // Output image is wrong - but renders JPX image
                 "caly-issues-58-2_1.png",
                 "caly-issues-58-2.pdf", 1, 2
             },
