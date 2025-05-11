@@ -13,12 +13,14 @@
 // limitations under the License.
 
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Images;
+using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
@@ -81,7 +83,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 if (numberOfComponents == 1)
                 {
-                    if (pdfImage.SoftMaskImage is not null)
+                    if (pdfImage.MaskImage is not null)
                     {
                         // TODO
                     }
@@ -109,32 +111,105 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     skImage = SKImage.FromPixels(pixmap, (addr, ctx) => ptr.Free());
                 }
 
-                Func<int, int, byte> getAlphaChannel = (_, _) => byte.MaxValue;
-                if (pdfImage.SoftMaskImage?.TryGenerate(out mask) == true)
+                Func<int, int, byte, byte, byte, byte> getAlphaChannel = (_, _, _, _, _) => byte.MaxValue;
+                if (pdfImage.MaskImage?.TryGenerate(out mask) == true)
                 {
                     if (!skImage.Info.Rect.Equals(mask!.Info.Rect))
                     {
-                        // TODO - Resize
+                        // Resize
+                        var maskInfo = new SKImageInfo(skImage.Info.Width, skImage.Info.Height, SKColorType.Gray8, SKAlphaType.Unpremul);
+                        var maskRaster = new byte[skImage.Info.Width * skImage.Info.Height];
+                        var ptrMask = GCHandle.Alloc(maskRaster, GCHandleType.Pinned);
+                        sMaskPixmap = new SKPixmap(maskInfo, ptrMask.AddrOfPinnedObject(), maskInfo.RowBytes);
+                        if (!mask.ScalePixels(sMaskPixmap, SKFilterQuality.High))
+                        {
+                            // TODO - Error
+                        }
+
+                        mask.Dispose();
+                        mask = SKImage.FromPixels(sMaskPixmap, (addr, ctx) => ptrMask.Free());
+                    }
+                    else
+                    {
+                        sMaskPixmap = mask.PeekPixels();
                     }
 
-                    sMaskPixmap = mask.PeekPixels();
                     if (!sMaskPixmap.GetPixelSpan().IsEmpty)
                     {
-                        bool isInvertedMask = pdfImage.SoftMaskImage.Decode.Count == 2 &&
-                                              (int)pdfImage.SoftMaskImage.Decode[0] == 1 &&
-                                              (int)pdfImage.SoftMaskImage.Decode[1] == 0;
+                        //getAlphaChannel = (row, col, _, _, _) => sMaskPixmap.GetPixelSpan()[(row * width) + col];
 
-                        if (isInvertedMask)
+                        if (pdfImage.MaskImage.NeedsReverseDecode())
                         {
-                            // TODO - Untested
-                            getAlphaChannel = (row, col) =>
+                            // MOZILLA-LINK-3264-0.pdf 
+                            // MOZILLA-LINK-4246-2.pdf
+                            // MOZILLA-LINK-4293-0.pdf
+                            // MOZILLA-LINK-4314-0.pdf
+                            // MOZILLA-LINK-3758-0.pdf
+
+                            // Wrong: MOZILLA-LINK-4379-0.pd
+
+                            getAlphaChannel = (row, col, _, _, _) =>
                                 Convert.ToByte(255 - sMaskPixmap.GetPixelSpan()[(row * width) + col]);
                         }
                         else
                         {
-                            getAlphaChannel = (row, col) => sMaskPixmap.GetPixelSpan()[(row * width) + col];
+                            getAlphaChannel = (row, col, _, _, _) => sMaskPixmap.GetPixelSpan()[(row * width) + col];
                         }
                     }
+                }
+                else if (pdfImage.ImageDictionary.TryGet(NameToken.Mask, out ArrayToken maskArr))
+                {
+                    var bytes = maskArr.Data.OfType<NumericToken>().Select(x => Convert.ToByte(x.Int)).ToArray();
+
+                    var range = ColorSpaceDetailsByteConverter.Convert(
+                        pdfImage.ColorSpaceDetails!,
+                        bytes,
+                        pdfImage.BitsPerComponent,
+                        bytes.Length / pdfImage.ColorSpaceDetails!.NumberOfColorComponents,
+                        1);
+
+                    byte rMin = 0;
+                    byte gMin = 0;
+                    byte bMin = 0;
+                    byte rMax = 0;
+                    byte gMax = 0;
+                    byte bMax = 0;
+
+                    if (numberOfComponents == 4)
+                    {
+                        if (range.Length != 8)
+                        {
+                            throw new ArgumentException($"The size of the transformed mask array does not match number of components of 4: got {range.Length} but expected 8.");
+                        }
+
+                        throw new NotImplementedException("Mask CMYK");
+                    }
+                    else if (numberOfComponents == 3)
+                    {
+                        if (range.Length != 6)
+                        {
+                            throw new ArgumentException($"The size of the transformed mask array does not match number of components of 3: got {range.Length} but expected 6.");
+                        }
+
+                        rMin = range[0];
+                        gMin = range[1];
+                        bMin = range[2];
+                        rMax = range[3];
+                        gMax = range[4];
+                        bMax = range[5];
+                    }
+
+                    getAlphaChannel = (_, _, r, g, b) =>
+                    {
+                        if (rMin <= r && r <= rMax &&
+                            gMin <= g && g <= gMax &&
+                            bMin <= b && b <= bMax)
+                        {
+                            return byte.MinValue;
+                        }
+
+                        return byte.MaxValue;
+                    };
                 }
 
                 if (pdfImage.ColorSpaceDetails.BaseType == ColorSpace.DeviceCMYK || numberOfComponents == 4)
@@ -163,7 +238,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             raster[start++] = r;
                             raster[start++] = g;
                             raster[start++] = b;
-                            raster[start] = getAlphaChannel(row, col);
+                            raster[start] = getAlphaChannel(row, col, r, g, b);
                         }
                     }
 
@@ -177,11 +252,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     {
                         for (int col = 0; col < width; ++col)
                         {
+                            byte r = bytesPure[i++];
+                            byte g = bytesPure[i++];
+                            byte b = bytesPure[i++];
+
                             var start = (row * (width * bytesPerPixel)) + (col * bytesPerPixel);
-                            raster[start++] = bytesPure[i++];
-                            raster[start++] = bytesPure[i++];
-                            raster[start++] = bytesPure[i++];
-                            raster[start] = getAlphaChannel(row, col);
+                            raster[start++] = r;
+                            raster[start++] = g;
+                            raster[start++] = b;
+                            raster[start] = getAlphaChannel(row, col, r, g, b);
                         }
                     }
 
