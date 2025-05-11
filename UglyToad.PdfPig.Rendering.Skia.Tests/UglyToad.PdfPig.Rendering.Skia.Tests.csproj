@@ -8,7 +8,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-		<PackageReference Include="PdfPig" Version="0.1.10-alpha-20250209-1660c" />
+		
 		<PackageReference Include="SkiaSharp" Version="2.88.9" />
 		<PackageReference Include="SkiaSharp.HarfBuzz" Version="2.88.9" />
 		<PackageReference Include="xunit" Version="2.4.1" />
@@ -23,6 +23,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Core\UglyToad.PdfPig.Core.csproj" />
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.DocumentLayoutAnalysis\UglyToad.PdfPig.DocumentLayoutAnalysis.csproj" />
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Fonts\UglyToad.PdfPig.Fonts.csproj" />
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Tokenization\UglyToad.PdfPig.Tokenization.csproj" />
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Tokens\UglyToad.PdfPig.Tokens.csproj" />
+	  <ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig\UglyToad.PdfPig.csproj" />
 	  <ProjectReference Include="..\UglyToad.PdfPig.Rendering.Skia\UglyToad.PdfPig.Rendering.Skia.csproj" />
 	</ItemGroup>
 
@@ -238,6 +244,9 @@
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	  <None Update="Documents\MOZILLA-3136-0.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\MOZILLA-LINK-3264-0.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	  <None Update="Documents\path_ext_oddeven.pdf">

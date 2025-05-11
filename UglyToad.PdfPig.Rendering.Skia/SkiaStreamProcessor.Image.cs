@@ -59,7 +59,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         _canvas.SetMatrix(matrix);
                         destRect = matrix.MapRect(destRect);
                     }
-
+                    
                     if (!image.IsImageMask)
                     {
                         _canvas.DrawImage(skImage, destRect, _paintCache.GetAntialiasing());
@@ -69,14 +69,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         // Draw image mask
                         var colour = GetCurrentState().CurrentNonStrokingColor.ToSKColor(1);
 
-                        /*
-                        For the moment we don't invert based on Decode parameter.
-                        See 2.pdf shared in https://github.com/CalyPdf/Caly/issues/58 (top right logo)
                         
-                        byte refByte = image.Decode.Count == 2 &&
-                                       (int)image.Decode[0] == 1 &&
-                                       (int)image.Decode[1] == 0 ? byte.MaxValue : byte.MinValue;
-                        */
+                        // For the moment we don't invert based on Decode parameter.
+                        // See 2.pdf shared in https://github.com/CalyPdf/Caly/issues/58 (top right logo)
+                        
+                        byte refByte = image.ShouldInvertColor ? byte.MaxValue : byte.MinValue;
 
                         using (var skImagePixels = skImage.PeekPixels())
                         using (var alphaMask = new SKBitmap(skImage.Width, skImage.Height, SKColorType.Bgra8888, SKAlphaType.Premul))
@@ -88,7 +85,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                                 for (int x = 0; x < skImage.Width; x++)
                                 {
                                     byte pixel = span[(y * skImage.Width) + x];
-                                    if (pixel == 0) // Use refByte variable if inverted required
+                                    if (pixel == refByte) // Use refByte variable if inverted required
                                     {
                                         alphaMask.SetPixel(x, y, colour);
                                     }
