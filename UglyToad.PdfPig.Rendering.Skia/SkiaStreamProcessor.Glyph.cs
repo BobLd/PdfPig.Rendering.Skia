@@ -45,8 +45,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            var strokingColor = currentState.CurrentStrokingColor!;
-            var nonStrokingColor = currentState.CurrentNonStrokingColor!;
+            var strokingColor = currentState.CurrentStrokingColor;
+            var nonStrokingColor = currentState.CurrentNonStrokingColor;
 
             if (_fontCache.TryGetPath(font, code, out SKPath path))
             {

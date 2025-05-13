@@ -237,13 +237,38 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             if (pdfColor is not null)
             {
                 var (r, g, b) = pdfColor.ToRGBValues();
-                return new SKColor(Convert.ToByte(r * 255), Convert.ToByte(g * 255), Convert.ToByte(b * 255),
+
+                if (r >= 0 && r <= 1 && g >= 0 && g <= 1 && b >= 0 && b <= 1)
+                {
+                    // This is the expected case
+                    return new SKColor(
+                        Convert.ToByte(r * 255),
+                        Convert.ToByte(g * 255),
+                        Convert.ToByte(b * 255),
+                        Convert.ToByte(alpha * 255));
+                }
+
+                // Should never happen, but see GHOSTSCRIPT-686749-1.pdf
+                return new SKColor(
+                    ConvertToByte(r),
+                    ConvertToByte(g),
+                    ConvertToByte(b),
                     Convert.ToByte(alpha * 255));
             }
 
             return SKColors.Black.WithAlpha(Convert.ToByte(alpha * 255));
         }
 
+        private static byte ConvertToByte(double v)
+        {
+            return v switch
+            {
+                >= byte.MaxValue => byte.MaxValue,
+                <= byte.MinValue => byte.MinValue,
+                _ => (byte)v
+            };
+        }
+        
         public static SKMatrix ToSkMatrix(this TransformationMatrix transformationMatrix)
         {
             return new SKMatrix((float)transformationMatrix.A, (float)transformationMatrix.C,
