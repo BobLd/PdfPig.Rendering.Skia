@@ -73,6 +73,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
                 for (int p = 1; p <= document.NumberOfPages; ++p)
                 {
+                    foreach (var image in document.GetPage(p).GetImages())
+                    {
+                        Assert.True(image.TryGetPng(out _));
+                    }
+                    
                     using (var fs = new FileStream(Path.Combine(_outputPath, $"new_{p}.png"), FileMode.Create))
                     using (var ms = document.GetPageAsPng(p, _scale, RGBColor.White))
                     {
