@@ -41,10 +41,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="PdfPig" Version="0.1.11-alpha-20250518-67d3d" />
-		<PackageReference Include="PdfPig.Filters.Dct.JpegLibrary" Version="0.1.10.2" />
-		<PackageReference Include="PdfPig.Filters.Jbig2.PdfboxJbig2" Version="0.1.10.2" />
-		<PackageReference Include="PdfPig.Filters.Jpx.OpenJpegDotNet" Version="0.1.10.2" />
+		<PackageReference Include="PdfPig" Version="0.1.11-alpha-20250530-4bdb8" />
+		<PackageReference Include="PdfPig.Filters.Dct.JpegLibrary" Version="0.1.11-alpha001" />
+		<PackageReference Include="PdfPig.Filters.Jbig2.PdfboxJbig2" Version="0.1.11-alpha001" />
+		<PackageReference Include="PdfPig.Filters.Jpx.OpenJpegDotNet" Version="0.1.11-alpha001" />
 		<PackageReference Include="SkiaSharp" Version="2.88.9" />
 		<PackageReference Include="SkiaSharp.HarfBuzz" Version="2.88.9" />
 	</ItemGroup>
