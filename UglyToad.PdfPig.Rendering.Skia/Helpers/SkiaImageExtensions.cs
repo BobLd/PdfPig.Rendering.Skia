@@ -33,7 +33,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                                   && pdfImage.ColorSpaceDetails!.BaseType != ColorSpace.Pattern;
         }
 
-
         private static bool IsImageArrayCorrectlySized(IPdfImage pdfImage, ReadOnlySpan<byte> bytesPure)
         {
             var actualSize = bytesPure.Length;
@@ -52,6 +51,23 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                                     bytesPure[actualSize - 1] == ReadHelper.AsciiLineFeed);
         }
 
+        private static bool HasAlphaChannel(this IPdfImage pdfImage)
+        {
+            return pdfImage.MaskImage is not null || pdfImage.ImageDictionary.ContainsKey(NameToken.Mask);
+        }
+
+        public static int GetRasterSize(this IPdfImage pdfImage)
+        {
+            int width = pdfImage.WidthInSamples;
+            int height = pdfImage.HeightInSamples;
+
+            var numberOfComponents = pdfImage.ColorSpaceDetails!.BaseNumberOfColorComponents;
+            bool isRgba = numberOfComponents > 1 || pdfImage.HasAlphaChannel();
+            int bytesPerPixel = isRgba ? 4 : 1; // 3 (RGB) + 1 (alpha)
+
+            return height * width * bytesPerPixel;
+        }
+
         // https://stackoverflow.com/questions/50312937/skiasharp-tiff-support#50370515
         private static bool TryGenerate(this IPdfImage pdfImage, out SKImage skImage)
         {
@@ -65,7 +81,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             var bytesPure = imageMemory.Span;
             SKImage? mask = null;
             SKPixmap? sMaskPixmap = null;
-
+            
             try
             {
                 int width = pdfImage.WidthInSamples;
@@ -81,79 +97,71 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     return false;
                 }
 
-                if (numberOfComponents == 1)
+                bool isRgba = numberOfComponents > 1 || pdfImage.HasAlphaChannel();
+                var colorSpace = isRgba ? SKColorType.Rgba8888 : SKColorType.Gray8;
+                /*
+                if (pdfImage.IsImageMask && colorSpace == SKColorType.Gray8)
                 {
-                    if (pdfImage.MaskImage is not null)
-                    {
-                        // TODO
-                    }
-
-                    return TryGetGray8Bitmap(width, height, bytesPure, out skImage);
+                    colorSpace = SKColorType.Alpha8;
                 }
+                */
 
                 // We apparently need SKAlphaType.Unpremul to avoid artifacts with transparency.
                 // For example, the logo's background in "Motor Insurance claim form.pdf" might
                 // appear black instead of transparent at certain scales.
                 // See https://groups.google.com/g/skia-discuss/c/sV6e3dpf4CE for related question
-                var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+                var info = new SKImageInfo(width, height, colorSpace, SKAlphaType.Unpremul);
 
-                // create the buffer that will hold the pixels
-                const int bytesPerPixel = 4; // 3 (RGB) + 1 (alpha)
-
-                var length = (height * width * bytesPerPixel) + height;
-
-                var raster = new byte[length];
-
-                // get a pointer to the buffer, and give it to the skImage
-                var ptr = GCHandle.Alloc(raster, GCHandleType.Pinned);
-                using (SKPixmap pixmap = new SKPixmap(info, ptr.AddrOfPinnedObject(), info.RowBytes))
-                {
-                    skImage = SKImage.FromPixels(pixmap, (addr, ctx) => ptr.Free());
-                }
+                int bytesPerPixel = isRgba ? 4 : 1; // 3 (RGB) + 1 (alpha)
 
                 Func<int, int, byte, byte, byte, byte> getAlphaChannel = (_, _, _, _, _) => byte.MaxValue;
-                if (pdfImage.MaskImage?.TryGenerate(out mask) == true)
+                if (pdfImage.MaskImage is not null)
                 {
-                    if (!skImage.Info.Rect.Equals(mask!.Info.Rect))
+                    if (pdfImage.MaskImage.TryGenerate(out mask))
                     {
-                        // Resize
-                        var maskInfo = new SKImageInfo(skImage.Info.Width, skImage.Info.Height, SKColorType.Gray8, SKAlphaType.Unpremul);
-                        var maskRaster = new byte[skImage.Info.Width * skImage.Info.Height];
-                        var ptrMask = GCHandle.Alloc(maskRaster, GCHandleType.Pinned);
-                        sMaskPixmap = new SKPixmap(maskInfo, ptrMask.AddrOfPinnedObject(), maskInfo.RowBytes);
-                        if (!mask.ScalePixels(sMaskPixmap, SKFilterQuality.High))
+                        if (!info.Rect.Equals(mask!.Info.Rect))
                         {
-                            // TODO - Error
+                            // Resize
+                            var maskInfo = new SKImageInfo(info.Width, info.Height, mask!.Info.ColorType, mask!.Info.AlphaType);
+                            var maskRasterResize = new byte[info.Width * info.Height];
+                            var ptrMask = GCHandle.Alloc(maskRasterResize, GCHandleType.Pinned);
+                            sMaskPixmap = new SKPixmap(maskInfo, ptrMask.AddrOfPinnedObject(), maskInfo.RowBytes);
+                            if (!mask.ScalePixels(sMaskPixmap, SKFilterQuality.High))
+                            {
+                                // TODO - Error
+                            }
+
+                            mask.Dispose();
+
+                            mask = SKImage.FromPixels(sMaskPixmap, (addr, ctx) => ptrMask.Free());
+                        }
+                        else
+                        {
+                            sMaskPixmap = mask.PeekPixels();
                         }
 
-                        mask.Dispose();
-                        mask = SKImage.FromPixels(sMaskPixmap, (addr, ctx) => ptrMask.Free());
-                    }
-                    else
-                    {
-                        sMaskPixmap = mask.PeekPixels();
-                    }
-
-                    if (!sMaskPixmap.GetPixelSpan().IsEmpty)
-                    {
-                        //getAlphaChannel = (row, col, _, _, _) => sMaskPixmap.GetPixelSpan()[(row * width) + col];
-
-                        if (pdfImage.MaskImage.NeedsReverseDecode())
+                        if (!sMaskPixmap.GetPixelSpan().IsEmpty)
                         {
+                            // TODO - It is very unclear why we need this logic of reversing or not here for IsImageMask
+                            if (pdfImage.MaskImage.IsImageMask)
+                            {
+                                // We reverse pixel color
+                                getAlphaChannel = (row, col, _, _, _) => (byte)~sMaskPixmap.GetPixelSpan()[(row * width) + col];
+                            }
+                            else
+                            {
+                                // This is a NameToken.Smask - we do not reverse pixel color
+                                getAlphaChannel = (row, col, _, _, _) => sMaskPixmap.GetPixelSpan()[(row * width) + col];
+                            }
+
+                            // Examples of docs that are decode inverse
                             // MOZILLA-LINK-3264-0.pdf 
                             // MOZILLA-LINK-4246-2.pdf
                             // MOZILLA-LINK-4293-0.pdf
                             // MOZILLA-LINK-4314-0.pdf
                             // MOZILLA-LINK-3758-0.pdf
 
-                            // Wrong: MOZILLA-LINK-4379-0.pd
-
-                            getAlphaChannel = (row, col, _, _, _) =>
-                                Convert.ToByte(255 - sMaskPixmap.GetPixelSpan()[(row * width) + col]);
-                        }
-                        else
-                        {
-                            getAlphaChannel = (row, col, _, _, _) => sMaskPixmap.GetPixelSpan()[(row * width) + col];
+                            // Wrong: MOZILLA-LINK-4379-0.pdf
                         }
                     }
                 }
@@ -200,6 +208,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         gMax = range[4];
                         bMax = range[5];
                     }
+                    else if (numberOfComponents == 1)
+                    {
+                        throw new NotImplementedException("Mask with numberOfComponents == 1.");
+                    }
 
                     getAlphaChannel = (_, _, r, g, b) =>
                     {
@@ -214,7 +226,23 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     };
                 }
 
-                if (pdfImage.ColorSpaceDetails.BaseType == ColorSpace.DeviceCMYK || numberOfComponents == 4)
+                // create the buffer that will hold the pixels
+                byte[] raster = new byte[height * width * bytesPerPixel];
+                Span<byte> rasterSpan = raster;
+
+                // get a pointer to the buffer, and give it to the skImage
+                var ptr = GCHandle.Alloc(raster, GCHandleType.Pinned);
+                using (SKPixmap pixmap = new SKPixmap(info, ptr.AddrOfPinnedObject(), info.RowBytes))
+                {
+                    skImage = SKImage.FromPixels(pixmap, (addr, ctx) =>
+                    {
+                        ptr.Free();
+                        raster = null;
+                        System.Diagnostics.Debug.WriteLine("ptr.Free()");
+                    });
+                }
+
+                if (numberOfComponents == 4)
                 {
                     int i = 0;
                     for (int row = 0; row < height; ++row)
@@ -225,10 +253,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                                 out byte r, out byte g, out byte b);
 
                             var start = (row * (width * bytesPerPixel)) + (col * bytesPerPixel);
-                            raster[start++] = r;
-                            raster[start++] = g;
-                            raster[start++] = b;
-                            raster[start] = getAlphaChannel(row, col, r, g, b);
+                            rasterSpan[start] = r;
+                            rasterSpan[start + 1] = g;
+                            rasterSpan[start + 2] = b;
+                            rasterSpan[start + 3] = getAlphaChannel(row, col, r, g, b);
                         }
                     }
 
@@ -247,11 +275,52 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             byte b = bytesPure[i++];
 
                             var start = (row * (width * bytesPerPixel)) + (col * bytesPerPixel);
-                            raster[start++] = r;
-                            raster[start++] = g;
-                            raster[start++] = b;
-                            raster[start] = getAlphaChannel(row, col, r, g, b);
+                            rasterSpan[start] = r;
+                            rasterSpan[start + 1] = g;
+                            rasterSpan[start + 2] = b;
+                            rasterSpan[start + 3] = getAlphaChannel(row, col, r, g, b);
                         }
+                    }
+
+                    return true;
+                }
+
+                if (numberOfComponents == 1)
+                {
+                    if (isRgba)
+                    {
+                        // Handle gray scale image as RGBA because we have an alpha channel
+                        int i = 0;
+                        for (int row = 0; row < height; ++row)
+                        {
+                            for (int col = 0; col < width; ++col)
+                            {
+                                byte g = bytesPure[i++];
+
+                                var start = (row * (width * bytesPerPixel)) + (col * bytesPerPixel);
+                                rasterSpan[start] = g;
+                                rasterSpan[start + 1] = g;
+                                rasterSpan[start + 2] = g;
+                                rasterSpan[start + 3] = getAlphaChannel(row, col, g, g, g);
+                            }
+                        }
+
+                        return true;
+                    }
+                    
+                    if (pdfImage.NeedsReverseDecode())
+                    {
+                        for (int i = 0; i < bytesPure.Length; ++i)
+                        {
+                            rasterSpan[i] = (byte)~bytesPure[i];
+                        }
+
+                        return true;
+                    }
+                    
+                    for (int i = 0; i < bytesPure.Length; ++i)
+                    {
+                        rasterSpan[i] = bytesPure[i];
                     }
 
                     return true;
@@ -312,7 +381,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         public static SKImage GetSKImage(this IPdfImage pdfImage)
         {
-            // Try get png bytes
             if (pdfImage.TryGenerate(out var bitmap))
             {
                 return bitmap;
