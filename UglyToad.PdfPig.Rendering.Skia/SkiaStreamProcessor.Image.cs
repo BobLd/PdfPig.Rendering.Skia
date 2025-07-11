@@ -13,6 +13,8 @@
 // limitations under the License.
 
 using System;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Graphics;
@@ -71,28 +73,62 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     else
                     {
                         // Draw image mask
-                        var colour = GetCurrentState().CurrentNonStrokingColor.ToSKColor(1);
-                        
-                        byte refByte = image.NeedsReverseDecode() ? byte.MaxValue : byte.MinValue;
+                        SKColor colour = GetCurrentState().CurrentNonStrokingColor.ToSKColor(GetCurrentState().AlphaConstantNonStroking);
 
-                        using (var skImagePixels = skImage.PeekPixels())
-                        using (var alphaMask = new SKBitmap(skImage.Width, skImage.Height, SKColorType.Bgra8888, SKAlphaType.Premul))
+                        /*
+                        var maskShader = SKShader.CreateImage(skImage, SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, SKMatrix.CreateScale(destRect.Width / skImage.Width, destRect.Height / skImage.Height));
+
+                        using var paint = new SKPaint
                         {
-                            var span = skImagePixels.GetPixelSpan();
+                            Color = colour,
+                            Shader = maskShader
+                        };
+                        _canvas.DrawRect(destRect, paint);
+                        */
 
-                            for (int y = 0; y < skImage.Height; y++)
+                        byte r = colour.Red;
+                        byte g = colour.Green;
+                        byte b = colour.Blue;
+                        
+                        using (var skImagePixels = skImage.PeekPixels())
+                        {
+                            var raster = new byte[skImage.Width * skImage.Height * 4]; // RGBA
+
+                            Span<byte> span = skImagePixels.GetPixelSpan<byte>();
+                            Span<byte> rasterSpan = raster;
+                            
+                            int i = 0;
+                            for (int row = 0; row < skImage.Height; ++row)
                             {
-                                for (int x = 0; x < skImage.Width; x++)
+                                for (int col = 0; col < skImage.Width; ++col)
                                 {
-                                    byte pixel = span[(y * skImage.Width) + x];
-                                    if (pixel == refByte)
+                                    byte pixel = span[(row * skImage.Width) + col];
+                                    if (pixel == byte.MinValue)
                                     {
-                                        alphaMask.SetPixel(x, y, colour);
+                                        var start = (row * (skImage.Width * 4)) + (col * 4);
+                                        rasterSpan[start] = r;
+                                        rasterSpan[start + 1] = g;
+                                        rasterSpan[start + 2] = b;
+                                        rasterSpan[start + 3] = byte.MaxValue;
                                     }
                                 }
                             }
 
-                            _canvas.DrawBitmap(alphaMask, destRect, _paintCache.GetAntialiasing());
+                            var info = new SKImageInfo(skImage.Width, skImage.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+
+                            // get a pointer to the buffer, and give it to the skImage
+                            var ptr = GCHandle.Alloc(raster, GCHandleType.Pinned);
+
+                            using (SKPixmap pixmap = new SKPixmap(info, ptr.AddrOfPinnedObject(), info.RowBytes))
+                            using (SKImage skImage2 = SKImage.FromPixels(pixmap, (addr, ctx) =>
+                                   {
+                                       ptr.Free();
+                                       raster = null;
+                                       System.Diagnostics.Debug.WriteLine("ptr.Free()");
+                                   }))
+                            {
+                                _canvas.DrawImage(skImage2, destRect, _paintCache.GetAntialiasing());
+                            }
                         }
                     }
                 }
