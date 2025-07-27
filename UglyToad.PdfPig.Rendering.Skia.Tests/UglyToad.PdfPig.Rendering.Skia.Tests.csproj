@@ -282,235 +282,244 @@
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\Apitron.PDF.Kit.Samples_patternFill-mupdf-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\Apitron.PDF.Kit.Samples_patternFill-pdfium-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\cat-genetics-mupdf-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\cat-genetics-pdfium-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\cat-genetics_bobld-mupdf-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\cat-genetics_bobld-pdfium-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\fseprd1102849-mupdf-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\fseprd1102849-pdfium-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\GHOSTSCRIPT-696547-0.zip-7-mupdf-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\GHOSTSCRIPT-696547-0.zip-7-pdfium-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\GHOSTSCRIPT-699554-0.zip-4-mupdf-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\GHOSTSCRIPT-699554-0.zip-4-pdfium-1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\11194059_2017-11_de_s_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\2108.11480_3.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\2108.11480_5.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\caly-issues-56-1_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\2108.11480_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\2108.11480_2.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\2108.11480_4.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\68-1990-01_A_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\68-1990-01_A_10.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\68-1990-01_A_19.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\68-1990-01_A_2.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\68-1990-01_A_31.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\68-1990-01_A_41.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\68-1990-01_A_7.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\AcroFormsBasicFields_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\APISmap1_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Apitron.PDF.Kit.Samples_patternFill_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\bold-italic_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\caly-issues-58-2_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\cat-genetics_bobld_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\DeviceN_CS_test_6.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\fseprd1102849_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692307-2.zip-3_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692564-0_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692564-0_1_1_rendered.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-693073-1_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-693073-1_2.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-693534-0_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-693664-0_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-694454-0.zip-36_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-695241-0_3.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-696116-0_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-696178-1_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-696547-0.zip-10_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-696547-0.zip-7_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-696547-0.zip-9_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-697507-0_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-699375-5_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-699488-0_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-700931-0.7z-5_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-700931-0.7z-5_2.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Grapheme clusters emoji_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Grapheme clusters emoji_1_win11.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\hex_0x0006_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\ICML03-081_4.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\ICML03-081_6.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\journal.pone.0196757_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\journal.pone.0196757_12.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\journal.pone.0196757_7.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Layer pdf - 322_High_Holborn_building_Brochure_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Motor Insurance claim form_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\MOZILLA-LINK-3264-0_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\MOZILLA-LINK-3264-0_3.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\MOZILLA-LINK-3264-0_4.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Page_28_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\path_ext_oddeven_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\PDFBOX-1869-4_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Pig Production Handbook_15.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Pig Production Handbook_17.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Pig Production Handbook_9.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Rotated Text Libre Office_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\SPARC - v9 Architecture Manual_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\TIKA-1552-0_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\TIKA-1552-0_3.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\TIKA-1552-0_68.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\TIKA-1552-0_75.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Type0 Font_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Why.does.this.not.work_1.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="SpecificTestDocuments\Go.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
