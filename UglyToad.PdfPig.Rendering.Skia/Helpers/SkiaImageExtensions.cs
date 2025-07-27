@@ -24,7 +24,10 @@ using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
-    internal static class SkiaImageExtensions
+    /// <summary>
+    /// SkiaSharp image extensions.
+    /// </summary>
+    public static class SkiaImageExtensions
     {
         private static bool IsValidColorSpace(IPdfImage pdfImage)
         {
@@ -56,7 +59,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return pdfImage.MaskImage is not null || pdfImage.ImageDictionary.ContainsKey(NameToken.Mask);
         }
 
-        public static int GetRasterSize(this IPdfImage pdfImage)
+        internal static int GetRasterSize(this IPdfImage pdfImage)
         {
             int width = pdfImage.WidthInSamples;
             int height = pdfImage.HeightInSamples;
@@ -379,6 +382,19 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return false;
         }
 
+        /// <summary>
+        /// Converts the specified <see cref="IPdfImage"/> to an <see cref="SKImage"/> instance.
+        /// </summary>
+        /// <param name="pdfImage">The PDF image to convert.</param>
+        /// <returns>
+        /// An <see cref="SKImage"/> representation of the provided <paramref name="pdfImage"/>.
+        /// If the conversion fails, a fallback mechanism is used to create the image from raw bytes.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="pdfImage"/> is <c>null</c>.</exception>
+        /// <remarks>
+        /// This method attempts to generate an <see cref="SKImage"/> using the image's data and color space.
+        /// If the generation fails, it falls back to creating the image using encoded or raw byte data.
+        /// </remarks>
         public static SKImage GetSKImage(this IPdfImage pdfImage)
         {
             if (pdfImage.TryGenerate(out var bitmap))
