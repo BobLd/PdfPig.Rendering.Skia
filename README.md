@@ -1,14 +1,15 @@
 # PdfPig.Rendering.Skia
 
-Cross-platform library to render pdf documents as images with `PdfPig` using `SkiaSharp`.
+Cross-platform library to render pdf documents as images with `PdfPig` using `SkiaSharp`, or to extract images contained in a pdf page as `SkiaSharp` images.
 
-**This is a very early version and not everything is supported (more to come).**
+> [!IMPORTANT]
+> **This is a very early version and the code is constantly evolving.**
 
 Available as a Nuget package https://www.nuget.org/packages/PdfPig.Rendering.Skia/
 
 Uses parts of [PDFBox](https://github.com/apache/pdfbox) code.
 
-## How to use
+## How to Render pages as images
 ### Save pages as image to disk
 ```csharp
 using UglyToad.PdfPig.Graphics.Colors;
@@ -73,6 +74,25 @@ using (var document = PdfDocument.Open(_path))
 	{
 		var picture = document.GetPage<SKPicture>(p);
 		// Use the SKPicture
+	}
+}
+```
+## How to extract images contained in a pdf page
+```csharp
+using UglyToad.PdfPig.Rendering.Skia.Helpers;
+
+[...]
+
+using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instance))
+{
+	for (int p = 1; p <= document.NumberOfPages; p++)
+	{
+		var page = document.GetPage(p);
+		foreach (var pdfImage in page.GetImages())
+		{
+			var skImage = pdfImage.GetSKImage();			
+			// Use SKImage
+		}
 	}
 }
 ```
