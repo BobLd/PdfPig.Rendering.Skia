@@ -14,7 +14,6 @@
 
 using System;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Graphics;
@@ -76,27 +75,30 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         SKColor colour = GetCurrentState().CurrentNonStrokingColor.ToSKColor(GetCurrentState().AlphaConstantNonStroking);
 
                         /*
-                        var maskShader = SKShader.CreateImage(skImage, SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, SKMatrix.CreateScale(destRect.Width / skImage.Width, destRect.Height / skImage.Height));
+                        SKMatrix finalMatrix = SKMatrix.CreateScale(destRect.Width / skImage.Width, destRect.Height / skImage.Height)
+                            .PostConcat(SKMatrix.CreateTranslation(destRect.Left, destRect.Top));
 
-                        using var paint = new SKPaint
+                        using (var shader = SKShader.CreateImage(skImage, SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, finalMatrix))
+                        using (var paint = new SKPaint())
                         {
-                            Color = colour,
-                            Shader = maskShader
-                        };
-                        _canvas.DrawRect(destRect, paint);
+                            paint.Color = colour;
+                            paint.Shader = shader;
+                            paint.IsAntialias = _antiAliasing;
+                            _canvas.DrawRect(destRect, paint);
+                        }
                         */
 
                         byte r = colour.Red;
                         byte g = colour.Green;
                         byte b = colour.Blue;
-                        
+
                         using (var skImagePixels = skImage.PeekPixels())
                         {
                             var raster = new byte[skImage.Width * skImage.Height * 4]; // RGBA
 
                             Span<byte> span = skImagePixels.GetPixelSpan<byte>();
                             Span<byte> rasterSpan = raster;
-                            
+
                             int i = 0;
                             for (int row = 0; row < skImage.Height; ++row)
                             {
