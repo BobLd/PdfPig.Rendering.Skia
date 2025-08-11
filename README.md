@@ -19,7 +19,7 @@ using SkiaSharp;
 
 [...]
 
-using (var document = PdfDocument.Open(_path))
+using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instance))
 {
 	string fileName = Path.GetFileName(_path);
 
@@ -45,7 +45,7 @@ using SkiaSharp;
 
 [...]
 
-using (var document = PdfDocument.Open(_path))
+using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instance))
 {
 	document.AddSkiaPageFactory(); // Same as document.AddPageFactory<SKPicture, SkiaPageFactory>()
 
@@ -66,7 +66,7 @@ using SkiaSharp;
 
 [...]
 
-using (var document = PdfDocument.Open(_path))
+using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instance))
 {
 	document.AddSkiaPageFactory(); // Same as document.AddPageFactory<SKPicture, SkiaPageFactory>()
 
