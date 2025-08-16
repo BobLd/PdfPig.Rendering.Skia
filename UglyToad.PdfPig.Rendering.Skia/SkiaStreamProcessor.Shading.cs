@@ -13,6 +13,8 @@
 // limitations under the License.
 
 using System;
+using System.IO;
+using System.Runtime.InteropServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Colors;
@@ -44,8 +46,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     break;
 
                 case ShadingType.FunctionBased:
-                    //RenderFunctionBasedShading(shading as FunctionBasedShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
-                    //break;
+                    RenderFunctionBasedShading(shading as FunctionBasedShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
+                    break;
 
                 case ShadingType.FreeFormGouraud:
                 case ShadingType.LatticeFormGouraud:
@@ -271,76 +273,112 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <summary>
-        /// Not finished, TODO matrix to adjust, this is not correct + implement actual function, the drawn vertices is not correct.
-        /// <para>see PDFBOX-1869-4.pdf</para>
+        /// see PDFBOX-1869-4.pdf
         /// </summary>
         private void RenderFunctionBasedShading(FunctionBasedShading shading, TransformationMatrix transformationMatrix,
             float minX, float minY, float maxX, float maxY, bool isStroke = false, SKPath path = null)
         {
-            var currentState = GetCurrentState();
-
-            var transformMatrix = transformationMatrix.ToSkMatrix()
-                                  .PostConcat(shading.Matrix.ToSkMatrix())
-                                  .PostConcat(_yAxisFlipMatrix); // Inverse direction of y-axis
+            /*
+             * TODO - Not finished, need more document samples
+             */
 
             var domain = shading.Domain;
-            // [xmin xmax ymin ymax]
 
-            (double x0, double x1) = (domain[0], domain[1]);
-            (double y0, double y1) = (domain[2], domain[3]);
+            double x0 = domain[0];
+            double x1 = domain[1];
+            double y0 = domain[2];
+            double y1 = domain[3];
 
-            float xmin = (float)x0;
-            float xmax = (float)x1;
+            // Based on https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/graphics/shading/Type1ShadingContext.java
 
-            float ymin = (float)y0;
-            float ymax = (float)y1;
+            int w = (int)(x1 - x0);
+            int h = (int)(y1 - y0);
 
-            // worst case for the number of steps is opposite diagonal corners, so use that
-            float dist = (float)Math.Sqrt(Math.Pow(maxX - minX, 2) + Math.Pow(maxY - minY, 2));
-            int factor = Math.Max(10, (int)Math.Ceiling(dist / 50.0)); // too much? - Min of 10
-            var colors = new SKColor[(factor + 1) * (factor + 1)];
-            var colorPos = new SKPoint[colors.Length];
-
-            for (int x = 0; x <= factor; x++)
+            byte[] raster = new byte[w * h * 4];
+            double[] values = new double[2]; // TODO - stackalloc
+            
+            for (int j = 0; j < h; j++)
             {
-                double tx = xmin + (x / (double)factor * xmax);
-                for (int y = 0; y <= factor; y++)
+                for (int i = 0; i < w; i++)
                 {
-                    double ty = ymin + (y / (double)factor * ymax);
-                    double[] v = shading.Eval(tx, ty);
+                    int index = (j * w + i) * 4;
+                    bool useBackground = false;
+                    values[0] = x0 + i;
+                    values[1] = y0 + j;
+                    //rat.transform(values, 0, values, 0, 1);
+                    if (values[0] < domain[0] || values[0] > domain[1] ||
+                        values[1] < domain[2] || values[1] > domain[3])
+                    {
+                        if (shading.Background is null)
+                        {
+                            continue;
+                        }
+                        useBackground = true;
+                    }
 
-                    fixIncorrectValues(v, domain); // This is a hack, this should never happen
+                    // evaluate function
+                    double[] tmpValues; // "values" can't be reused due to different length
+                    if (useBackground)
+                    {
+                        tmpValues = shading.Background;
+                    }
+                    else
+                    {
+                        try
+                        {
+                            tmpValues = shading.Eval(values);
+                        }
+                        catch (IOException e)
+                        {
+                            System.Diagnostics.Debug.WriteLine("error while processing a function {0}", e);
+                            continue;
+                        }
+                    }
 
-                    colors[y + x * (factor + 1)] = shading.ColorSpace.GetColor(v).ToSKColor(currentState.AlphaConstantNonStroking); // TODO - is it non stroking??
-
-                    float vX = minX + (x / (float)factor * maxX);
-                    float vY = maxY + (y / (float)factor * minY);
-
-                    colorPos[y + x * (factor + 1)] = new SKPoint(vX, vY);
+                    // convert color values from shading color space to RGB
+                    var shadingColorSpace = shading.ColorSpace;
+                    if (shadingColorSpace is not null)
+                    {
+                        try
+                        {
+                            (double r, double g, double b) = shadingColorSpace.GetColor(tmpValues).ToRGBValues(); // To improve
+                            tmpValues = [r, g, b];
+                        }
+                        catch (IOException e)
+                        {
+                            System.Diagnostics.Debug.WriteLine("error processing color space {0}", e);
+                            continue;
+                        }
+                    }
+                    raster[index] = (byte)(tmpValues[0] * 255);
+                    raster[index + 1] = (byte)(tmpValues[1] * 255);
+                    raster[index + 2] = (byte)(tmpValues[2] * 255);
+                    raster[index + 3] = 255;
                 }
             }
 
-            if (path != null)
+            var info = new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul);
+
+            // get a pointer to the buffer, and give it to the skImage
+            var ptr = GCHandle.Alloc(raster, GCHandleType.Pinned);
+
+            using (SKPixmap pixmap = new SKPixmap(info, ptr.AddrOfPinnedObject(), info.RowBytes))
+            using (SKImage skImage2 = SKImage.FromPixels(pixmap, (addr, ctx) =>
+                   {
+                       ptr.Free();
+                       raster = null;
+                       System.Diagnostics.Debug.WriteLine("ptr.Free()");
+                   }))
             {
+                var domainRect = new SKRect((float)x0, (float)y0, (float)x1, (float)y1);
+
                 using (new SKAutoCanvasRestore(_canvas, true))
                 {
-                    var mat = shading.Matrix.ToSkMatrix();
-                    _canvas.Concat(ref mat);
-                    _canvas.DrawPath(path, new SKPaint() { Color = SKColors.Green, Style = SKPaintStyle.Stroke, StrokeWidth = 5 });
-                }
-            }
+                    SKMatrix shadingSkMat = shading.Matrix.ToSkMatrix();
+                    // TODO - Do we need `.PostConcat(_yAxisFlipMatrix); // Inverse direction of y-axis`
 
-            using (new SKAutoCanvasRestore(_canvas, true))
-            {
-                _canvas.SetMatrix(transformMatrix);
-
-                using (var paint = new SKPaint())
-                {
-                    paint.IsAntialias = shading.AntiAlias;
-                    paint.StrokeWidth = 5;
-
-                    _canvas.DrawVertices(SKVertexMode.TriangleStrip, colorPos, colors, paint);
-                    //_canvas.DrawPoints(SKPointMode.Points, colorPos, new SKPaint() { Color = SKColors.Black });
+                    _canvas.Concat(ref shadingSkMat);
+                    _canvas.DrawImage(skImage2, domainRect, _paintCache.GetAntialiasing());
                 }
             }
         }
@@ -375,8 +413,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     break;
 
                 case ShadingType.FunctionBased:
-                    //RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
-                    //break;
+                    RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
+                    break;
 
                 case ShadingType.FreeFormGouraud:
                 case ShadingType.LatticeFormGouraud:
