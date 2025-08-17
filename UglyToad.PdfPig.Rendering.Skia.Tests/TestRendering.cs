@@ -419,6 +419,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "Grapheme clusters emoji_1.png",
                 "Grapheme clusters emoji.pdf", 1, 2
             },
+            new object[]
+            {
+                "22060_A1_01_Plans-1_1.png",
+                "22060_A1_01_Plans-1.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
