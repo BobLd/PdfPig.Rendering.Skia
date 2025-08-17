@@ -437,21 +437,16 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // See 22060_A1_01_Plans-1.pdf
             // And Apitron.PDF.Kit.Samples_patternFill.pdf
 
+            // For Uncoloured;
+            // - gs-bugzilla694385 
+
             if (pattern.PaintType == PatternPaintType.Uncoloured)
             {
                 // TODO - not supported for the moment
                 return;
             }
 
-            var operations =
-                PageContentParser.Parse(PageNumber, new MemoryInputBytes(pattern.Data), ParsingOptions.Logger);
-
-            SKMatrix transformMatrix = CurrentTransformationMatrix.ToSkMatrix()
-                .PostConcat(pattern.Matrix.ToSkMatrix())
-                .PostConcat(_yAxisFlipMatrix);
-
-            var m = pattern.Matrix;
-            var bbox = m.Transform(pattern.BBox);
+            var operations = PageContentParser.Parse(PageNumber, new MemoryInputBytes(pattern.Data), ParsingOptions.Logger);
 
             bool hasResources = pattern.PatternStream.StreamDictionary.TryGet(NameToken.Resources, PdfScanner, out DictionaryToken resourcesDictionary);
 
@@ -463,11 +458,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/contentstream/PDFStreamEngine.java#L370
 
             var processor = new SkiaStreamProcessor(PageNumber, ResourceStore, PdfScanner, PageContentParser,
-                FilterProvider, new UglyToad.PdfPig.Content.CropBox(bbox), UserSpaceUnit, Rotation,
-                CurrentTransformationMatrix, // TODO - Not sure about the matrix
-                ParsingOptions, _annotationProvider, _fontCache);
-
-            processor.ModifyCurrentTransformationMatrix(new double[] { m.A, m.B, 0, m.C, m.D, 0, m.E, m.F, 1 });
+                FilterProvider, new Content.CropBox(pattern.BBox), UserSpaceUnit, Rotation,
+                pattern.Matrix, ParsingOptions, _annotationProvider, _fontCache);
 
             /*
             if (pattern.PaintType == PatternPaintType.Uncoloured)
@@ -483,24 +475,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // Installs the graphics state that was in effect at the beginning of the pattern’s parent content stream,
             // with the current transformation matrix altered by the pattern matrix as described in 8.7.2, "General properties of patterns"
 
-            double xStep = pattern.XStep;
-            double yStep = pattern.YStep;
+            SKRect rect = SKRect.Create(Math.Abs((float)pattern.XStep), Math.Abs((float)pattern.YStep));
 
-            // flip a -ve YStep around its own axis (see gs-bugzilla694385.pdf)
-            if (pattern.YStep < 0)
-            {
-                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateTranslation(0, (float)pattern.BBox.Height));
-                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateScale(1, -1));
-            }
-
-            // flip a -ve XStep around its own axis
-            if (pattern.XStep < 0)
-            {
-                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateTranslation((float)pattern.BBox.Width, 0));
-                transformMatrix = transformMatrix.PostConcat(SKMatrix.CreateScale(-1, 1));
-            }
-
-            SKRect rect = SKRect.Create(Math.Abs((float)xStep), Math.Abs((float)yStep));
+            // We are drawing a SKPicture, we need to flip the Y axis of this picture (same as main SKPicture)
+            var transformMatrix = SKMatrix.CreateScale(1, -1, 0, (float)pattern.BBox.Height / 2f)
+                .PostConcat(_yAxisFlipMatrix);
 
             using (var picture = processor.Process(PageNumber, operations))
             using (var shader = SKShader.CreatePicture(picture, SKShaderTileMode.Repeat, SKShaderTileMode.Repeat, transformMatrix, rect))
@@ -510,8 +489,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 paint.Shader = shader;
                 paint.FilterQuality = SKFilterQuality.High;
 
-                // TODO - check if bbox not null
-
+//#if DEBUG
+//                _canvas.DrawPath(path, new SKPaint() { Color = SKColors.Blue.WithAlpha(150) });
+//                _canvas.DrawPath(path, new SKPaint() { Color = SKColors.Red.WithAlpha(150), IsStroke = true, StrokeWidth = 5 });
+//#endif
+                
                 _canvas.DrawPath(path, paint);
             }
 

@@ -8,8 +8,6 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-		<PackageReference Include="SkiaSharp" Version="2.88.9" />
-		<PackageReference Include="SkiaSharp.HarfBuzz" Version="2.88.9" />
 		<PackageReference Include="xunit" Version="2.4.1" />
 		<PackageReference Include="xunit.runner.visualstudio" Version="2.4.3">
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -324,6 +322,9 @@
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\2108.11480_5.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\22060_A1_01_Plans-1_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\caly-issues-56-1_1.png">
