@@ -12,6 +12,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.editorconfig = .editorconfig
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UglyToad.PdfPig.Rendering.Skia.Benchmarks", "UglyToad.PdfPig.Rendering.Skia.Benchmarks\UglyToad.PdfPig.Rendering.Skia.Benchmarks.csproj", "{590439F5-FBA7-43C4-8308-E11D88F68F0A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,6 +28,10 @@ Global
 		{AB3779CB-2D75-49E5-889A-5628D2B895E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AB3779CB-2D75-49E5-889A-5628D2B895E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AB3779CB-2D75-49E5-889A-5628D2B895E2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{590439F5-FBA7-43C4-8308-E11D88F68F0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{590439F5-FBA7-43C4-8308-E11D88F68F0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{590439F5-FBA7-43C4-8308-E11D88F68F0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{590439F5-FBA7-43C4-8308-E11D88F68F0A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

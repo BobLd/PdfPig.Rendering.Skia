@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System.Collections.Generic;
+using JBig2;
 using UglyToad.PdfPig.Filters;
 using UglyToad.PdfPig.Filters.Dct.JpegLibrary;
 using UglyToad.PdfPig.Filters.Jbig2.PdfboxJbig2;
@@ -41,6 +42,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // New filters
             var dct = new JpegLibraryDctDecodeFilter();
             var jbig2 = new PdfboxJbig2DecodeFilter();
+            //var jbig2 = new JPedalJbig2DecodeFilter();
             var jpx = new OpenJpegJpxDecodeFilter();
 
             // Standard filters
