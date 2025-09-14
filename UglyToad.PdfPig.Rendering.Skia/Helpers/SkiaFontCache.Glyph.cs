@@ -28,7 +28,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             if (font.TryGetNormalisedPath(code, out var nPath))
             {
-                var gp = new SKPath() { FillType = SKPathFillType.EvenOdd };
+                var gp = new SKPath() { FillType = SKPathFillType.Winding };
 
                 foreach (var subpath in nPath)
                 {
@@ -62,8 +62,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 // TODO - check/benchmark if useful to Simplify()
                 var simplified = new SKPath();
-                if (gp.Simplify(simplified))
+                if (gp.Simplify(simplified) && simplified.PointCount > 4)
                 {
+                    // We check that the number of point is greater than 4
+                    // as the Simplify pass can 'remove' the path
                     gp.Dispose();
                     return simplified;
                 }
