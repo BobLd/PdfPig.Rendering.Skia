@@ -449,6 +449,26 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "annots_rotated_1.png",
                 "annots_rotated.pdf", 1, 2
             },
+            new object[]
+            {
+                "GHOSTSCRIPT-700370-2_1.png",
+                "GHOSTSCRIPT-700370-2.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-686749-1_1.png",
+                "GHOSTSCRIPT-686749-1.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-693295-0_1.png",
+                "GHOSTSCRIPT-693295-0.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-698721-1_1.png",
+                "GHOSTSCRIPT-698721-1.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
@@ -464,7 +484,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         public void PdfPigSkiaTest(string expectedImage, string pdfFile, int pageNumber, int scale)
         {
 #if DEBUG
-            //throw new System.ArgumentException("PdfPigSkiaTest needs to run in Release mode.");
+            throw new System.ArgumentException("PdfPigSkiaTest needs to run in Release mode.");
 #endif
 
             expectedImage = Path.Combine("pdfpig_skia", expectedImage);
