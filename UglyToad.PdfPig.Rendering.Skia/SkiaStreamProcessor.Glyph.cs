@@ -155,6 +155,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
+            var drawTypeface = _fontCache.GetTypefaceOrFallback(font, unicode);
+            if (!drawTypeface.Typeface.ContainsGlyphs(unicode))
+            {
+                return;
+            }
+
             // TODO - Handle Fill
 
             var style = textRenderingMode.ToSKPaintStyle();
@@ -182,8 +188,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var color = style == SKPaintStyle.Stroke ? strokingColor : nonStrokingColor; // TODO - very not correct
 
             float skew = ComputeSkewX(transformedPdfBounds);
-
-            var drawTypeface = _fontCache.GetTypefaceOrFallback(font, unicode);
 
             using (var skFont = drawTypeface.Typeface.ToFont((float)pointSize, 1f, -skew))
             using (var fontPaint = new SKPaint(skFont))
