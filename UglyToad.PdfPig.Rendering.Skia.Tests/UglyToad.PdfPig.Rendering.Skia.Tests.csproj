@@ -404,6 +404,9 @@
 	  <None Update="ExpectedImages\pdfpig_skia\fseprd1102849_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-539359-0.zip-0_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692307-2.zip-3_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
