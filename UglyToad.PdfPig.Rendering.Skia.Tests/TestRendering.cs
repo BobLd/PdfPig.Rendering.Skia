@@ -504,7 +504,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         public void PdfPigSkiaTest(string expectedImage, string pdfFile, int pageNumber, int scale)
         {
 #if DEBUG
-            //throw new System.ArgumentException("PdfPigSkiaTest needs to run in Release mode.");
+            throw new System.ArgumentException("PdfPigSkiaTest needs to run in Release mode.");
 #endif
 
             expectedImage = Path.Combine("pdfpig_skia", expectedImage);
