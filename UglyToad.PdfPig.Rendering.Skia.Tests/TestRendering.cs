@@ -424,6 +424,21 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "22060_A1_01_Plans-1_1.png",
                 "22060_A1_01_Plans-1.pdf", 1, 2
             },
+            new object[]
+            {
+                "P2P-33713919_2.png",
+                "P2P-33713919.pdf", 2, 2
+            },
+            new object[]
+            {
+                "felltypes-test_1.png",
+                "felltypes-test.pdf", 1, 2
+            },
+            new object[]
+            {
+                "FontMatrix-concat_1.png",
+                "FontMatrix-concat.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
