@@ -72,6 +72,12 @@
 	  <None Update="Documents\encrypt-revision-6-maltby.pdf">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	  <None Update="Documents\felltypes-test.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\FontMatrix-concat.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	  <None Update="Documents\fseprd1102849.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
@@ -387,6 +393,12 @@
 	  <None Update="ExpectedImages\pdfpig_skia\DeviceN_CS_test_6.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\felltypes-test_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\FontMatrix-concat_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\fseprd1102849_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
@@ -486,6 +498,9 @@
 	  <None Update="ExpectedImages\pdfpig_skia\MOZILLA-LINK-3264-0_4.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\P2P-33713919_2.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Page_28_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
@@ -532,6 +547,9 @@
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	  <None Update="SpecificTestDocuments\new.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\P2P-33713919.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	  <None Update="SpecificTestDocuments\Shadows.at.Sundown.-.Lvl.11_removed.pdf">

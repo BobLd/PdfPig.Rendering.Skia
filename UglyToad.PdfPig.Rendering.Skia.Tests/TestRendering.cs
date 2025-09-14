@@ -426,6 +426,21 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             },
             new object[]
             {
+                "P2P-33713919_2.png",
+                "P2P-33713919.pdf", 2, 2
+            },
+            new object[]
+            {
+                "felltypes-test_1.png",
+                "felltypes-test.pdf", 1, 2
+            },
+            new object[]
+            {
+                "FontMatrix-concat_1.png",
+                "FontMatrix-concat.pdf", 1, 2
+            },
+            new object[]
+            {
                 "annots_rotated_1.png",
                 "annots_rotated.pdf", 1, 2
             },
