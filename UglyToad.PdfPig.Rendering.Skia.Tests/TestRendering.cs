@@ -164,6 +164,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             },
             new object[]
             {
+                "68-1990-01_A_15.png",
+                "68-1990-01_A.pdf", 15, 2
+            },
+            new object[]
+            {
+                "68-1990-01_A_21.png",
+                "68-1990-01_A.pdf", 21, 2
+            },
+            new object[]
+            {
                 "11194059_2017-11_de_s_1.png",
                 "11194059_2017-11_de_s.pdf", 1, 2
             },
@@ -468,6 +478,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             {
                 "GHOSTSCRIPT-698721-1_1.png",
                 "GHOSTSCRIPT-698721-1.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-686821-0_1.png",
+                "GHOSTSCRIPT-686821-0.pdf", 1, 2
             },
         };
 
