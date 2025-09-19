@@ -214,8 +214,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // Test documents:
             // - SPARC - v9 Architecture Manual.pdf, page 1
             // - 68-1990-01_A.pdf, page 15
+            // - GHOSTSCRIPT-686821-0.pdf
 
-            return (float)Math.Round(Math.PI / 2.0 + rotationRadians - rotationBottomTopRadians, 5);
+            double radians = (Math.PI / 2.0 + rotationRadians - rotationBottomTopRadians) % Math.PI;
+
+            return (float)Math.Round(radians, 5);
         }
 
         private static bool CanRender(string unicode)
