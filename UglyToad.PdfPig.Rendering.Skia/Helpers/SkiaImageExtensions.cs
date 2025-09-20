@@ -331,7 +331,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 throw new Exception($"Could not process image with ColorSpace={pdfImage.ColorSpaceDetails.BaseType}, numberOfComponents={numberOfComponents}.");
             }
-            catch
+            catch (Exception e)
             {
                 // ignored.
             }
