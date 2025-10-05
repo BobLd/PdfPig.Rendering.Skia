@@ -129,7 +129,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             var maskRasterResize = new byte[info.Width * info.Height];
                             var ptrMask = GCHandle.Alloc(maskRasterResize, GCHandleType.Pinned);
                             sMaskPixmap = new SKPixmap(maskInfo, ptrMask.AddrOfPinnedObject(), maskInfo.RowBytes);
-                            if (!mask.ScalePixels(sMaskPixmap, SKFilterQuality.High))
+                            if (!mask.ScalePixels(sMaskPixmap, pdfImage.MaskImage.GetSamplingOption()))
                             {
                                 // TODO - Error
                             }
@@ -380,6 +380,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             bitmap?.Dispose();
             return false;
+        }
+
+        private static SKSamplingOptions GetSamplingOption(this IPdfImage pdfImage)
+        {
+            if (pdfImage.Interpolate)
+            {
+                return new SKSamplingOptions(SKCubicResampler.Mitchell);
+            }
+
+            return new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear);
         }
 
         /// <summary>

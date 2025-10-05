@@ -15,6 +15,7 @@
 using System;
 using System.Collections.Generic;
 using SkiaSharp;
+using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Graphics.Core;
@@ -28,6 +29,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         private readonly Dictionary<int, SKPaint> _cache = new Dictionary<int, SKPaint>();
 
         private readonly SKPaint _antialiasingPaint;
+        private readonly SKPaint _noAntialiasingPaint;
 
 #if DEBUG
         private readonly SKPaint _imageDebugPaint;
@@ -37,12 +39,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         {
             _isAntialias = isAntialias;
             // minimumLineWidth not in use
-            _antialiasingPaint = new SKPaint()
-            {
-                IsAntialias = _isAntialias,
-                FilterQuality = SKFilterQuality.High,
-                SubpixelText = true
-            };
+            _antialiasingPaint = new SKPaint() { IsAntialias = true };
+
+            _noAntialiasingPaint = new SKPaint() { IsAntialias = false };
 #if DEBUG
             _imageDebugPaint = new SKPaint()
             {
@@ -75,8 +74,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 IsAntialias = _isAntialias,
                 Color = color.ToSKColor(alpha),
                 Style = stroke ? SKPaintStyle.Stroke : SKPaintStyle.Fill,
-                FilterQuality = SKFilterQuality.High,
-                SubpixelText = true
             };
             
             if (stroke)
@@ -110,6 +107,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return key;
         }
 
+        public SKPaint GetPaint(IPdfImage pdfImage)
+        {
+            if (!pdfImage.Interpolate)
+            {
+                return _noAntialiasingPaint;
+            }
+            return _antialiasingPaint;
+        }
+
         public SKPaint GetAntialiasing()
         {
             return _antialiasingPaint;
@@ -128,6 +134,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             _imageDebugPaint.Dispose();
 #endif
             _antialiasingPaint.Dispose();
+            _noAntialiasingPaint.Dispose();
 
             foreach (var pair in _cache)
             {

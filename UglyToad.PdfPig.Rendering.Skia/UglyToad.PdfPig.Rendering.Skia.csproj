@@ -3,6 +3,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.0;net462;net471;net6.0;net8.0;net9.0</TargetFrameworks>
 		<LangVersion>12</LangVersion>
+		<Version>0.1.12.1-alpha005-skia3.1</Version>
 		<Nullable>enable</Nullable>
 		<Version>0.1.12.1-alpha007</Version>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>

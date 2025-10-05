@@ -79,7 +79,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         canvas.Clear(background.ToSKColor(1.0));
                     }
 
-                    canvas.DrawPicture(picture, ref scaleMatrix);
+                    canvas.DrawPicture(picture, in scaleMatrix);
                     return bitmap;
                 }
             }
