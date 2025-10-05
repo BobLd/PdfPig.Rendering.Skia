@@ -88,7 +88,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     if (!image.IsImageMask)
                     {
-                        _canvas.DrawImage(skImage, destRect, _paintCache.GetAntialiasing());
+                        _canvas.DrawImage(skImage, destRect, _paintCache.GetPaint(image));
                     }
                     else
                     {
@@ -149,7 +149,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                                        //System.Diagnostics.Debug.WriteLine("ptr.Free()");
                                    }))
                             {
-                                _canvas.DrawImage(skImage2, destRect, _paintCache.GetAntialiasing());
+                                _canvas.DrawImage(skImage2, destRect, _paintCache.GetPaint(image));
                             }
                         }
                     }
