@@ -46,8 +46,8 @@
 		<PackageReference Include="PdfPig.Filters.Dct.JpegLibrary" Version="0.1.11" />
 		<PackageReference Include="PdfPig.Filters.Jbig2.PdfboxJbig2" Version="0.1.11" />
 		<PackageReference Include="PdfPig.Filters.Jpx.OpenJpeg" Version="0.1.11.3" />
-		<PackageReference Include="SkiaSharp" Version="2.88.9" />
-		<PackageReference Include="SkiaSharp.HarfBuzz" Version="2.88.9" />
+		<PackageReference Include="SkiaSharp" Version="3.119.1" />
+		<PackageReference Include="SkiaSharp.HarfBuzz" Version="3.119.1" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0' or '$(TargetFramework)'=='net462' OR '$(TargetFramework)'=='net471'">
