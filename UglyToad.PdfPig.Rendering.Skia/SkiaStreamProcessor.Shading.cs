@@ -377,7 +377,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     SKMatrix shadingSkMat = shading.Matrix.ToSkMatrix();
                     // TODO - Do we need `.PostConcat(_yAxisFlipMatrix); // Inverse direction of y-axis`
 
-                    _canvas.Concat(ref shadingSkMat);
+                    _canvas.Concat(in shadingSkMat);
                     _canvas.DrawImage(skImage2, domainRect, _paintCache.GetAntialiasing());
                 }
             }
@@ -487,7 +487,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 paint.IsAntialias = _antiAliasing;
                 paint.Shader = shader;
-                paint.FilterQuality = SKFilterQuality.High;
 
 //#if DEBUG
 //                _canvas.DrawPath(path, new SKPaint() { Color = SKColors.Blue.WithAlpha(150) });
