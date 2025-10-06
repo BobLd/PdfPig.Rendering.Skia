@@ -22,7 +22,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\UglyToad.PdfPig.Rendering.Skia\UglyToad.PdfPig.Rendering.Skia.csproj" />
+		<ProjectReference Include="..\UglyToad.PdfPig.Rendering.Skia\UglyToad.PdfPig.Rendering.Skia.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
