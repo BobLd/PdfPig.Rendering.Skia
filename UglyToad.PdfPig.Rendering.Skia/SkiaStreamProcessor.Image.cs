@@ -34,6 +34,21 @@ namespace UglyToad.PdfPig.Rendering.Skia
             RenderImage(inlineImage);
         }
 
+        private static double FoldAngleTo90(double angleInDegrees)
+        {
+            if (angleInDegrees > 90)
+            {
+                return 180 - angleInDegrees;
+            }
+
+            if (angleInDegrees < -90)
+            {
+                return -180 - angleInDegrees;
+            }
+
+            return angleInDegrees;
+        }
+
         private void RenderImage(IPdfImage image)
         {
             if (image.WidthInSamples == 0 || image.HeightInSamples == 0)
@@ -60,9 +75,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                         // Avoid passing a scale of 0
                         var matrix = SKMatrix.CreateScale(sx == 0 ? 1 : sx, sy == 0 ? 1 : sy);
-
-                        _canvas.SetMatrix(matrix);
+                        _canvas.Concat(ref matrix);
                         destRect = matrix.MapRect(destRect);
+                    }
+
+                    float rotation = (float)FoldAngleTo90(image.Bounds.Rotation);
+                    if (Math.Abs(rotation) > float.Epsilon)
+                    {
+                        var rotMatrix = SKMatrix.CreateRotationDegrees(-rotation, destRect.Left, destRect.Top);
+                        _canvas.Concat(ref rotMatrix);
                     }
 
                     if (!image.IsImageMask)
@@ -99,7 +120,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                             Span<byte> span = skImagePixels.GetPixelSpan<byte>();
                             Span<byte> rasterSpan = raster;
 
-                            int i = 0;
                             for (int row = 0; row < skImage.Height; ++row)
                             {
                                 for (int col = 0; col < skImage.Width; ++col)
@@ -123,11 +143,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                             using (SKPixmap pixmap = new SKPixmap(info, ptr.AddrOfPinnedObject(), info.RowBytes))
                             using (SKImage skImage2 = SKImage.FromPixels(pixmap, (addr, ctx) =>
-                                   {
-                                       ptr.Free();
-                                       raster = null;
-                                       System.Diagnostics.Debug.WriteLine("ptr.Free()");
-                                   }))
+                            {
+                                ptr.Free();
+                                raster = null;
+                                System.Diagnostics.Debug.WriteLine("ptr.Free()");
+                            }))
                             {
                                 _canvas.DrawImage(skImage2, destRect, _paintCache.GetAntialiasing());
                             }

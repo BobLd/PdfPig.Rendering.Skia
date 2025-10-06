@@ -476,6 +476,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             },
             new object[]
             {
+                "GHOSTSCRIPT-693295-0_2.png",
+                "GHOSTSCRIPT-693295-0.pdf", 2, 2
+            },
+            new object[]
+            {
                 "GHOSTSCRIPT-698721-1_1.png",
                 "GHOSTSCRIPT-698721-1.pdf", 1, 2
             },
