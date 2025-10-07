@@ -91,7 +91,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     continue;
                 }
 
-                if (!appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Rect, PdfScanner, out var rectToken))
+                if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Rect, PdfScanner, out var rectToken))
                 {
                     // TODO - log
                     continue; // Should never happen
@@ -131,7 +131,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         (float)(rect.Height / transformedBox.Height));
                     a = a.Translate(-transformedBox.TopLeft.X, -transformedBox.TopLeft.Y);
 
-                    GetCurrentState().CurrentTransformationMatrix = a;
+                    var currentState = GetCurrentState();
+                    currentState.CurrentTransformationMatrix = a.Multiply(currentState.CurrentTransformationMatrix);
 
                     try
                     {
