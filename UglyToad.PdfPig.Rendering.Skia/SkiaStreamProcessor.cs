@@ -104,7 +104,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         DrawAnnotations(true);
                     }
 
+                    PushState();
+
                     ProcessOperations(operations);
+
+                    PopState();
 
                     if (_renderAnnotations)
                     {

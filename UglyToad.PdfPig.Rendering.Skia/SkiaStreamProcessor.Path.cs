@@ -129,21 +129,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override void Rectangle(double x, double y, double width, double height)
         {
-            BeginSubpath();
-
-            if (_currentPath == null)
-            {
-                return;
-            }
-
-            var lowerLeft = CurrentTransformationMatrix.Transform(x, y);
-            var upperRight = CurrentTransformationMatrix.Transform(x + width, y + height);
-
-            float left = (float)lowerLeft.x;
-            float top = (float)(this._height - upperRight.y);
-            float right = (float)upperRight.x;
-            float bottom = (float)(this._height - lowerLeft.y);
-            _currentPath.AddRect(new SKRect(left, top, right, bottom));
+            MoveTo(x, y);
+            LineTo(x + width, y);
+            LineTo(x + width, y + height);
+            LineTo(x, y + height);
+            CloseSubpath();
         }
 
         public override void StrokePath(bool close)
