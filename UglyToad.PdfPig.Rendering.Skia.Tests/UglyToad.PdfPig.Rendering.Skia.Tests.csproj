@@ -425,9 +425,6 @@
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692564-0_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
-	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692564-0_1_1_rendered.png">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-693073-1_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
