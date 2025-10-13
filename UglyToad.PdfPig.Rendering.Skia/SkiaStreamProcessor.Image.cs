@@ -75,7 +75,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                         // Avoid passing a scale of 0
                         var matrix = SKMatrix.CreateScale(sx == 0 ? 1 : sx, sy == 0 ? 1 : sy);
-                        _canvas.Concat(ref matrix);
+                        _canvas.Concat(in matrix);
                         destRect = matrix.MapRect(destRect);
                     }
 
@@ -83,7 +83,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     if (Math.Abs(rotation) > float.Epsilon)
                     {
                         var rotMatrix = SKMatrix.CreateRotationDegrees(-rotation, destRect.Left, destRect.Top);
-                        _canvas.Concat(ref rotMatrix);
+                        _canvas.Concat(in rotMatrix);
                     }
 
                     if (!image.IsImageMask)
