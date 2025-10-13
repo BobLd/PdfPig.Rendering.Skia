@@ -48,9 +48,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var strokingColor = currentState.CurrentStrokingColor;
             var nonStrokingColor = currentState.CurrentNonStrokingColor;
 
-            if (_fontCache.TryGetPath(font, code, out SKPath path))
+            if (_fontCache.TryGetPath(font, code, out SKPath? path))
             {
-                if (path.IsEmpty)
+                if (path!.IsEmpty)
                 {
                     // If null or whitespace, ignore
                     if (string.IsNullOrWhiteSpace(unicode))
@@ -75,7 +75,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private void ShowVectorFontGlyph(SKPath path, IColor strokingColor, IColor nonStrokingColor,
+        private void ShowVectorFontGlyph(SKPath path, IColor? strokingColor, IColor? nonStrokingColor,
             TextRenderingMode textRenderingMode, in TransformationMatrix renderingMatrix,
             in TransformationMatrix textMatrix, in TransformationMatrix transformationMatrix)
         {
@@ -101,7 +101,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 if (fill)
                 {
                     // Do fill first
-                    if (nonStrokingColor != null && nonStrokingColor.ColorSpace == ColorSpace.Pattern)
+                    if (nonStrokingColor is not null && nonStrokingColor.ColorSpace == ColorSpace.Pattern)
                     {
                         // TODO - Clean shading patterns painting
                         // See documents:
@@ -117,11 +117,26 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         switch (pattern.PatternType)
                         {
                             case PatternType.Tiling:
-                                RenderTilingPattern(transformedPath, pattern as TilingPatternColor, false);
+                                if (pattern is TilingPatternColor tilingColor)
+                                {
+                                    RenderTilingPattern(transformedPath, tilingColor, false);
+                                }
+                                else
+                                {
+                                    ParsingOptions.Logger.Error($"Expecting a TilingPatternColor, but got {pattern.GetType().Name}.");
+                                }
+
                                 break;
 
                             case PatternType.Shading:
-                                RenderShadingPattern(transformedPath, pattern as ShadingPatternColor, false);
+                                if (pattern is ShadingPatternColor shadingColor)
+                                {
+                                    RenderShadingPattern(transformedPath, shadingColor, false);
+                                }
+                                else
+                                {
+                                    ParsingOptions.Logger.Error($"Expecting a ShadingPatternColor, but got {pattern.GetType().Name}.");
+                                }
                                 break;
                         }
                     }

@@ -27,14 +27,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
     internal sealed partial class SkiaFontCache : IDisposable
     {
-        private readonly Lazy<SkiaFontCacheItem> DefaultSkiaFontCacheItem =
-            new Lazy<SkiaFontCacheItem>(() => new SkiaFontCacheItem(SKTypeface.Default)); // Do not make static
+        private readonly Lazy<SkiaFontCacheItem> DefaultSkiaFontCacheItem = new(() => new SkiaFontCacheItem(SKTypeface.Default)); // Do not make static
 
-        private readonly ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath>>> _cache =
-            new ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath>>>();
+        private readonly ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath?>>> _cache = new();
 
-        private readonly ConcurrentDictionary<string, List<SkiaFontCacheItem>> _typefaces =
-            new ConcurrentDictionary<string, List<SkiaFontCacheItem>>();
+        private readonly ConcurrentDictionary<string, List<SkiaFontCacheItem>> _typefaces = new();
 
         private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
 
@@ -60,7 +57,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 if (TryGetFontCacheItem(fontKey, unicode, codepoint, out var item))
                 {
-                    return item;
+                    return item!;
                 }
 
                 // Cannot find font ZapfDingbats MOZILLA-LINK-5251-1
@@ -90,7 +87,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     {
                         // If font cannot render the char
                         var fallback = _skFontManager.MatchCharacter(codepoint); // Access violation here
-                        if (fallback != null)
+                        if (fallback is not null)
                         {
                             currentTypeface.Dispose();
                             currentTypeface = _skFontManager.MatchFamily(fallback.FamilyName, style);
@@ -121,22 +118,24 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         {
             item = null;
 
-            if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem> skiaFontCacheItems))
+            if (!_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem>? skiaFontCacheItems))
             {
-                if (string.IsNullOrWhiteSpace(unicode))
-                {
-                    item = skiaFontCacheItems[0];
-                    return true;
-                }
+                return false;
+            }
 
-                foreach (var cacheItem in skiaFontCacheItems)
+            if (string.IsNullOrWhiteSpace(unicode))
+            {
+                item = skiaFontCacheItems[0];
+                return true;
+            }
+
+            foreach (var cacheItem in skiaFontCacheItems)
+            {
+                // Find first font that can render char
+                if (cacheItem.Typeface.ContainsGlyph(codepoint))
                 {
-                    // Find first font that can render char
-                    if (cacheItem.Typeface.ContainsGlyph(codepoint))
-                    {
-                         item = cacheItem;
-                         return true;
-                    }
+                    item = cacheItem;
+                    return true;
                 }
             }
 
@@ -145,7 +144,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         private SkiaFontCacheItem SetFontCacheItem(string fontKey, SKTypeface typeface)
         {
-            if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem> skiaFontCacheItems))
+            if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem>? skiaFontCacheItems))
             {
                 // Make sure the font is not already cached
                 SkiaFontCacheItem? skiaFontCacheItem = skiaFontCacheItems.FirstOrDefault(x => x.Typeface.Equals(typeface));
@@ -173,7 +172,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return item;
         }
 
-        private static string GetTrueTypeFontFontName(string fontName)
+        private static string? GetTrueTypeFontFontName(string fontName)
         {
             TrueTypeFont trueTypeFont = SystemFontFinder.Instance.GetTrueTypeFont(fontName);
             return trueTypeFont?.TableRegister?.NameTable?.FontFamilyName;

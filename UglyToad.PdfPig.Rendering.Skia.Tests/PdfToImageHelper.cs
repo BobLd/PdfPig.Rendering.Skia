@@ -46,14 +46,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
         private const byte _threshold = 2;
 
-        private static SKBitmap diffImages(SKBitmap bim1, SKBitmap bim2)
+        private static SKBitmap? DiffImages(SKBitmap bim1, SKBitmap bim2)
         {
             int minWidth = Math.Min(bim1.Width, bim2.Width);
             int minHeight = Math.Min(bim1.Height, bim2.Height);
             int maxWidth = Math.Max(bim1.Width, bim2.Width);
             int maxHeight = Math.Max(bim1.Height, bim2.Height);
 
-            SKBitmap bim3 = null;
+            SKBitmap? bim3 = null;
             if (minWidth != maxWidth || minHeight != maxHeight)
             {
                 bim3 = createEmptyDiffImage(minWidth, minHeight, maxWidth, maxHeight);
@@ -152,8 +152,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                                     return true;
                                 }
 
-                                SKBitmap bim3 = diffImages(expectedResize, actualResize);
-                                if (bim3 == null)
+                                SKBitmap? bim3 = DiffImages(expectedResize, actualResize);
+                                if (bim3 is null)
                                 {
                                     return true;
                                 }
@@ -198,8 +198,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                             return true;
                         }
 
-                        SKBitmap bim3 = diffImages(expected, actual);
-                        if (bim3 == null)
+                        SKBitmap? bim3 = DiffImages(expected, actual);
+                        if (bim3 is null)
                         {
                             return true;
                         }
@@ -209,7 +209,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
                         string errorToSaveFile = Path.Combine(_errorFolder, $"{rootName}_{pageNumber}_diff.png");
 
-                        Directory.CreateDirectory(Path.GetDirectoryName(errorToSaveFile));
+                        Directory.CreateDirectory(Path.GetDirectoryName(errorToSaveFile)!);
                         using (var fs = new FileStream(errorToSaveFile, FileMode.Create))
                         {
                             bim3.Encode(fs, SKEncodedImageFormat.Png, 100);
@@ -217,7 +217,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
                         string renderToSaveFile = Path.Combine(_errorFolder, $"{rootName}_{pageNumber}_rendered.png");
 
-                        Directory.CreateDirectory(Path.GetDirectoryName(renderToSaveFile));
+                        Directory.CreateDirectory(Path.GetDirectoryName(renderToSaveFile)!);
                         using (var fs = new FileStream(renderToSaveFile, FileMode.Create))
                         {
                             actual.Encode(fs, SKEncodedImageFormat.Png, 100);

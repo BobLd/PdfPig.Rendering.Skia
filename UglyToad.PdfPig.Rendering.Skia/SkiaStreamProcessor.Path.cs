@@ -23,11 +23,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
 {
     internal partial class SkiaStreamProcessor
     {
-        private SKPath _currentPath;
+        private SKPath? _currentPath;
 
         public override void BeginSubpath()
         {
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 _currentPath = new SKPath();
             }
@@ -35,7 +35,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override PdfPoint? CloseSubpath()
         {
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return null;
             }
@@ -48,7 +48,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             BeginSubpath();
 
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return;
             }
@@ -62,7 +62,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override void LineTo(double x, double y)
         {
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return;
             }
@@ -76,7 +76,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override void BezierCurveTo(double x2, double y2, double x3, double y3)
         {
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return;
             }
@@ -93,7 +93,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override void BezierCurveTo(double x1, double y1, double x2, double y2, double x3, double y3)
         {
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return;
             }
@@ -118,7 +118,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override void EndPath()
         {
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return;
             }
@@ -131,7 +131,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             BeginSubpath();
 
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return;
             }
@@ -148,7 +148,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override void StrokePath(bool close)
         {
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return;
             }
@@ -170,7 +170,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             if (currentState.CurrentStrokingColor?.ColorSpace == ColorSpace.Pattern)
             {
-                if (!(currentState.CurrentStrokingColor is PatternColor pattern))
+                if (currentState.CurrentStrokingColor is not PatternColor pattern)
                 {
                     throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got {currentState.CurrentStrokingColor.GetType()}");
                 }
@@ -178,11 +178,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 switch (pattern.PatternType)
                 {
                     case PatternType.Tiling:
-                        RenderTilingPatternCurrentPath(pattern as TilingPatternColor, true);
+                        if (pattern is TilingPatternColor tilingColor)
+                        {
+                            RenderTilingPatternCurrentPath(tilingColor, true);
+                        }
+                        else
+                        {
+                            ParsingOptions.Logger.Error($"Expecting a TilingPatternColor, but got {pattern.GetType().Name}.");
+                        }
                         break;
 
                     case PatternType.Shading:
-                        RenderShadingPatternCurrentPath(pattern as ShadingPatternColor, true);
+                        if (pattern is ShadingPatternColor shadingColor)
+                        {
+                            RenderShadingPatternCurrentPath(shadingColor, true);
+                        }
+                        else
+                        {
+                            ParsingOptions.Logger.Error($"Expecting a ShadingPatternColor, but got {pattern.GetType().Name}.");
+                        }
                         break;
                 }
             }
@@ -197,7 +211,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override void FillPath(FillingRule fillingRule, bool close)
         {
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return;
             }
@@ -217,7 +231,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         private void PaintFillPath(CurrentGraphicsState currentState, FillingRule fillingRule)
         {
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return;
             }
@@ -234,11 +248,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 switch (pattern.PatternType)
                 {
                     case PatternType.Tiling:
-                        RenderTilingPatternCurrentPath(pattern as TilingPatternColor, false);
+                        if (pattern is TilingPatternColor tilingColor)
+                        {
+                            RenderTilingPatternCurrentPath(tilingColor, false);
+                        }
+                        else
+                        {
+                            ParsingOptions.Logger.Error($"Expecting a TilingPatternColor, but got {pattern.GetType().Name}.");
+                        }
                         break;
 
                     case PatternType.Shading:
-                        RenderShadingPatternCurrentPath(pattern as ShadingPatternColor, false);
+                        if (pattern is ShadingPatternColor shadingColor)
+                        {
+                            RenderShadingPatternCurrentPath(shadingColor, false);
+                        }
+                        else
+                        {
+                            ParsingOptions.Logger.Error($"Expecting a ShadingPatternColor, but got {pattern.GetType().Name}.");
+                        }
                         break;
                 }
             }
@@ -265,7 +293,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override void FillStrokePath(FillingRule fillingRule, bool close)
         {
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return;
             }

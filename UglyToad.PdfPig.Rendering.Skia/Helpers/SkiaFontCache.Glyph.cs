@@ -22,7 +22,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
     internal partial class SkiaFontCache
     {
-        private static SKPath GetPathInternal(IFont font, int code)
+        private static SKPath? GetPathInternal(IFont font, int code)
         {
             // TODO - check if font can even have path info
 
@@ -75,11 +75,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return null;
         }
 
-        public bool TryGetPath(IFont font, int code, out SKPath path)
+        public bool TryGetPath(IFont font, int code, out SKPath? path)
         {
-            ConcurrentDictionary<int, Lazy<SKPath>> fontCache = _cache.GetOrAdd(font, new ConcurrentDictionary<int, Lazy<SKPath>>());
+            ConcurrentDictionary<int, Lazy<SKPath?>> fontCache = _cache.GetOrAdd(font, new ConcurrentDictionary<int, Lazy<SKPath?>>());
 
-            Lazy<SKPath> glyph = fontCache.GetOrAdd(code, c => new Lazy<SKPath>(() => GetPathInternal(font, c)));
+            Lazy<SKPath?> glyph = fontCache.GetOrAdd(code, c => new Lazy<SKPath?>(() => GetPathInternal(font, c)));
 
             if (glyph.Value is null)
             {

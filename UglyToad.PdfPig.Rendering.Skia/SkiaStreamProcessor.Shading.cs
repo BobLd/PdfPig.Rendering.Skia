@@ -36,11 +36,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
             switch (shading.ShadingType)
             {
                 case ShadingType.Axial:
-                    RenderAxialShading(shading as AxialShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
+                    if (shading is AxialShading axialShading)
+                    {
+                        RenderAxialShading(axialShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
+                    }
+                    else
+                    {
+                        ParsingOptions.Logger.Error($"Expecting a AxialShading, but got {shading.GetType().Name}.");
+                    }
                     break;
 
                 case ShadingType.Radial:
-                    RenderRadialShading(shading as RadialShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
+                    if (shading is RadialShading radialShading)
+                    {
+                        RenderRadialShading(radialShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
+                    }
+                    else
+                    {
+                        ParsingOptions.Logger.Error($"Expecting a RadialShading, but got {shading.GetType().Name}.");
+                    }
                     break;
 
                 case ShadingType.FunctionBased:
@@ -99,7 +113,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         private void RenderRadialShading(RadialShading shading, TransformationMatrix transformationMatrix, float minX,
             float minY, float maxX, float maxY,
-            bool isStroke = false, SKPath path = null)
+            bool isStroke = false, SKPath? path = null)
         {
             var currentState = GetCurrentState();
 
@@ -152,7 +166,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 // TODO
             }
 
-            if (shading.Background != null)
+            if (shading.Background is not null)
             {
                 // TODO
             }
@@ -190,7 +204,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         private void RenderAxialShading(AxialShading shading, TransformationMatrix transformationMatrix, float minX, float minY, float maxX, float maxY,
-            bool isStroke = false, SKPath path = null)
+            bool isStroke = false, SKPath? path = null)
         {
             var currentState = GetCurrentState();
 
@@ -213,7 +227,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 // TODO
             }
 
-            if (shading.Background != null)
+            if (shading.Background is not null)
             {
                 // TODO
             }
@@ -243,7 +257,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 // check if bbox not null
 
-                SKPathEffect dash = null;
+                SKPathEffect? dash = null;
                 if (isStroke)
                 {
                     float scalingFactor = currentState.CurrentTransformationMatrix.GetScalingFactor();
@@ -275,7 +289,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <para>see PDFBOX-1869-4.pdf</para>
         /// </summary>
         private void RenderFunctionBasedShading(FunctionBasedShading shading, TransformationMatrix transformationMatrix,
-            float minX, float minY, float maxX, float maxY, bool isStroke = false, SKPath path = null)
+            float minX, float minY, float maxX, float maxY, bool isStroke = false, SKPath? path = null)
         {
             var currentState = GetCurrentState();
 
@@ -320,7 +334,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 }
             }
 
-            if (path != null)
+            if (path is not null)
             {
                 using (new SKAutoCanvasRestore(_canvas, true))
                 {
@@ -352,7 +366,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         private void RenderShadingPattern(SKPath path, ShadingPatternColor pattern, bool isStroke)
         {
-            if (pattern.ExtGState != null)
+            if (pattern.ExtGState is not null)
             {
                 // TODO
             }
@@ -367,11 +381,27 @@ namespace UglyToad.PdfPig.Rendering.Skia
             switch (pattern.Shading.ShadingType)
             {
                 case ShadingType.Axial:
-                    RenderAxialShading(pattern.Shading as AxialShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
+                    
+                    if (pattern.Shading is AxialShading axialShading)
+                    {
+                        RenderAxialShading(axialShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
+                    }
+                    else
+                    {
+                        ParsingOptions.Logger.Error($"Expecting a AxialShading, but got {pattern.Shading.GetType().Name}.");
+                    }
                     break;
 
                 case ShadingType.Radial:
-                    RenderRadialShading(pattern.Shading as RadialShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
+                    if (pattern.Shading is RadialShading radialShading)
+                    {
+                        RenderRadialShading(radialShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
+                        RenderRadialShading(radialShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
+                    }
+                    else
+                    {
+                        ParsingOptions.Logger.Error($"Expecting a RadialShading, but got {pattern.Shading.GetType().Name}.");
+                    }
                     break;
 
                 case ShadingType.FunctionBased:
@@ -415,11 +445,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var m = pattern.Matrix;
             var bbox = m.Transform(pattern.BBox);
 
-            bool hasResources = pattern.PatternStream.StreamDictionary.TryGet(NameToken.Resources, PdfScanner, out DictionaryToken resourcesDictionary);
+            bool hasResources = pattern.PatternStream.StreamDictionary.TryGet(NameToken.Resources, PdfScanner, out DictionaryToken? resourcesDictionary);
 
             if (hasResources)
             {
-                ResourceStore.LoadResourceDictionary(resourcesDictionary);
+                ResourceStore.LoadResourceDictionary(resourcesDictionary!);
             }
 
             // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/contentstream/PDFStreamEngine.java#L370

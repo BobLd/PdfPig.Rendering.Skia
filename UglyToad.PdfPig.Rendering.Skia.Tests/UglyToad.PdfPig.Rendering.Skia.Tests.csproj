@@ -2,6 +2,8 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>net462;net6.0;net8.0</TargetFrameworks>
+		<LangVersion>12</LangVersion>
+		<Nullable>enable</Nullable>
 		<IsPackable>false</IsPackable>
 		<RuntimeFrameworkVersion Condition="'$(TargetFramework)'=='netcoreapp2.1'">2.1.30</RuntimeFrameworkVersion>
 	</PropertyGroup>
