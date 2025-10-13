@@ -83,7 +83,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 }
 
                 // Get appearance
-                StreamToken appearance = GetNormalAppearanceAsStream(annotation);
+                StreamToken? appearance = GetNormalAppearanceAsStream(annotation);
 
                 if (appearance is null)
                 {
@@ -136,7 +136,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     try
                     {
-                        ProcessFormXObject(appearance, null);
+                        ProcessFormXObject(appearance, null!);
                     }
                     catch (Exception ex)
                     {
@@ -196,7 +196,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 }
             }
 
-            StreamToken normalAppearance = null;
+            StreamToken? normalAppearance = null;
 
             if (data is StreamToken streamToken)
             {
@@ -311,7 +311,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
 
                     PdfRectangle bbox = widget.Rectangle;
-                    if (widget.AnnotationDictionary.TryGet(NameToken.Rect, PdfScanner, out ArrayToken rect))
+                    if (widget.AnnotationDictionary.TryGet(NameToken.Rect, PdfScanner, out ArrayToken? rect))
                     {
                         var points = rect.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
                         bbox = new PdfRectangle(points[0], points[1], points[2], points[3]);
@@ -366,7 +366,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private DictionaryToken GetAppearance(Annotation annotation)
+        private DictionaryToken? GetAppearance(Annotation annotation)
         {
             return annotation.AnnotationDictionary.TryGet<DictionaryToken>(NameToken.Ap, PdfScanner, out var appearance)
                 ? appearance
@@ -388,7 +388,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             };
         }
 
-        private StreamToken GenerateStrikeOutNormalAppearanceAsStream(Annotation annotation)
+        private StreamToken? GenerateStrikeOutNormalAppearanceAsStream(Annotation annotation)
         {
             // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDStrikeoutAppearanceHandler.java
 
@@ -403,7 +403,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             AnnotationBorder ab = annotation.Border;
 
-            if (!annotation.AnnotationDictionary.TryGet(NameToken.C, PdfScanner, out ArrayToken colorToken) ||
+            if (!annotation.AnnotationDictionary.TryGet(NameToken.C, PdfScanner, out ArrayToken? colorToken) ||
                 colorToken.Data.Count == 0)
             {
                 return null;
@@ -449,7 +449,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     GetAnnotationStrokeColorOperation(color)?.Write(ms);
 
-                    //if (ab.dashArray != null)
+                    //if (ab.dashArray is not null)
                     //{
                     //    cs.setLineDashPattern(ab.dashArray, 0);
                     //}                   
@@ -512,17 +512,17 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private StreamToken GenerateHighlightNormalAppearanceAsStream(Annotation annotation)
+        private StreamToken? GenerateHighlightNormalAppearanceAsStream(Annotation annotation)
         {
             // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDHighlightAppearanceHandler.java
             PdfRectangle rect = annotation.Rectangle;
 
-            if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadpoints))
+            if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadPoints))
             {
                 return null;
             }
 
-            var pathsArray = quadpoints.Data.OfType<NumericToken>().Select(x => (float)x.Double).ToArray();
+            var pathsArray = quadPoints.Data.OfType<NumericToken>().Select(x => (float)x.Double).ToArray();
 
             var ab = annotation.Border;
 
@@ -703,18 +703,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
             return null;
         }
 
-        private StreamToken GenerateUnderlineNormalAppearanceAsStream(Annotation annotation)
+        private StreamToken? GenerateUnderlineNormalAppearanceAsStream(Annotation annotation)
         {
             // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDStrikeoutAppearanceHandler.java
 
             PdfRectangle rect = annotation.Rectangle;
 
-            if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadpoints))
+            if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadPoints))
             {
                 return null;
             }
 
-            var pathsArray = quadpoints.Data.OfType<NumericToken>().Select(x => (float)x.Double).ToArray();
+            var pathsArray = quadPoints.Data.OfType<NumericToken>().Select(x => (float)x.Double).ToArray();
 
             var ab = annotation.Border;
 
@@ -765,7 +765,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     GetAnnotationStrokeColorOperation(color)?.Write(ms);
 
-                    //if (ab.dashArray != null)
+                    //if (ab.dashArray is not null)
                     //{
                     //    cs.setLineDashPattern(ab.dashArray, 0);
                     //}                   
@@ -823,7 +823,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             return null;
         }
 
-        private StreamToken GenerateLinkNormalAppearanceAsStream(Annotation annotation)
+        private StreamToken? GenerateLinkNormalAppearanceAsStream(Annotation annotation)
         {
             // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDLinkAppearanceHandler.java
 
@@ -834,7 +834,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 using (var ms = new MemoryStream())
                 {
-                    double[] color = null;
+                    double[]? color = null;
                     if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.C, PdfScanner, out var colorToken) &&
                         colorToken.Data.Count > 0)
                     {
@@ -853,13 +853,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     // the bbox.
                     PdfRectangle borderEdge = GetPaddedRectangle(rect, (float)(lineWidth / 2.0));
 
-                    float[] pathsArray = null;
-                    if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadpoints))
+                    float[]? pathsArray = null;
+                    if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadPoints))
                     {
-                        pathsArray = quadpoints?.Data?.OfType<NumericToken>().Select(x => (float)x.Double)?.ToArray();
+                        pathsArray = quadPoints?.Data?.OfType<NumericToken>().Select(x => (float)x.Double)?.ToArray();
                     }
 
-                    if (pathsArray != null)
+                    if (pathsArray is not null)
                     {
                         // QuadPoints shall be ignored if any coordinate in the array lies outside
                         // the region specified by Rect.
@@ -877,7 +877,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         }
                     }
 
-                    if (pathsArray == null)
+                    if (pathsArray is null)
                     {
                         // Convert rectangle coordinates as if it was a /QuadPoints entry
                         pathsArray = new float[8];
@@ -982,13 +982,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 var (r, g, b) = DefaultFieldsHighlightColor.ToRGBValues();
                 GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
 
-                float[] pathsArray = null;
-                if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadpoints))
+                float[]? pathsArray = null;
+                if (annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Quadpoints, PdfScanner, out var quadPoints))
                 {
-                    pathsArray = quadpoints.Data?.OfType<NumericToken>().Select(x => (float)x.Double)?.ToArray();
+                    pathsArray = quadPoints.Data?.OfType<NumericToken>().Select(x => (float)x.Double)?.ToArray();
                 }
 
-                if (pathsArray != null)
+                if (pathsArray is not null)
                 {
                     // QuadPoints shall be ignored if any coordinate in the array lies outside
                     // the region specified by Rect.
@@ -1006,7 +1006,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
                 }
 
-                if (pathsArray == null)
+                if (pathsArray is null)
                 {
                     // Convert rectangle coordinates as if it was a /QuadPoints entry
                     pathsArray = new float[8];
@@ -1051,7 +1051,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 .Without(NameToken.F); // Need to remove the F entry as it will be treated as a Filter entry in ProcessFormXObject()
         }
 
-        private static IGraphicsStateOperation GetAnnotationStrokeColorOperation(ReadOnlySpan<double> color)
+        private static IGraphicsStateOperation? GetAnnotationStrokeColorOperation(ReadOnlySpan<double> color)
         {
             // An array of numbers in the range 0.0 to 1.0, representing a colour used for the following purposes:
             // The background of the annotation’s icon when closed
@@ -1079,7 +1079,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private static IGraphicsStateOperation GetAnnotationNonStrokeColorOperation(ReadOnlySpan<double> color)
+        private static IGraphicsStateOperation? GetAnnotationNonStrokeColorOperation(ReadOnlySpan<double> color)
         {
             // An array of numbers in the range 0.0 to 1.0, representing a colour used for the following purposes:
             // The background of the annotation’s icon when closed

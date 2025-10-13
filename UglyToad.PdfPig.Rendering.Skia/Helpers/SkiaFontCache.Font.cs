@@ -60,7 +60,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 if (TryGetFontCacheItem(fontKey, unicode, codepoint, out var item))
                 {
-                    return item;
+                    return item!;
                 }
 
                 // Cannot find font ZapfDingbats MOZILLA-LINK-5251-1
@@ -69,7 +69,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 using (var style = font.Details.GetFontStyle())
                 {
                     // Try get font by name
-                    string cleanFontName = font.GetCleanFontName();
+                    string? cleanFontName = font.GetCleanFontName();
                     currentTypeface = SKTypeface.FromFamilyName(cleanFontName, style);
 
                     if (currentTypeface.IsDefault())
@@ -90,7 +90,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     {
                         // If font cannot render the char
                         var fallback = _skFontManager.MatchCharacter(codepoint); // Access violation here
-                        if (fallback != null)
+                        if (fallback is not null)
                         {
                             currentTypeface.Dispose();
                             currentTypeface = _skFontManager.MatchFamily(fallback.FamilyName, style);
@@ -121,7 +121,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         {
             item = null;
 
-            if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem> skiaFontCacheItems))
+            if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem>? skiaFontCacheItems))
             {
                 if (string.IsNullOrWhiteSpace(unicode))
                 {
@@ -145,7 +145,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         private SkiaFontCacheItem SetFontCacheItem(string fontKey, SKTypeface typeface)
         {
-            if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem> skiaFontCacheItems))
+            if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem>? skiaFontCacheItems))
             {
                 // Make sure the font is not already cached
                 SkiaFontCacheItem? skiaFontCacheItem = skiaFontCacheItems.FirstOrDefault(x => x.Typeface.Equals(typeface));
@@ -173,7 +173,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return item;
         }
 
-        private static string GetTrueTypeFontFontName(string fontName)
+        private static string? GetTrueTypeFontFontName(string? fontName)
         {
             TrueTypeFont trueTypeFont = SystemFontFinder.Instance.GetTrueTypeFont(fontName);
             return trueTypeFont?.TableRegister?.NameTable?.FontFamilyName;

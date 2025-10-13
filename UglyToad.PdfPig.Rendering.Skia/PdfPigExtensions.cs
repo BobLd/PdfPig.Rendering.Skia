@@ -74,7 +74,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 var bitmap = new SKBitmap(size.Width, size.Height);
                 using (var canvas = new SKCanvas(bitmap))
                 {
-                    if (background != null)
+                    if (background is not null)
                     {
                         canvas.Clear(background.ToSKColor(1.0));
                     }

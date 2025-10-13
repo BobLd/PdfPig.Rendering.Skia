@@ -153,7 +153,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                                 }
 
                                 SKBitmap bim3 = diffImages(expectedResize, actualResize);
-                                if (bim3 == null)
+                                if (bim3 is null)
                                 {
                                     return true;
                                 }
@@ -199,7 +199,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                         }
 
                         SKBitmap bim3 = diffImages(expected, actual);
-                        if (bim3 == null)
+                        if (bim3 is null)
                         {
                             return true;
                         }

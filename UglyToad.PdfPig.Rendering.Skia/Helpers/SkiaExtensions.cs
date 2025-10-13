@@ -47,9 +47,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return fontDetails.IsItalic ? SKFontStyle.Italic : SKFontStyle.Normal;
         }
 
-        public static string GetCleanFontName(this IFont font)
+        public static string? GetCleanFontName(this IFont font)
         {
-            string fontName = font.Name?.Data;
+            string? fontName = font.Name?.Data;
             if (fontName is null)
             {
                 return null;
@@ -116,7 +116,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             };
         }
 
-        public static SKPathEffect ToSKPathEffect(this LineDashPattern lineDashPattern, float scale)
+        public static SKPathEffect? ToSKPathEffect(this LineDashPattern lineDashPattern, float scale)
         {
             //const float oneOver72 = (float)(1.0 / 72.0);
 

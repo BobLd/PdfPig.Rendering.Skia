@@ -101,7 +101,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 if (fill)
                 {
                     // Do fill first
-                    if (nonStrokingColor != null && nonStrokingColor.ColorSpace == ColorSpace.Pattern)
+                    if (nonStrokingColor is not null && nonStrokingColor.ColorSpace == ColorSpace.Pattern)
                     {
                         // TODO - Clean shading patterns painting
                         // See documents:

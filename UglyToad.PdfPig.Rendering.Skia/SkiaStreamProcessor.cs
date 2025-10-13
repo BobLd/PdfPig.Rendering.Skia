@@ -140,7 +140,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override void ModifyClippingIntersect(FillingRule clippingRule)
         {
-            if (_currentPath == null)
+            if (_currentPath is null)
             {
                 return;
             }
@@ -156,7 +156,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <inheritdoc/>
-        public override void BeginMarkedContent(NameToken name, NameToken propertyDictionaryName, DictionaryToken properties)
+        public override void BeginMarkedContent(NameToken name, NameToken? propertyDictionaryName, DictionaryToken? properties)
         {
             // No op
         }

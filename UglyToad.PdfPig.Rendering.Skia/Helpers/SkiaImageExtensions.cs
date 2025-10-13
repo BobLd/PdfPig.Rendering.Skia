@@ -31,7 +31,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
     {
         private static bool IsValidColorSpace(IPdfImage pdfImage)
         {
-            return pdfImage.ColorSpaceDetails != null &&
+            return pdfImage.ColorSpaceDetails is not null &&
                                   !(pdfImage.ColorSpaceDetails is UnsupportedColorSpaceDetails)
                                   && pdfImage.ColorSpaceDetails!.BaseType != ColorSpace.Pattern;
         }
@@ -72,7 +72,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         }
 
         // https://stackoverflow.com/questions/50312937/skiasharp-tiff-support#50370515
-        private static bool TryGenerate(this IPdfImage pdfImage, out SKImage skImage)
+        private static bool TryGenerate(this IPdfImage pdfImage, out SKImage? skImage)
         {
             skImage = null;
 
@@ -240,7 +240,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     skImage = SKImage.FromPixels(pixmap, (addr, ctx) =>
                     {
                         ptr.Free();
-                        raster = null;
+                        raster = null!;
                         System.Diagnostics.Debug.WriteLine("ptr.Free()");
                     });
                 }
@@ -395,11 +395,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         /// This method attempts to generate an <see cref="SKImage"/> using the image's data and color space.
         /// If the generation fails, it falls back to creating the image using encoded or raw byte data.
         /// </remarks>
-        public static SKImage GetSKImage(this IPdfImage pdfImage)
+        public static SKImage? GetSKImage(this IPdfImage pdfImage)
         {
             if (pdfImage.TryGenerate(out var bitmap))
             {
-                return bitmap;
+                return bitmap!;
             }
 
             // Fallback to bytes
