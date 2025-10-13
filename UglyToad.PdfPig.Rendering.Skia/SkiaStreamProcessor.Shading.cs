@@ -99,14 +99,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <summary>
         /// This is very hackish, should never happen.
         /// </summary>
-        private static void fixIncorrectValues(double[] v, double[] domain)
+        private static void FixIncorrectValues(double[] v, double[] domain)
         {
+            double rep = domain[0];
             for (int i = 0; i < v.Length; i++)
             {
-                double c = v[i];
+                ref double c = ref v[i];
                 if (double.IsNaN(c) || double.IsInfinity(c))
                 {
-                    v[i] = domain[0];
+                    c = rep;
                 }
             }
         }
@@ -154,7 +155,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 double tx = t0 + (t / (double)factor * t1);
                 double[] v = shading.Eval(tx);
 
-                fixIncorrectValues(v, domain); // This is a hack, this should never happen
+                FixIncorrectValues(v, domain); // This is a hack, this should never happen
 
                 colors[t] = shading.ColorSpace.GetColor(v).ToSKColor(currentState.AlphaConstantNonStroking);
                 // TODO - is it non stroking??
@@ -243,7 +244,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 double tx = t0 + (t / (double)factor * t1);
                 double[] v = shading.Eval(tx);
 
-                fixIncorrectValues(v, domain); // This is a hack, this should never happen, see GHOSTSCRIPT-693154-0
+                FixIncorrectValues(v, domain); // This is a hack, this should never happen, see GHOSTSCRIPT-693154-0
 
                 colors[t] = shading.ColorSpace.GetColor(v).ToSKColor(currentState.AlphaConstantNonStroking); // TODO - is it non stroking??
                 colorPos[t] = (float)tx;
@@ -323,7 +324,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     double ty = ymin + (y / (double)factor * ymax);
                     double[] v = shading.Eval(tx, ty);
 
-                    fixIncorrectValues(v, domain); // This is a hack, this should never happen
+                    FixIncorrectValues(v, domain); // This is a hack, this should never happen
 
                     colors[y + x * (factor + 1)] = shading.ColorSpace.GetColor(v).ToSKColor(currentState.AlphaConstantNonStroking); // TODO - is it non stroking??
 
