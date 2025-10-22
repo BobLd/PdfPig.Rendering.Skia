@@ -367,7 +367,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                    {
                        ptr.Free();
                        raster = null!;
-                       System.Diagnostics.Debug.WriteLine("ptr.Free()");
+                       //System.Diagnostics.Debug.WriteLine("ptr.Free()");
                    }))
             {
                 var domainRect = new SKRect((float)x0, (float)y0, (float)x1, (float)y1);

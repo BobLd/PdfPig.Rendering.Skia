@@ -65,34 +65,34 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 // Cannot find font ZapfDingbats MOZILLA-LINK-5251-1
 
-                SKTypeface currentTypeface;
+                SKTypeface? currentTypeface;
                 using (var style = font.Details.GetFontStyle())
                 {
                     // Try get font by name
                     string? cleanFontName = font.GetCleanFontName();
                     currentTypeface = SKTypeface.FromFamilyName(cleanFontName, style);
 
-                    if (currentTypeface.IsDefault())
+                    if (currentTypeface is null || currentTypeface.IsDefault())
                     {
                         // We found the default font
                         // Try get font by substitute name
                         string? fontFamilyName = GetTrueTypeFontFontName(cleanFontName);
                         if (!string.IsNullOrEmpty(fontFamilyName))
                         {
-                            currentTypeface.Dispose();
-                            currentTypeface = SKTypeface.FromFamilyName(fontFamilyName, style);
+                            currentTypeface?.Dispose();
+                            currentTypeface = SKTypeface.FromFamilyName(fontFamilyName, style) ?? SKTypeface.Default;
                         }
                     }
 
                     // Fallback font
                     // https://github.com/mono/SkiaSharp/issues/232
-                    if (!string.IsNullOrWhiteSpace(unicode) && !currentTypeface.ContainsGlyph(codepoint))
+                    if (currentTypeface is null || (!string.IsNullOrWhiteSpace(unicode) && !currentTypeface.ContainsGlyph(codepoint)))
                     {
                         // If font cannot render the char
                         var fallback = _skFontManager.MatchCharacter(codepoint); // Access violation here
                         if (fallback is not null)
                         {
-                            currentTypeface.Dispose();
+                            currentTypeface?.Dispose();
                             currentTypeface = _skFontManager.MatchFamily(fallback.FamilyName, style);
                             fallback.Dispose();
                         }
@@ -143,7 +143,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return false;
         }
 
-        private SkiaFontCacheItem SetFontCacheItem(string fontKey, SKTypeface typeface)
+        private SkiaFontCacheItem SetFontCacheItem(string fontKey, SKTypeface? typeface)
         {
             if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem>? skiaFontCacheItems))
             {
@@ -159,7 +159,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
 
             // Check if we need to create cache item
-            var item = typeface.IsDefault()
+            var item = typeface is null || typeface.IsDefault()
                 ? DefaultSkiaFontCacheItem.Value
                 : new SkiaFontCacheItem(typeface);
 

@@ -126,7 +126,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                                    {
                                        ptr.Free();
                                        raster = null;
-                                       System.Diagnostics.Debug.WriteLine("ptr.Free()");
+                                       //System.Diagnostics.Debug.WriteLine("ptr.Free()");
                                    }))
                             {
                                 _canvas.DrawImage(skImage2, destRect, _paintCache.GetAntialiasing());

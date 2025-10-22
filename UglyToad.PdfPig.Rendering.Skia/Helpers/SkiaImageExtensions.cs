@@ -241,7 +241,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     {
                         ptr.Free();
                         raster = null!;
-                        System.Diagnostics.Debug.WriteLine("ptr.Free()");
+                        //System.Diagnostics.Debug.WriteLine("ptr.Free()");
                     });
                 }
 
