@@ -80,7 +80,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         if (!string.IsNullOrEmpty(fontFamilyName))
                         {
                             currentTypeface?.Dispose();
-                            currentTypeface = SKTypeface.FromFamilyName(fontFamilyName, style) ?? SKTypeface.Default;
+                            currentTypeface = SKTypeface.FromFamilyName(fontFamilyName, style);
                         }
                     }
 
