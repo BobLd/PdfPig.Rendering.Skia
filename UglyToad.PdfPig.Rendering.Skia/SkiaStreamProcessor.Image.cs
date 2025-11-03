@@ -46,28 +46,17 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            var destRect = image.Bounds.ToSKRect(_height);
-
             try
             {
                 using (new SKAutoCanvasRestore(_canvas, true))
                 using (var skImage = image.GetSKImage())
                 {
-                    if (!(CurrentTransformationMatrix.A > 0) || !(CurrentTransformationMatrix.D > 0))
-                    {
-                        int sx = Math.Sign(CurrentTransformationMatrix.A);
-                        int sy = Math.Sign(CurrentTransformationMatrix.D);
-
-                        // Avoid passing a scale of 0
-                        var matrix = SKMatrix.CreateScale(sx == 0 ? 1 : sx, sy == 0 ? 1 : sy);
-
-                        _canvas.SetMatrix(matrix);
-                        destRect = matrix.MapRect(destRect);
-                    }
+                    // Images are upside down in PDF
+                    _canvas.Scale(1, -1, 0, 0.5f);
 
                     if (!image.IsImageMask)
                     {
-                        _canvas.DrawImage(skImage, destRect, _paintCache.GetAntialiasing());
+                        _canvas.DrawImage(skImage, new SKRect(0, 0, 1, 1), _paintCache.GetAntialiasing());
                     }
                     else
                     {
@@ -99,7 +88,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                             Span<byte> span = skImagePixels.GetPixelSpan<byte>();
                             Span<byte> rasterSpan = raster;
 
-                            int i = 0;
                             for (int row = 0; row < skImage.Height; ++row)
                             {
                                 for (int col = 0; col < skImage.Width; ++col)
@@ -129,7 +117,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                                        //System.Diagnostics.Debug.WriteLine("ptr.Free()");
                                    }))
                             {
-                                _canvas.DrawImage(skImage2, destRect, _paintCache.GetAntialiasing());
+                                _canvas.DrawImage(skImage2, new SKRect(0, 0, 1, 1), _paintCache.GetAntialiasing());
                             }
                         }
                     }
@@ -144,7 +132,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
 
 #if DEBUG
-            _canvas.DrawRect(destRect, _paintCache.GetImageDebug());
+            _canvas.DrawRect(new SKRect(0, 0, 1, 1), _paintCache.GetImageDebug());
 #endif
         }
     }

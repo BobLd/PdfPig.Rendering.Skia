@@ -71,27 +71,27 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return fontName.Substring(7);
         }
 
-        public static SKRect ToSKRect(this PdfRectangle rect, float height)
+        public static SKRect ToSKRect(this PdfRectangle rect)
         {
             float left = (float)rect.Left;
-            float top = (float)(height - rect.Top);
+            float bottom = (float)rect.BottomLeft.Y;
             float right = left + (float)rect.Width;
-            float bottom = top + (float)rect.Height;
+            float top = bottom + (float)rect.Height;
             return new SKRect(left, top, right, bottom);
         }
 
-        public static SKRectI ToSKRectI(this PdfRectangle rect, float height)
+        public static SKRectI ToSKRectI(this PdfRectangle rect)
         {
             double left = rect.Left;
-            double top = height - rect.Top;
+            double top = rect.Top;
             double right = left + rect.Width;
             double bottom = top + rect.Height;
             return new SKRectI((int)left, (int)top, (int)right, (int)bottom); // TODO - rounding
         }
 
-        public static SKPoint ToSKPoint(this PdfPoint pdfPoint, float height)
+        public static SKPoint ToSKPoint(this PdfPoint pdfPoint)
         {
-            return new SKPoint((float)pdfPoint.X, (float)(height - pdfPoint.Y));
+            return new SKPoint((float)pdfPoint.X, (float)pdfPoint.Y);
         }
 
         public static SKStrokeJoin ToSKStrokeJoin(this LineJoinStyle lineJoinStyle)

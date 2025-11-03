@@ -53,11 +53,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            var point = CurrentTransformationMatrix.Transform(x, y);
-            float xs = (float)point.x;
-            float ys = (float)(_height - point.y);
-
-            _currentPath.MoveTo(xs, ys);
+            _currentPath.MoveTo((float)x, (float)y);
         }
 
         public override void LineTo(double x, double y)
@@ -67,11 +63,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            var point = CurrentTransformationMatrix.Transform(x, y);
-            float xs = (float)point.x;
-            float ys = (float)(_height - point.y);
-
-            _currentPath.LineTo(xs, ys);
+            _currentPath.LineTo((float)x, (float)y);
         }
 
         public override void BezierCurveTo(double x2, double y2, double x3, double y3)
@@ -81,14 +73,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            var (c2x, c2y) = CurrentTransformationMatrix.Transform(x2, y2);
-            var (endx, endy) = CurrentTransformationMatrix.Transform(x3, y3);
-            float x2s = (float)c2x;
-            float y2s = (float)(_height - c2y);
-            float x3s = (float)endx;
-            float y3s = (float)(_height - endy);
-
-            _currentPath.QuadTo(x2s, y2s, x3s, y3s);
+            _currentPath.QuadTo((float)x2, (float)y2, (float)x3, (float)y3);
         }
 
         public override void BezierCurveTo(double x1, double y1, double x2, double y2, double x3, double y3)
@@ -98,17 +83,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            var (c1x, c1y) = CurrentTransformationMatrix.Transform(x1, y1);
-            var (c2x, c2y) = CurrentTransformationMatrix.Transform(x2, y2);
-            var (endx, endy) = CurrentTransformationMatrix.Transform(x3, y3);
-            float x1s = (float)c1x;
-            float y1s = (float)(_height - c1y);
-            float x2s = (float)c2x;
-            float y2s = (float)(_height - c2y);
-            float x3s = (float)endx;
-            float y3s = (float)(_height - endy);
-
-            _currentPath.CubicTo(x1s, y1s, x2s, y2s, x3s, y3s);
+            _currentPath.CubicTo((float)x1, (float)y1, (float)x2, (float)y2, (float)x3, (float)y3);
         }
 
         public override void ClosePath()
@@ -129,11 +104,19 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override void Rectangle(double x, double y, double width, double height)
         {
-            MoveTo(x, y);
-            LineTo(x + width, y);
-            LineTo(x + width, y + height);
-            LineTo(x, y + height);
-            CloseSubpath();
+            BeginSubpath();
+
+            if (_currentPath == null)
+            {
+                return;
+            }
+
+            var left = (float)x;
+            var top = (float)(y + height);
+            var right = (float)(x + width);
+            var bottom = (float)(y);
+
+            _currentPath.AddRect(new SKRect(left, top, right, bottom));
         }
 
         public override void StrokePath(bool close)
