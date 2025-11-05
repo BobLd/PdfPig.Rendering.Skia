@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>net462;net6.0;net8.0</TargetFrameworks>
+		<TargetFrameworks>net462;net6.0;net8.0;net9.0</TargetFrameworks>
 		<LangVersion>12</LangVersion>
 		<Nullable>enable</Nullable>
 		<IsPackable>false</IsPackable>
@@ -22,7 +22,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\UglyToad.PdfPig.Rendering.Skia\UglyToad.PdfPig.Rendering.Skia.csproj" />
+		<ProjectReference Include="..\UglyToad.PdfPig.Rendering.Skia\UglyToad.PdfPig.Rendering.Skia.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -73,6 +73,12 @@
 	  </None>
 	  <None Update="Documents\encrypt-revision-6-maltby.pdf">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\felltypes-test.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\FontMatrix-concat.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	  <None Update="Documents\fseprd1102849.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -335,6 +341,12 @@
 	  <None Update="ExpectedImages\pdfpig_skia\annots_rotated_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\68-1990-01_A_15.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\68-1990-01_A_21.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\caly-issues-56-1_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
@@ -389,7 +401,22 @@
 	  <None Update="ExpectedImages\pdfpig_skia\DeviceN_CS_test_6.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\felltypes-test_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\FontMatrix-concat_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\fseprd1102849_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-539359-0.zip-0_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-686749-1_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-686821-0_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692307-2.zip-3_1.png">
@@ -398,13 +425,16 @@
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692564-0_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
-	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692564-0_1_1_rendered.png">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-693073-1_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-693073-1_2.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-693295-0_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-693295-0_2.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-693534-0_1.png">
@@ -437,10 +467,16 @@
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-697507-0_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-698721-1_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-699375-5_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-699488-0_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-700370-2_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-700931-0.7z-5_1.png">
@@ -486,6 +522,9 @@
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\MOZILLA-LINK-3264-0_4.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\P2P-33713919_2.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\Page_28_1.png">
@@ -534,6 +573,9 @@
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	  <None Update="SpecificTestDocuments\new.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\P2P-33713919.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	  <None Update="SpecificTestDocuments\Shadows.at.Sundown.-.Lvl.11_removed.pdf">

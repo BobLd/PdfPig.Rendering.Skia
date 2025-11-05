@@ -34,6 +34,21 @@ namespace UglyToad.PdfPig.Rendering.Skia
             RenderImage(inlineImage);
         }
 
+        private static double FoldAngleTo90(double angleInDegrees)
+        {
+            if (angleInDegrees > 90)
+            {
+                return 180 - angleInDegrees;
+            }
+
+            if (angleInDegrees < -90)
+            {
+                return -180 - angleInDegrees;
+            }
+
+            return angleInDegrees;
+        }
+
         private void RenderImage(IPdfImage image)
         {
             if (image.WidthInSamples == 0 || image.HeightInSamples == 0)
@@ -56,7 +71,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     if (!image.IsImageMask)
                     {
-                        _canvas.DrawImage(skImage, new SKRect(0, 0, 1, 1), _paintCache.GetAntialiasing());
+                        _canvas.DrawImage(skImage, new SKRect(0, 0, 1, 1), _paintCache.GetPaint(image));
                     }
                     else
                     {
@@ -117,7 +132,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                                        //System.Diagnostics.Debug.WriteLine("ptr.Free()");
                                    }))
                             {
-                                _canvas.DrawImage(skImage2, new SKRect(0, 0, 1, 1), _paintCache.GetAntialiasing());
+                                _canvas.DrawImage(skImage2, new SKRect(0, 0, 1, 1), _paintCache.GetPaint(image));
                             }
                         }
                     }

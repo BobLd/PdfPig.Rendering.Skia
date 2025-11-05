@@ -1,10 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>netstandard2.0;net462;net471;net6.0;net8.0</TargetFrameworks>
+		<TargetFrameworks>netstandard2.0;net462;net471;net6.0;net8.0;net9.0</TargetFrameworks>
 		<LangVersion>12</LangVersion>
+		<Version>0.1.12.1-alpha007-skia3</Version>
 		<Nullable>enable</Nullable>
-		<Version>0.1.11.6</Version>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
 
@@ -42,12 +42,16 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="PdfPig" Version="0.1.11" />
+		<PackageReference Include="PdfPig" Version="0.1.12-alpha-20251104-181fa" />
 		<PackageReference Include="PdfPig.Filters.Dct.JpegLibrary" Version="0.1.11" />
 		<PackageReference Include="PdfPig.Filters.Jbig2.PdfboxJbig2" Version="0.1.11" />
 		<PackageReference Include="PdfPig.Filters.Jpx.OpenJpeg" Version="0.1.11.3" />
-		<PackageReference Include="SkiaSharp" Version="2.88.9" />
-		<PackageReference Include="SkiaSharp.HarfBuzz" Version="2.88.9" />
+		<PackageReference Include="SkiaSharp" Version="3.119.1" />
+		<PackageReference Include="SkiaSharp.HarfBuzz" Version="3.119.1" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(TargetFramework)'=='net462'">
+		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0' or '$(TargetFramework)'=='net462' OR '$(TargetFramework)'=='net471'">

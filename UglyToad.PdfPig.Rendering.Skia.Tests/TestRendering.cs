@@ -164,6 +164,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             },
             new object[]
             {
+                "68-1990-01_A_15.png",
+                "68-1990-01_A.pdf", 15, 2
+            },
+            new object[]
+            {
+                "68-1990-01_A_21.png",
+                "68-1990-01_A.pdf", 21, 2
+            },
+            new object[]
+            {
                 "11194059_2017-11_de_s_1.png",
                 "11194059_2017-11_de_s.pdf", 1, 2
             },
@@ -436,8 +446,58 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             },
             new object[]
             {
+                "P2P-33713919_2.png",
+                "P2P-33713919.pdf", 2, 2
+            },
+            new object[]
+            {
+                "felltypes-test_1.png",
+                "felltypes-test.pdf", 1, 2
+            },
+            new object[]
+            {
+                "FontMatrix-concat_1.png",
+                "FontMatrix-concat.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-539359-0.zip-0_1.png",
+                "GHOSTSCRIPT-539359-0.zip-0.pdf", 1, 2
+            },
+            new object[]
+            {
                 "annots_rotated_1.png",
                 "annots_rotated.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-700370-2_1.png",
+                "GHOSTSCRIPT-700370-2.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-686749-1_1.png",
+                "GHOSTSCRIPT-686749-1.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-693295-0_1.png",
+                "GHOSTSCRIPT-693295-0.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-693295-0_2.png",
+                "GHOSTSCRIPT-693295-0.pdf", 2, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-698721-1_1.png",
+                "GHOSTSCRIPT-698721-1.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-686821-0_1.png",
+                "GHOSTSCRIPT-686821-0.pdf", 1, 2
             },
             new object[]
             {

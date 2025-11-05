@@ -182,15 +182,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var color = style == SKPaintStyle.Stroke ? strokingColor : nonStrokingColor; // TODO - very not correct
 
             using (var skFont = drawTypeface.Typeface.ToFont(1f))
-            using (var fontPaint = new SKPaint())
+            using (var paint = new SKPaint())
             {
-                fontPaint.Style = style.Value;
-                fontPaint.Color = color.ToSKColor(GetCurrentState().AlphaConstantNonStroking);
-                fontPaint.IsAntialias = _antiAliasing;
+                paint.Style = style.Value;
+                paint.Color = color.ToSKColor(GetCurrentState().AlphaConstantNonStroking);
+                paint.IsAntialias = _antiAliasing;
 
                 // TODO - Benchmark with SPARC - v9 Architecture Manual.pdf
                 // as _canvas.DrawShapedText(unicode, startBaseLine, fontPaint); as very slow without 'Shaper' caching
-                _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, fontPaint);
+                _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, paint);
             }
         }
 
@@ -205,8 +205,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // Test documents:
             // - SPARC - v9 Architecture Manual.pdf, page 1
             // - 68-1990-01_A.pdf, page 15
+            // - GHOSTSCRIPT-686821-0.pdf
 
-            return (float)Math.Round(Math.PI / 2.0 + rotationRadians - rotationBottomTopRadians, 5);
+            double radians = (Math.PI / 2.0 + rotationRadians - rotationBottomTopRadians) % Math.PI;
+
+            return (float)Math.Round(radians, 5);
         }
 
         private static bool CanRender(string unicode)

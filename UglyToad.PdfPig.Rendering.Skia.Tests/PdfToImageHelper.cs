@@ -119,7 +119,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 {
                     throw new NullReferenceException("Could not load expected image.");
                 }
-
+                
+                var samplingOptions = new SKSamplingOptions(SKCubicResampler.Mitchell);
+                
                 using (var document = PdfDocument.Open(docPath, SkiaRenderingParsingOptions.Instance))
                 {
                     document.AddSkiaPageFactory();
@@ -135,14 +137,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
                         using (SKBitmap actualResize = new SKBitmap(skInfo))
                         {
-                            if (!actual.ScalePixels(actualResize, SKFilterQuality.High))
+                            if (!actual.ScalePixels(actualResize, samplingOptions))
                             {
                                 throw new Exception("Unable to resize image.");
                             }
 
                             using (var expectedResize = new SKBitmap(skInfo))
                             {
-                                if (!expected.ScalePixels(expectedResize, SKFilterQuality.High))
+                                if (!expected.ScalePixels(expectedResize, samplingOptions))
                                 {
                                     throw new Exception("Unable to resize image.");
                                 }
