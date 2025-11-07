@@ -38,15 +38,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
             switch (shading.ShadingType)
             {
                 case ShadingType.Axial:
-                    RenderAxialShading(shading as AxialShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
+                    RenderAxialShading(shading as AxialShading, SKMatrix.Identity, minX, minY, maxX, maxY);
                     break;
 
                 case ShadingType.Radial:
-                    RenderRadialShading(shading as RadialShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
+                    RenderRadialShading(shading as RadialShading, SKMatrix.Identity, minX, minY, maxX, maxY);
                     break;
 
                 case ShadingType.FunctionBased:
-                    RenderFunctionBasedShading(shading as FunctionBasedShading, CurrentTransformationMatrix, minX, minY, maxX, maxY);
+                    RenderFunctionBasedShading(shading as FunctionBasedShading, SKMatrix.Identity, minX, minY, maxX, maxY);
                     break;
 
                 case ShadingType.FreeFormGouraud:
@@ -54,23 +54,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 case ShadingType.CoonsPatch:
                 case ShadingType.TensorProductPatch:
                 default:
-                    RenderUnsupportedShading(shading, CurrentTransformationMatrix);
+                    RenderUnsupportedShading(shading, SKMatrix.Identity);
                     break;
             }
         }
 
-        private void RenderUnsupportedShading(Shading shading, TransformationMatrix transformationMatrix)
+        private void RenderUnsupportedShading(Shading shading, in SKMatrix patternTransformMatrix)
         {
 #if DEBUG
-            var (x0, y0) = transformationMatrix.Transform(0, 0);
-            var (x1, y1) = transformationMatrix.Transform(0, 1);
-
-            float xs0 = (float)x0;
-            float ys0 = (float)(_height - y0);
-            float xs1 = (float)x1;
-            float ys1 = (float)(_height - y1);
-
-            using (var shader = SKShader.CreateLinearGradient(new SKPoint(xs0, ys0), new SKPoint(xs1, ys1), new[] { SKColors.Red, SKColors.Green }, SKShaderTileMode.Clamp))
+            using (var shader = SKShader.CreateLinearGradient(SKPoint.Empty, new SKPoint(0, 1), new[] { SKColors.Red, SKColors.Green }, SKShaderTileMode.Clamp))
             using (var paint = new SKPaint())
             {
                 paint.IsAntialias = shading.AntiAlias;
@@ -99,14 +91,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private void RenderRadialShading(RadialShading shading, TransformationMatrix transformationMatrix, float minX,
+        private void RenderRadialShading(RadialShading shading, in SKMatrix patternTransformMatrix, float minX,
             float minY, float maxX, float maxY,
             bool isStroke = false, SKPath? path = null)
         {
             var currentState = GetCurrentState();
-
-            var transformMatrix = transformationMatrix.ToSkMatrix()
-                .PostConcat(_yAxisFlipMatrix); // Inverse direction of y-axis
 
             // Not correct
             var coords = shading.Coords;
@@ -160,7 +149,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
             
             using (var shader = SKShader.CreateTwoPointConicalGradient(new SKPoint(x0, y0), r0, new SKPoint(x1, y1), r1,
-                       colors, colorPos, SKShaderTileMode.Clamp, transformMatrix))
+                       colors, colorPos, SKShaderTileMode.Clamp, patternTransformMatrix))
             using (var paint = new SKPaint())
             {
                 paint.IsAntialias = shading.AntiAlias;
@@ -170,7 +159,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 if (isStroke)
                 {
-                    float scalingFactor = currentState.CurrentTransformationMatrix.GetScalingFactor();
+                    float scalingFactor = 1.0f;
 
                     // TODO - To finish
                     paint.Style = SKPaintStyle.Stroke;
@@ -191,13 +180,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private void RenderAxialShading(AxialShading shading, TransformationMatrix transformationMatrix, float minX, float minY, float maxX, float maxY,
+        private void RenderAxialShading(AxialShading shading, in SKMatrix patternTransformMatrix, float minX, float minY, float maxX, float maxY,
             bool isStroke = false, SKPath? path = null)
         {
             var currentState = GetCurrentState();
-
-            var transformMatrix = transformationMatrix.ToSkMatrix()
-                .PostConcat(_yAxisFlipMatrix); // Inverse direction of y-axis
 
             var coords = shading.Coords;
             var domain = shading.Domain;
@@ -237,7 +223,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 colorPos[t] = (float)tx;
             }
 
-            using (var shader = SKShader.CreateLinearGradient(new SKPoint(x0, y0), new SKPoint(x1, y1), colors, colorPos, SKShaderTileMode.Clamp, transformMatrix))
+            using (var shader = SKShader.CreateLinearGradient(new SKPoint(x0, y0), new SKPoint(x1, y1), colors, colorPos, SKShaderTileMode.Clamp, patternTransformMatrix))
             using (var paint = new SKPaint())
             {
                 paint.IsAntialias = shading.AntiAlias;
@@ -248,7 +234,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 SKPathEffect? dash = null;
                 if (isStroke)
                 {
-                    float scalingFactor = currentState.CurrentTransformationMatrix.GetScalingFactor();
+                    float scalingFactor = 1.0f;
 
                     // TODO - To Check
                     paint.Style = SKPaintStyle.Stroke;
@@ -275,7 +261,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <summary>
         /// see PDFBOX-1869-4.pdf
         /// </summary>
-        private void RenderFunctionBasedShading(FunctionBasedShading shading, TransformationMatrix transformationMatrix,
+        private void RenderFunctionBasedShading(FunctionBasedShading shading, in SKMatrix patternTransformMatrix,
             float minX, float minY, float maxX, float maxY, bool isStroke = false, SKPath? path = null)
         {
             /*
@@ -362,24 +348,45 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // get a pointer to the buffer, and give it to the skImage
             var ptr = GCHandle.Alloc(raster, GCHandleType.Pinned);
 
+            var finalShadingMatrix = patternTransformMatrix.PreConcat(shading.Matrix.ToSkMatrix());
+
             using (SKPixmap pixmap = new SKPixmap(info, ptr.AddrOfPinnedObject(), info.RowBytes))
             using (SKImage skImage2 = SKImage.FromPixels(pixmap, (addr, ctx) =>
-                   {
-                       ptr.Free();
-                       raster = null!;
-                       //System.Diagnostics.Debug.WriteLine("ptr.Free()");
-                   }))
-            {
-                var domainRect = new SKRect((float)x0, (float)y0, (float)x1, (float)y1);
-
-                using (new SKAutoCanvasRestore(_canvas, true))
                 {
-                    SKMatrix shadingSkMat = shading.Matrix.ToSkMatrix();
-                    // TODO - Do we need `.PostConcat(_yAxisFlipMatrix); // Inverse direction of y-axis`
+                    ptr.Free();
+                    raster = null!;
+                }))
+            using (var shader = SKShader.CreateImage(skImage2, SKShaderTileMode.Decal, SKShaderTileMode.Decal, finalShadingMatrix))
+            using (var paint = new SKPaint())
+            {
+                paint.IsAntialias = shading.AntiAlias;
+                paint.Shader = shader;
 
-                    _canvas.Concat(in shadingSkMat);
-                    _canvas.DrawImage(skImage2, domainRect, _paintCache.GetAntialiasing());
+                SKPathEffect? dash = null;
+                if (isStroke)
+                {
+                    float scalingFactor = 1.0f;
+
+                    var currentState = GetCurrentState();
+
+                    // TODO - To Check
+                    paint.Style = SKPaintStyle.Stroke;
+                    paint.StrokeWidth = (float)currentState.LineWidth * scalingFactor; // A guess
+                    paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
+                    paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
+                    paint.PathEffect = currentState.LineDashPattern.ToSKPathEffect(scalingFactor);
                 }
+
+                if (path is null)
+                {
+                    _canvas.DrawPaint(paint);
+                }
+                else
+                {
+                    _canvas.DrawPath(path, paint);
+                }
+
+                dash?.Dispose();
             }
         }
 
@@ -395,25 +402,28 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 // TODO
             }
 
-            TransformationMatrix transformationMatrix = CurrentTransformationMatrix.Multiply(pattern.Matrix);
-
             float maxX = path.Bounds.Right;
             float maxY = path.Bounds.Top;
             float minX = path.Bounds.Left;
             float minY = path.Bounds.Bottom;
 
+            // We cancel CTM, but not canvas' Y flip, as we still need it.
+            var patternTransform = CurrentTransformationMatrix.ToSkMatrix().Invert()
+                .PreConcat(_currentStreamOriginalTransforms.Peek())
+                .PreConcat(pattern.Matrix.ToSkMatrix());
+
             switch (pattern.Shading.ShadingType)
             {
                 case ShadingType.Axial:
-                    RenderAxialShading(pattern.Shading as AxialShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
+                    RenderAxialShading(pattern.Shading as AxialShading, patternTransform, minX, minY, maxX, maxY, isStroke, path);
                     break;
 
                 case ShadingType.Radial:
-                    RenderRadialShading(pattern.Shading as RadialShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
+                    RenderRadialShading(pattern.Shading as RadialShading, patternTransform, minX, minY, maxX, maxY, isStroke, path);
                     break;
 
                 case ShadingType.FunctionBased:
-                    RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, transformationMatrix, minX, minY, maxX, maxY, isStroke, path);
+                    RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, patternTransform, minX, minY, maxX, maxY, isStroke, path);
                     break;
 
                 case ShadingType.FreeFormGouraud:
@@ -421,7 +431,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 case ShadingType.CoonsPatch:
                 case ShadingType.TensorProductPatch:
                 default:
-                    RenderUnsupportedShading(pattern.Shading, CurrentTransformationMatrix);
+                    RenderUnsupportedShading(pattern.Shading, patternTransform);
                     break;
             }
         }
@@ -459,7 +469,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             var processor = new SkiaStreamProcessor(PageNumber, ResourceStore, PdfScanner, PageContentParser,
                 FilterProvider, new Content.CropBox(pattern.BBox), UserSpaceUnit, Rotation,
-                pattern.Matrix, ParsingOptions, _annotationProvider, _fontCache);
+                pattern.Matrix, ParsingOptions, null, _fontCache);
 
             /*
             if (pattern.PaintType == PatternPaintType.Uncoloured)
@@ -477,12 +487,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             SKRect rect = SKRect.Create(Math.Abs((float)pattern.XStep), Math.Abs((float)pattern.YStep));
 
-            // We are drawing a SKPicture, we need to flip the Y axis of this picture (same as main SKPicture)
-            var transformMatrix = SKMatrix.CreateScale(1, -1, 0, (float)pattern.BBox.Height / 2f)
-                .PostConcat(_yAxisFlipMatrix);
+            // We cancel CTM, but not canvas' Y flip, as we still need it.
+            // We are drawing a SKPicture, we need to flip the Y axis of this picture.
+            var transformMatrix = CurrentTransformationMatrix.ToSkMatrix().Invert()
+                .PreConcat(_currentStreamOriginalTransforms.Peek())
+                .PreConcat(SKMatrix.CreateScale(1, -1, 0, (float)pattern.BBox.Height / 2f));
 
             using (var picture = processor.Process(PageNumber, operations))
-            using (var shader = SKShader.CreatePicture(picture, SKShaderTileMode.Repeat, SKShaderTileMode.Repeat, transformMatrix, rect))
+            using (var shader = SKShader.CreatePicture(picture, SKShaderTileMode.Repeat, SKShaderTileMode.Repeat, SKFilterMode.Linear, transformMatrix, rect))
             using (var paint = new SKPaint())
             {
                 paint.IsAntialias = _antiAliasing;

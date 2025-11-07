@@ -59,33 +59,31 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
 
                     ParsingOptions.Logger.Debug($"RenderGlyph: VectorFontGlyph path is empty for '{unicode}' ({font.Details}), falling back to NonVectorFontGlyph.");
-                    ShowNonVectorFontGlyph(font, strokingColor, nonStrokingColor, textRenderingMode, pointSize, unicode,
-                        in renderingMatrix, in textMatrix, in transformationMatrix, characterBoundingBox);
+                    ShowNonVectorFontGlyph(font, strokingColor, nonStrokingColor, textRenderingMode, fontSize, unicode,
+                        in renderingMatrix, in textMatrix, characterBoundingBox);
                 }
                 else
                 {
                     ShowVectorFontGlyph(path, strokingColor, nonStrokingColor, textRenderingMode, in renderingMatrix,
-                        in textMatrix, in transformationMatrix);
+                        in textMatrix);
                 }
             }
             else
             {
-                ShowNonVectorFontGlyph(font, strokingColor, nonStrokingColor, textRenderingMode, pointSize, unicode,
-                    in renderingMatrix, in textMatrix, in transformationMatrix, characterBoundingBox);
+                ShowNonVectorFontGlyph(font, strokingColor, nonStrokingColor, textRenderingMode, fontSize, unicode,
+                    in renderingMatrix, in textMatrix, characterBoundingBox);
             }
         }
 
         private void ShowVectorFontGlyph(SKPath path, IColor strokingColor, IColor nonStrokingColor,
             TextRenderingMode textRenderingMode, in TransformationMatrix renderingMatrix,
-            in TransformationMatrix textMatrix, in TransformationMatrix transformationMatrix)
+            in TransformationMatrix textMatrix)
         {
             bool stroke = textRenderingMode.IsStroke();
             bool fill = textRenderingMode.IsFill();
 
             var transformMatrix = renderingMatrix.ToSkMatrix()
-                .PostConcat(textMatrix.ToSkMatrix())
-                .PostConcat(transformationMatrix.ToSkMatrix())
-                .PostConcat(_yAxisFlipMatrix); // Inverse direction of y-axis
+                .PostConcat(textMatrix.ToSkMatrix());
 
             var currentState = GetCurrentState();
 
@@ -146,8 +144,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         private void ShowNonVectorFontGlyph(IFont font, IColor strokingColor, IColor nonStrokingColor,
             TextRenderingMode textRenderingMode,
-            double pointSize, string unicode, in TransformationMatrix renderingMatrix,
-            in TransformationMatrix textMatrix, in TransformationMatrix transformationMatrix,
+            double fontSize, string unicode, in TransformationMatrix renderingMatrix,
+            in TransformationMatrix textMatrix,
             CharacterBoundingBox characterBoundingBox)
         {
             if (!CanRender(unicode))
@@ -169,27 +167,21 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            var transformedPdfBounds = PerformantRectangleTransformer
-                .Transform(renderingMatrix, textMatrix, transformationMatrix,
-                    new PdfRectangle(0, 0, characterBoundingBox.Width, UserSpaceUnit.PointMultiples));
+            using var s = new SKAutoCanvasRestore(_canvas, true);
+            _canvas.Concat(textMatrix.ToSkMatrix());
+            _canvas.Concat(renderingMatrix.ToSkMatrix());
+            _canvas.Scale(1, -1, 0, 0);
 
-            var startBaseLine = transformedPdfBounds.BottomLeft.ToSKPoint(_height);
+            var glyphBounds = new PdfRectangle(0, 0, characterBoundingBox.Width, UserSpaceUnit.PointMultiples);
 
-            if (transformedPdfBounds.Rotation != 0)
-            {
-                _canvas.RotateDegrees((float)-transformedPdfBounds.Rotation, startBaseLine.X, startBaseLine.Y);
-            }
-
-            if (_canvas.QuickReject(transformedPdfBounds.ToSKRect(_height)))
+            if (_canvas.QuickReject(glyphBounds.ToSKRect()))
             {
                 return;
             }
 
             var color = style == SKPaintStyle.Stroke ? strokingColor : nonStrokingColor; // TODO - very not correct
 
-            float skew = ComputeSkewX(transformedPdfBounds);
-
-            using (var skFont = drawTypeface.Typeface.ToFont((float)pointSize, 1f, -skew))
+            using (var skFont = drawTypeface.Typeface.ToFont(1f))
             using (var paint = new SKPaint())
             {
                 paint.Style = style.Value;
@@ -198,8 +190,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 // TODO - Benchmark with SPARC - v9 Architecture Manual.pdf
                 // as _canvas.DrawShapedText(unicode, startBaseLine, fontPaint); as very slow without 'Shaper' caching
-                _canvas.DrawShapedText(drawTypeface.Shaper, unicode, startBaseLine, SKTextAlign.Left, skFont, paint);
-                _canvas.ResetMatrix();
+                _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, paint);
             }
         }
 

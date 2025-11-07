@@ -78,7 +78,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             
             if (stroke)
             {
-                float scalingFactor = matrix.Value.GetScalingFactor();
+                float scalingFactor = 1.0f;
                 
                 // Careful - we assume they all have values if stroke!
                 paint.StrokeWidth = strokeWidth.Value * scalingFactor;
