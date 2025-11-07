@@ -50,7 +50,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private readonly SkiaFontCache _fontCache;
         private readonly SKPaintCache _paintCache = new SKPaintCache(_antiAliasing, _minimumLineWidth);
 
-        private readonly AnnotationProvider _annotationProvider;
+        // Stack to keep track of original transforms for nested form XObjects
+        private readonly Stack<SKMatrix> _currentStreamOriginalTransforms = new Stack<SKMatrix>();
 
         public SkiaStreamProcessor(
             int pageNumber,
@@ -63,7 +64,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             PageRotationDegrees rotation,
             TransformationMatrix initialMatrix,
             ParsingOptions parsingOptions,
-            AnnotationProvider annotationProvider,
+            AnnotationProvider? annotationProvider,
             SkiaFontCache fontCache)
             : base(pageNumber,
                 resourceStore,
@@ -76,14 +77,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 initialMatrix,
                 parsingOptions)
         {
-            _annotationProvider = annotationProvider;
-
-            _annotations = new Lazy<Annotation[]>(() => _annotationProvider.GetAnnotations().ToArray());
+            _renderAnnotations = annotationProvider is not null;
+            _annotations = new Lazy<Annotation[]>(() => annotationProvider?.GetAnnotations().ToArray() ?? []);
 
             _fontCache = fontCache;
 
             _width = (float)cropBox.Bounds.Width;
             _height = (float)cropBox.Bounds.Height;
+
+            _currentStreamOriginalTransforms.Push(initialMatrix.ToSkMatrix());
 
             _yAxisFlipMatrix = SKMatrix.CreateScale(1, -1, 0, _height / 2f);
         }
@@ -99,6 +101,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 using (var recorder = new SKPictureRecorder())
                 using (_canvas = recorder.BeginRecording(SKRect.Create(_width, _height)))
                 {
+                    _canvas.SetMatrix(_yAxisFlipMatrix);
+                    _canvas.Concat(CurrentTransformationMatrix.ToSkMatrix());
+
                     if (_renderAnnotations)
                     {
                         DrawAnnotations(true);
@@ -130,12 +135,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             base.PopState();
             _canvas.Restore();
+            EndPath();
         }
 
         public override void PushState()
         {
             base.PushState();
             _canvas.Save();
+            EndPath();
         }
 
         public override void ModifyClippingIntersect(FillingRule clippingRule)
@@ -152,7 +159,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         protected override void ClipToRectangle(PdfRectangle rectangle, FillingRule clippingRule)
         {
             //_canvas.DrawRect(rectangle.ToSKRect(_height), _paintCache.GetImageDebug());
-            _canvas.ClipRect(rectangle.ToSKRect(_height), SKClipOperation.Intersect);
+            _canvas.ClipRect(rectangle.ToSKRect(), SKClipOperation.Intersect);
         }
 
         /// <inheritdoc/>
@@ -166,5 +173,34 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             // No op
         }
+
+        public override void ModifyCurrentTransformationMatrix(TransformationMatrix value)
+        {
+            base.ModifyCurrentTransformationMatrix(value);
+
+            _canvas.Concat(value.ToSkMatrix());
+
+            if (_updateCurrentStreamOriginalTransform)
+            {
+                // Update the original transform for form XObject
+                _currentStreamOriginalTransforms.Push(CurrentTransformationMatrix.ToSkMatrix());
+
+                _updateCurrentStreamOriginalTransform = false;
+            }
+        }
+
+        // Note that recursive calls are possible here for nested form XObjects
+        protected override void ProcessFormXObject(StreamToken formStream, NameToken xObjectName)
+        {
+            // Indicate that we want to update the original transform for form XObject
+            _updateCurrentStreamOriginalTransform = true;
+
+            base.ProcessFormXObject(formStream, xObjectName);
+
+            // Restore previous original transform
+            _currentStreamOriginalTransforms.Pop();
+        }
+
+        private bool _updateCurrentStreamOriginalTransform;
     }
 }

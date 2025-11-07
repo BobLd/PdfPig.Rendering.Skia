@@ -131,8 +131,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         (float)(rect.Height / transformedBox.Height));
                     a = a.Translate(-transformedBox.TopLeft.X, -transformedBox.TopLeft.Y);
 
-                    var currentState = GetCurrentState();
-                    currentState.CurrentTransformationMatrix = a.Multiply(currentState.CurrentTransformationMatrix);
+                    ModifyCurrentTransformationMatrix(a);
 
                     try
                     {

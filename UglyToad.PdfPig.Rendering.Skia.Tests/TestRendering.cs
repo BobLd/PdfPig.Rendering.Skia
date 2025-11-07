@@ -304,6 +304,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             },
             new object[]
             {
+                "Apitron.PDF.Kit.Samples_patternFill-rotated_1.png",
+                "Apitron.PDF.Kit.Samples_patternFill-rotated.pdf", 1, 2
+            },
+            new object[]
+            {
                 "cat-genetics_bobld_1.png",
                 "cat-genetics_bobld.pdf", 1, 2
             },
@@ -426,6 +431,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             },
             new object[]
             {
+                "PDFBOX-1869-4-rotated_1.png",
+                "PDFBOX-1869-4-rotated.pdf", 1, 2
+            },
+            new object[]
+            {
                 "Grapheme clusters emoji_1.png",
                 "Grapheme clusters emoji.pdf", 1, 2
             },
@@ -488,6 +498,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             {
                 "GHOSTSCRIPT-686821-0_1.png",
                 "GHOSTSCRIPT-686821-0.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-698721-1-rotated_1.png",
+                "GHOSTSCRIPT-698721-1-rotated.pdf", 1, 2
             },
         };
 
