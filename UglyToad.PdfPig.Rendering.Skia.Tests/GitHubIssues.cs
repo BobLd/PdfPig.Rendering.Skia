@@ -38,7 +38,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 for (int p = 1; p <= document.NumberOfPages; ++p)
                 {
                     using (var fs = new FileStream(Path.Combine(_outputPath, $"Shadows.at.Sundown.-.Lvl.11_removed_{p}.png"), FileMode.Create))
-                    using (var ms = document.GetPageAsPng(p, _scale, RGBColor.White))
+                    using (var ms = document.GetPageAsPng(p, _scale))
                     {
                         ms.WriteTo(fs);
                     }
@@ -56,7 +56,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 for (int p = 1; p <= document.NumberOfPages; ++p)
                 {
                     using (var fs = new FileStream(Path.Combine(_outputPath, $"Go_{p}.png"), FileMode.Create))
-                    using (var ms = document.GetPageAsPng(p, _scale, RGBColor.White))
+                    using (var ms = document.GetPageAsPng(p, _scale))
                     {
                         ms.WriteTo(fs);
                     }
@@ -79,7 +79,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                     }
                     
                     using (var fs = new FileStream(Path.Combine(_outputPath, $"new_{p}.png"), FileMode.Create))
-                    using (var ms = document.GetPageAsPng(p, _scale, RGBColor.White))
+                    using (var ms = document.GetPageAsPng(p, _scale))
                     {
                         ms.WriteTo(fs);
                     }

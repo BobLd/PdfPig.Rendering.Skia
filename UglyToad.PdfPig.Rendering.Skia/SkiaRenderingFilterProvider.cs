@@ -29,7 +29,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <summary>
         /// The single instance of this provider.
         /// </summary>
-        public static readonly SkiaRenderingFilterProvider Instance = new SkiaRenderingFilterProvider();
+        public static readonly SkiaRenderingFilterProvider Instance = new();
 
         /// <inheritdoc/>
         private SkiaRenderingFilterProvider() : base(GetDictionary())

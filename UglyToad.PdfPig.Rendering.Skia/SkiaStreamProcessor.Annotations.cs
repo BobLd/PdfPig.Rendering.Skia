@@ -127,8 +127,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     PdfRectangle transformedBox = matrix.Transform(bbox.Value).Normalise();
 
                     var a = TransformationMatrix.GetTranslationMatrix(rect.TopLeft.X, rect.TopLeft.Y);
-                    a = Scale(a, (float)(rect.Width / transformedBox.Width),
-                        (float)(rect.Height / transformedBox.Height));
+                    a = Scale(a, (float)(rect.Width / transformedBox.Width), (float)(rect.Height / transformedBox.Height));
                     a = a.Translate(-transformedBox.TopLeft.X, -transformedBox.TopLeft.Y);
 
                     ModifyCurrentTransformationMatrix(a);

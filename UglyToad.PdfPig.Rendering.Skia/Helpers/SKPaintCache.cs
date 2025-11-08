@@ -60,7 +60,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         }
 
         public SKPaint GetPaint(IColor color, double alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,
-            LineCapStyle? capStyle, LineDashPattern? dashPattern, TransformationMatrix? matrix)
+            LineCapStyle? capStyle, LineDashPattern? dashPattern)
         {
             var key = GetPaintKey(color, alpha, stroke, strokeWidth, joinStyle, capStyle, dashPattern);
 
@@ -78,13 +78,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             
             if (stroke)
             {
-                float scalingFactor = 1.0f;
-                
                 // Careful - we assume they all have values if stroke!
-                paint.StrokeWidth = strokeWidth.Value * scalingFactor;
+                paint.StrokeWidth = strokeWidth.Value;
                 paint.StrokeJoin = joinStyle.Value.ToSKStrokeJoin();
                 paint.StrokeCap = capStyle.Value.ToSKStrokeCap();
-                paint.PathEffect = dashPattern.Value.ToSKPathEffect(scalingFactor);
+                paint.PathEffect = dashPattern.Value.ToSKPathEffect();
             }
 
             _cache[key] = paint;

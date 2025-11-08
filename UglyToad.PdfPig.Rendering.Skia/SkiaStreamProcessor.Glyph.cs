@@ -48,9 +48,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var strokingColor = currentState.CurrentStrokingColor;
             var nonStrokingColor = currentState.CurrentNonStrokingColor;
 
-            if (_fontCache.TryGetPath(font, code, out SKPath path))
+            if (_fontCache.TryGetPath(font, code, out SKPath? path))
             {
-                if (path.IsEmpty)
+                if (path!.IsEmpty)
                 {
                     // If null or whitespace, ignore
                     if (string.IsNullOrWhiteSpace(unicode))
@@ -107,7 +107,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         // - GHOSTSCRIPT-698721-0.zip-6
                         // - GHOSTSCRIPT-698721-1_1
 
-                        if (!(nonStrokingColor is PatternColor pattern))
+                        if (nonStrokingColor is not PatternColor pattern)
                         {
                             throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got {nonStrokingColor.GetType()}");
                         }
@@ -126,7 +126,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     else
                     {
                         var fillBrush = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
-                            null, null, null, null, null);
+                            null, null, null, null);
                         _canvas.DrawPath(transformedPath, fillBrush);
                     }
                 }
@@ -136,7 +136,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     // Then stroke
                     var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
                         (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
-                        currentState.LineDashPattern, currentState.CurrentTransformationMatrix);
+                        currentState.LineDashPattern);
                     _canvas.DrawPath(transformedPath, strokePaint);
                 }
             }

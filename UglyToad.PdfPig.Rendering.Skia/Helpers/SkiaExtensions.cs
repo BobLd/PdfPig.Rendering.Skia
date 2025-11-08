@@ -116,7 +116,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             };
         }
 
-        public static SKPathEffect? ToSKPathEffect(this LineDashPattern lineDashPattern, float scale)
+        public static SKPathEffect? ToSKPathEffect(this LineDashPattern lineDashPattern, float scale = 1.0f)
         {
             //const float oneOver72 = (float)(1.0 / 72.0);
 
@@ -277,7 +277,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 0, 0, 1);
         }
 
-        private static bool doBlending = false;
+        private static readonly bool doBlending = false;
 
         public static SKBlendMode ToSKBlendMode(this BlendMode blendMode)
         {

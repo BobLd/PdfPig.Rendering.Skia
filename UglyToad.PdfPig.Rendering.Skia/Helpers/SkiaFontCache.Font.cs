@@ -27,16 +27,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
     internal sealed partial class SkiaFontCache : IDisposable
     {
-        private readonly Lazy<SkiaFontCacheItem> DefaultSkiaFontCacheItem =
-            new Lazy<SkiaFontCacheItem>(() => new SkiaFontCacheItem(SKTypeface.Default)); // Do not make static
+        private readonly Lazy<SkiaFontCacheItem> DefaultSkiaFontCacheItem = new(() => new SkiaFontCacheItem(SKTypeface.Default)); // Do not make static
 
-        private readonly ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath>>> _cache =
-            new ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath>>>();
+        private readonly ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath?>>> _cache = new();
 
-        private readonly ConcurrentDictionary<string, List<SkiaFontCacheItem>> _typefaces =
-            new ConcurrentDictionary<string, List<SkiaFontCacheItem>>();
+        private readonly ConcurrentDictionary<string, List<SkiaFontCacheItem>> _typefaces = new();
 
-        private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+        private readonly ReaderWriterLockSlim _lock = new();
 
         private readonly SKFontManager _skFontManager = SKFontManager.CreateDefault();
         
@@ -186,7 +183,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 throw new NullReferenceException("The font's name is null.");
             }
 
-            return $"{font.Name.Data}|{(font.Details.IsBold ? (byte)1 : (byte)0)}|{(font.Details.IsItalic ? (byte)1 : (byte)0)}";
+            return $"{font.Name!.Data}|{(font.Details.IsBold ? (byte)1 : (byte)0)}|{(font.Details.IsItalic ? (byte)1 : (byte)0)}";
         }
 
         private static int GetCodepoint(string unicode)
@@ -216,29 +213,33 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 _skFontManager.Dispose();
 
-                foreach (var key in _cache.Keys)
+                foreach (IFont? key in _cache.Keys)
                 {
-                    if (_cache.TryRemove(key, out var fontCache))
+                    if (!_cache.TryRemove(key, out var fontCache))
                     {
-                        foreach (var value in fontCache.Values)
-                        {
-                            value?.Value?.Dispose();
-                        }
-
-                        fontCache.Clear();
+                        continue;
                     }
+
+                    foreach (var value in fontCache.Values)
+                    {
+                        value?.Value?.Dispose();
+                    }
+
+                    fontCache.Clear();
                 }
 
                 _cache.Clear();
 
                 foreach (string key in _typefaces.Keys)
                 {
-                    if (_typefaces.TryRemove(key, out var typeface))
+                    if (!_typefaces.TryRemove(key, out var typeface))
                     {
-                        foreach (SkiaFontCacheItem item in typeface)
-                        {
-                            item.Dispose();
-                        }
+                        continue;
+                    }
+
+                    foreach (SkiaFontCacheItem item in typeface)
+                    {
+                        item.Dispose();
                     }
                 }
 

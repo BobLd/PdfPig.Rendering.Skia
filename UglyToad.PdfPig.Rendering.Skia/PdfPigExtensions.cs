@@ -62,9 +62,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <param name="document">The pdf document.</param>
         /// <param name="pageNumber">The number of the page to return, this starts from 1.</param>
         /// <param name="scale">The scale factor to use when rendering the page.</param>
-        /// <param name="background">The page background color to use when rendering the page. Pdf page have no default color so the background is transparent.</param>
         /// <returns>The <see cref="SKBitmap"/>.</returns>
-        public static SKBitmap GetPageAsSKBitmap(this PdfDocument document, int pageNumber, float scale = 1, IColor background = null)
+        public static SKBitmap GetPageAsSKBitmap(this PdfDocument document, int pageNumber, float scale = 1)
         {
             using (var picture = document.GetPage<SKPicture>(pageNumber))
             {
@@ -74,11 +73,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 var bitmap = new SKBitmap(size.Width, size.Height);
                 using (var canvas = new SKCanvas(bitmap))
                 {
-                    if (background is not null)
-                    {
-                        canvas.Clear(background.ToSKColor(1.0));
-                    }
-
                     canvas.DrawPicture(picture, in scaleMatrix);
                     return bitmap;
                 }
@@ -94,10 +88,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <param name="background">The page background color to use when rendering the page. Pdf page have no default color so the background is transparent.</param>
         /// <param name="quality">The Png quality.</param>
         /// <returns>The Png stream.</returns>
-        public static MemoryStream GetPageAsPng(this PdfDocument document, int pageNumber, float scale = 1, IColor background = null, int quality = 100)
+        public static MemoryStream GetPageAsPng(this PdfDocument document, int pageNumber, float scale = 1, int quality = 100)
         {
             var ms = new MemoryStream();
-            using (var bitmap = document.GetPageAsSKBitmap(pageNumber, scale, background))
+            using (var bitmap = document.GetPageAsSKBitmap(pageNumber, scale))
             {
                 bitmap.Encode(ms, SKEncodedImageFormat.Png, quality);
                 return ms;

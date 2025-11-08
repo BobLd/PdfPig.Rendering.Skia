@@ -52,7 +52,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 int p = 2;
 
                 using (var fs = new FileStream(Path.Combine(_outputPath, $"2108.11480_{p}.png"), FileMode.Create))
-                using (var ms = document.GetPageAsPng(p, _scale, RGBColor.White))
+                using (var ms = document.GetPageAsPng(p, _scale))
                 {
                     ms.WriteTo(fs);
                 }
@@ -69,7 +69,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 int p = 1;
 
                 using (var fs = new FileStream(Path.Combine(_outputPath, $"GHOSTSCRIPT-693073-1_{p}.png"), FileMode.Create))
-                using (var ms = document.GetPageAsPng(p, _scale, RGBColor.White))
+                using (var ms = document.GetPageAsPng(p, _scale))
                 {
                     ms.WriteTo(fs);
                 }
@@ -89,7 +89,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 for (int p = 1; p <= document.NumberOfPages; p++)
                 {
                     using (var fs = new FileStream(Path.Combine(_outputPath, $"{rootName}_{p}.png"), FileMode.Create))
-                    using (var ms = document.GetPageAsPng(p, _scale, RGBColor.White))
+                    using (var ms = document.GetPageAsPng(p, _scale))
                     {
                         ms.WriteTo(fs);
                     }

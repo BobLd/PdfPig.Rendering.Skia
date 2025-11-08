@@ -32,26 +32,22 @@ namespace UglyToad.PdfPig.Rendering.Skia
 {
     internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
     {
-        private readonly bool _renderAnnotations = true; // TODO - param
+        private const float _minimumLineWidth = 0.25f;
         private const bool _antiAliasing = true;
 
+        private readonly bool _renderAnnotations;
         private readonly float _height;
         private readonly float _width;
-
-        private SKCanvas _canvas;
-
-        private const float _minimumLineWidth = 0.25f;
-
-        /// <summary>
-        /// Inverse direction of y-axis
-        /// </summary>
-        private readonly SKMatrix _yAxisFlipMatrix;
 
         private readonly SkiaFontCache _fontCache;
         private readonly SKPaintCache _paintCache = new SKPaintCache(_antiAliasing, _minimumLineWidth);
 
         // Stack to keep track of original transforms for nested form XObjects
-        private readonly Stack<SKMatrix> _currentStreamOriginalTransforms = new Stack<SKMatrix>();
+        private readonly Stack<SKMatrix> _currentStreamOriginalTransforms = new();
+
+        private SKCanvas _canvas;
+
+        private bool _updateCurrentStreamOriginalTransform;
 
         public SkiaStreamProcessor(
             int pageNumber,
@@ -86,8 +82,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             _height = (float)cropBox.Bounds.Height;
 
             _currentStreamOriginalTransforms.Push(initialMatrix.ToSkMatrix());
-
-            _yAxisFlipMatrix = SKMatrix.CreateScale(1, -1, 0, _height / 2f);
         }
 
         public override SKPicture Process(int pageNumberCurrent, IReadOnlyList<IGraphicsStateOperation> operations)
@@ -99,10 +93,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 CloneAllStates();
 
                 using (var recorder = new SKPictureRecorder())
-                using (_canvas = recorder.BeginRecording(SKRect.Create(_width, _height)))
+                using (_canvas = recorder.BeginRecording(SKRect.Create(_width, _height), true))
                 {
-                    _canvas.SetMatrix(_yAxisFlipMatrix);
+                    // Inverse direction of y-axis
+                    _canvas.SetMatrix(SKMatrix.CreateScale(1, -1, 0, _height / 2f));
                     _canvas.Concat(CurrentTransformationMatrix.ToSkMatrix());
+
+                    _canvas.Clear(SKColors.White);
 
                     if (_renderAnnotations)
                     {
@@ -200,7 +197,5 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // Restore previous original transform
             _currentStreamOriginalTransforms.Pop();
         }
-
-        private bool _updateCurrentStreamOriginalTransform;
     }
 }

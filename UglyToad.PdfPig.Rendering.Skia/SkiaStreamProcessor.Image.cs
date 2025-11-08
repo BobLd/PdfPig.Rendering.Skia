@@ -34,21 +34,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             RenderImage(inlineImage);
         }
 
-        private static double FoldAngleTo90(double angleInDegrees)
-        {
-            if (angleInDegrees > 90)
-            {
-                return 180 - angleInDegrees;
-            }
-
-            if (angleInDegrees < -90)
-            {
-                return -180 - angleInDegrees;
-            }
-
-            return angleInDegrees;
-        }
-
         private void RenderImage(IPdfImage image)
         {
             if (image.WidthInSamples == 0 || image.HeightInSamples == 0)

@@ -27,10 +27,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         public override void BeginSubpath()
         {
-            if (_currentPath is null)
-            {
-                _currentPath = new SKPath();
-            }
+            _currentPath ??= new SKPath();
         }
 
         public override PdfPoint? CloseSubpath()
@@ -143,7 +140,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             if (currentState.CurrentStrokingColor?.ColorSpace == ColorSpace.Pattern)
             {
-                if (!(currentState.CurrentStrokingColor is PatternColor pattern))
+                if (currentState.CurrentStrokingColor is not PatternColor pattern)
                 {
                     throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got {currentState.CurrentStrokingColor.GetType()}");
                 }
@@ -163,7 +160,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 var paint = _paintCache.GetPaint(currentState.CurrentStrokingColor, currentState.AlphaConstantStroking, true,
                     (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
-                    currentState.LineDashPattern, currentState.CurrentTransformationMatrix);
+                    currentState.LineDashPattern);
                 _canvas.DrawPath(_currentPath, paint);
             }
         }
@@ -199,7 +196,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             if (currentState.CurrentNonStrokingColor?.ColorSpace == ColorSpace.Pattern)
             {
-                if (!(currentState.CurrentNonStrokingColor is PatternColor pattern))
+                if (currentState.CurrentNonStrokingColor is not PatternColor pattern)
                 {
                     throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got {currentState.CurrentStrokingColor.GetType()}");
                 }
@@ -218,7 +215,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             else
             {
                 var paint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
-                    currentState.AlphaConstantNonStroking, false, null, null, null, null, null);
+                    currentState.AlphaConstantNonStroking, false, null, null, null, null);
                 _canvas.DrawPath(_currentPath, paint);
 
                 /* No cache method
