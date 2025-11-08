@@ -16,7 +16,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 {
     public static class SkiaRenderingParsingOptions
     {
-        public static readonly ParsingOptions Instance = new ParsingOptions()
+        public static readonly ParsingOptions Instance = new()
         {
             UseLenientParsing = true,
             SkipMissingFonts = true,

@@ -77,10 +77,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                             continue;
                         }
 
-                        if (bim3 is null)
-                        {
-                            bim3 = createEmptyDiffImage(minWidth, minHeight, maxWidth, maxHeight);
-                        }
+                        bim3 ??= createEmptyDiffImage(minWidth, minHeight, maxWidth, maxHeight);
 
                         bim3.SetPixel(x, y, new SKColor(Math.Min((byte)125, rDiff), Math.Min((byte)125, gDiff), Math.Min((byte)125, bDiff)));
                     }
@@ -106,7 +103,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             return leftSpan.Length == rightSpan.Length && leftSpan.SequenceEqual(rightSpan);
         }
 
-        private static string _errorFolder = "ErrorImages";
+        private static readonly string _errorFolder = "ErrorImages";
 
         public static bool TestResizeSinglePage(string pdfFile, int pageNumber, string expectedFile, int scale = 1)
         {
@@ -125,7 +122,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 using (var document = PdfDocument.Open(docPath, SkiaRenderingParsingOptions.Instance))
                 {
                     document.AddSkiaPageFactory();
-                    using (var actual = document.GetPageAsSKBitmap(pageNumber, scale, RGBColor.White))
+                    using (var actual = document.GetPageAsSKBitmap(pageNumber, scale))
                     {
                         var skInfo = new SKImageInfo()
                         {
@@ -193,7 +190,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 using (var document = PdfDocument.Open(docPath, SkiaRenderingParsingOptions.Instance))
                 {
                     document.AddSkiaPageFactory();
-                    using (var actual = document.GetPageAsSKBitmap(pageNumber, scale, RGBColor.White))
+                    using (var actual = document.GetPageAsSKBitmap(pageNumber, scale))
                     {
                         if (filesAreIdentical(expected, actual))
                         {

@@ -38,15 +38,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
             switch (shading.ShadingType)
             {
                 case ShadingType.Axial:
-                    RenderAxialShading(shading as AxialShading, SKMatrix.Identity, minX, minY, maxX, maxY);
+                    RenderAxialShading(shading as AxialShading, in SKMatrix.Identity, minX, minY, maxX, maxY);
                     break;
 
                 case ShadingType.Radial:
-                    RenderRadialShading(shading as RadialShading, SKMatrix.Identity, minX, minY, maxX, maxY);
+                    RenderRadialShading(shading as RadialShading, in SKMatrix.Identity, minX, minY, maxX, maxY);
                     break;
 
                 case ShadingType.FunctionBased:
-                    RenderFunctionBasedShading(shading as FunctionBasedShading, SKMatrix.Identity, minX, minY, maxX, maxY);
+                    RenderFunctionBasedShading(shading as FunctionBasedShading, in SKMatrix.Identity, minX, minY, maxX, maxY);
                     break;
 
                 case ShadingType.FreeFormGouraud:
@@ -54,7 +54,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 case ShadingType.CoonsPatch:
                 case ShadingType.TensorProductPatch:
                 default:
-                    RenderUnsupportedShading(shading, SKMatrix.Identity);
+                    RenderUnsupportedShading(shading, in SKMatrix.Identity);
                     break;
             }
         }
@@ -159,14 +159,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 if (isStroke)
                 {
-                    float scalingFactor = 1.0f;
-
                     // TODO - To finish
                     paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = (float)currentState.LineWidth * scalingFactor; // A guess
+                    paint.StrokeWidth = (float)currentState.LineWidth;
                     paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
                     paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    paint.PathEffect = currentState.LineDashPattern.ToSKPathEffect(scalingFactor);
+                    paint.PathEffect = currentState.LineDashPattern.ToSKPathEffect();
                 }
 
                 if (path is null)
@@ -234,14 +232,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 SKPathEffect? dash = null;
                 if (isStroke)
                 {
-                    float scalingFactor = 1.0f;
-
-                    // TODO - To Check
                     paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = (float)currentState.LineWidth * scalingFactor; // A guess
+                    paint.StrokeWidth = (float)currentState.LineWidth;
                     paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
                     paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    dash = currentState.LineDashPattern.ToSKPathEffect(scalingFactor);
+                    dash = currentState.LineDashPattern.ToSKPathEffect();
                     paint.PathEffect = dash;
                 }
 
@@ -365,16 +360,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 SKPathEffect? dash = null;
                 if (isStroke)
                 {
-                    float scalingFactor = 1.0f;
-
                     var currentState = GetCurrentState();
 
                     // TODO - To Check
                     paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = (float)currentState.LineWidth * scalingFactor; // A guess
+                    paint.StrokeWidth = (float)currentState.LineWidth;
                     paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
                     paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    paint.PathEffect = currentState.LineDashPattern.ToSKPathEffect(scalingFactor);
+                    paint.PathEffect = currentState.LineDashPattern.ToSKPathEffect();
                 }
 
                 if (path is null)
@@ -415,15 +408,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
             switch (pattern.Shading.ShadingType)
             {
                 case ShadingType.Axial:
-                    RenderAxialShading(pattern.Shading as AxialShading, patternTransform, minX, minY, maxX, maxY, isStroke, path);
+                    RenderAxialShading(pattern.Shading as AxialShading, in patternTransform, minX, minY, maxX, maxY, isStroke, path);
                     break;
 
                 case ShadingType.Radial:
-                    RenderRadialShading(pattern.Shading as RadialShading, patternTransform, minX, minY, maxX, maxY, isStroke, path);
+                    RenderRadialShading(pattern.Shading as RadialShading, in patternTransform, minX, minY, maxX, maxY, isStroke, path);
                     break;
 
                 case ShadingType.FunctionBased:
-                    RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, patternTransform, minX, minY, maxX, maxY, isStroke, path);
+                    RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, in patternTransform, minX, minY, maxX, maxY, isStroke, path);
                     break;
 
                 case ShadingType.FreeFormGouraud:
@@ -431,7 +424,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 case ShadingType.CoonsPatch:
                 case ShadingType.TensorProductPatch:
                 default:
-                    RenderUnsupportedShading(pattern.Shading, patternTransform);
+                    RenderUnsupportedShading(pattern.Shading, in patternTransform);
                     break;
             }
         }
