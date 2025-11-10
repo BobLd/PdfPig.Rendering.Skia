@@ -22,12 +22,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
     {
         public SkiaFontCacheItem(SKTypeface typeface)
         {
-            if (typeface is null)
-            {
-                throw new ArgumentNullException(nameof(typeface));
-            }
-
-            Typeface = typeface;
+            Typeface = typeface ?? throw new ArgumentNullException(nameof(typeface));
             Shaper = new SKShaper(Typeface);
         }
 

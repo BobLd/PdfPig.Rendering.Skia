@@ -974,8 +974,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             using (var ms = new MemoryStream())
             {
-                double lineWidth = ab.BorderWidth;
-
                 // TODO - handle no background color filling required, see `SetAppearanceContent(Annotation widget, StreamToken appearanceStream)`
                 var (r, g, b) = DefaultFieldsHighlightColor.ToRGBValues();
                 GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);

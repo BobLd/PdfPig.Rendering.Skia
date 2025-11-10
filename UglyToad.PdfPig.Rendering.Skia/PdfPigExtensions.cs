@@ -16,8 +16,6 @@ using System;
 using System.IO;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
-using UglyToad.PdfPig.Graphics.Colors;
-using UglyToad.PdfPig.Rendering.Skia.Helpers;
 using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia
@@ -27,27 +25,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
     /// </summary>
     public static class PdfPigExtensions
     {
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="matrix"></param>
-        /// <returns></returns>
-        public static float GetScalingFactor(this TransformationMatrix matrix)
-        {
-            double sx = matrix.A;
-            double sky = matrix.B;
-            double skx = matrix.C;
-            double sy = matrix.D;
-
-            double scalingFactor = Math.Sqrt(Math.Sqrt(sx * sx + sky * sky) * Math.Sqrt(skx * skx + sy * sy));
-            if (Math.Abs(scalingFactor) < double.Epsilon)
-            {
-                return 1f;
-            }
-
-            return (float)scalingFactor;
-        }
-
         /// <summary>
         /// Add the Skia page factory.
         /// </summary>

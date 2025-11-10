@@ -16,7 +16,6 @@ using System;
 using System.Collections.Generic;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
-using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Graphics.Core;
 
@@ -26,7 +25,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
     {
         private readonly bool _isAntialias;
 
-        private readonly Dictionary<int, SKPaint> _cache = new Dictionary<int, SKPaint>();
+        private readonly Dictionary<int, SKPaint> _cache = new();
 
         private readonly SKPaint _antialiasingPaint;
         private readonly SKPaint _noAntialiasingPaint;
