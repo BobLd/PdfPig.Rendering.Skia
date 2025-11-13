@@ -361,4 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
 /UglyToad.PdfPig.Rendering.Skia.Tests/Documents/stencil issue
+TemplateEngineHost/
