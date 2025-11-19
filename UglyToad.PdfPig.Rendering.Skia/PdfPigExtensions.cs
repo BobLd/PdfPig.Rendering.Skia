@@ -62,7 +62,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <param name="document">The pdf document.</param>
         /// <param name="pageNumber">The number of the page to return, this starts from 1.</param>
         /// <param name="scale">The scale factor to use when rendering the page.</param>
-        /// <param name="background">The page background color to use when rendering the page. Pdf page have no default color so the background is transparent.</param>
         /// <param name="quality">The Png quality.</param>
         /// <returns>The Png stream.</returns>
         public static MemoryStream GetPageAsPng(this PdfDocument document, int pageNumber, float scale = 1, int quality = 100)
@@ -71,6 +70,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             using (var bitmap = document.GetPageAsSKBitmap(pageNumber, scale))
             {
                 bitmap.Encode(ms, SKEncodedImageFormat.Png, quality);
+                ms.Position = 0;
                 return ms;
             }
         }
