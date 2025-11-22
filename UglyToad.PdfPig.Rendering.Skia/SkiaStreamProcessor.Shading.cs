@@ -275,111 +275,104 @@ namespace UglyToad.PdfPig.Rendering.Skia
             int w = (int)(x1 - x0);
             int h = (int)(y1 - y0);
 
-            byte[] raster = new byte[w * h * 4];
-            double[] values = new double[2]; // TODO - stackalloc
-            
-            for (int j = 0; j < h; j++)
+            using (SKBitmap shaderBitmap = new SKBitmap(w, h, SKColorType.Rgba8888, SKAlphaType.Premul))
             {
-                for (int i = 0; i < w; i++)
+                var raster = shaderBitmap.GetPixelSpan();
+
+                double[] values = new double[2]; // TODO - stackalloc
+
+                for (int j = 0; j < h; j++)
                 {
-                    int index = (j * w + i) * 4;
-                    bool useBackground = false;
-                    values[0] = x0 + i;
-                    values[1] = y0 + j;
-                    //rat.transform(values, 0, values, 0, 1);
-                    if (values[0] < domain[0] || values[0] > domain[1] ||
-                        values[1] < domain[2] || values[1] > domain[3])
+                    for (int i = 0; i < w; i++)
                     {
-                        if (shading.Background is null)
+                        int index = (j * w + i) * 4;
+                        bool useBackground = false;
+                        values[0] = x0 + i;
+                        values[1] = y0 + j;
+                        //rat.transform(values, 0, values, 0, 1);
+                        if (values[0] < domain[0] || values[0] > domain[1] ||
+                            values[1] < domain[2] || values[1] > domain[3])
                         {
-                            continue;
+                            if (shading.Background is null)
+                            {
+                                continue;
+                            }
+                            useBackground = true;
                         }
-                        useBackground = true;
+
+                        // evaluate function
+                        double[] tmpValues; // "values" can't be reused due to different length
+                        if (useBackground && shading.Background is not null)
+                        {
+                            tmpValues = shading.Background;
+                        }
+                        else
+                        {
+                            try
+                            {
+                                tmpValues = shading.Eval(values);
+                            }
+                            catch (IOException e)
+                            {
+                                System.Diagnostics.Debug.WriteLine("error while processing a function {0}", e);
+                                continue;
+                            }
+                        }
+
+                        // convert color values from shading color space to RGB
+                        ColorSpaceDetails? shadingColorSpace = shading.ColorSpace;
+                        if (shadingColorSpace is not null)
+                        {
+                            try
+                            {
+                                (double r, double g, double b) = shadingColorSpace.GetColor(tmpValues).ToRGBValues(); // To improve
+                                tmpValues = [r, g, b];
+                            }
+                            catch (IOException e)
+                            {
+                                System.Diagnostics.Debug.WriteLine("error processing color space {0}", e);
+                                continue;
+                            }
+                        }
+                        raster[index] = (byte)(tmpValues[0] * 255);
+                        raster[index + 1] = (byte)(tmpValues[1] * 255);
+                        raster[index + 2] = (byte)(tmpValues[2] * 255);
+                        raster[index + 3] = 255;
+                    }
+                }
+
+                var finalShadingMatrix = patternTransformMatrix.PreConcat(shading.Matrix.ToSkMatrix());
+
+                using (var shader = SKShader.CreateBitmap(shaderBitmap, SKShaderTileMode.Decal, SKShaderTileMode.Decal, finalShadingMatrix))
+                using (var paint = new SKPaint())
+                {
+                    paint.IsAntialias = shading.AntiAlias;
+                    paint.Shader = shader;
+
+                    SKPathEffect? dash = null;
+                    if (isStroke)
+                    {
+                        var currentState = GetCurrentState();
+
+                        // TODO - To Check
+                        paint.Style = SKPaintStyle.Stroke;
+                        paint.StrokeWidth = (float)currentState.LineWidth;
+                        paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
+                        paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
+                        paint.PathEffect = currentState.LineDashPattern.ToSKPathEffect();
                     }
 
-                    // evaluate function
-                    double[] tmpValues; // "values" can't be reused due to different length
-                    if (useBackground && shading.Background is not null)
+                    if (path is null)
                     {
-                        tmpValues = shading.Background;
+                        _canvas.DrawPaint(paint);
                     }
                     else
                     {
-                        try
-                        {
-                            tmpValues = shading.Eval(values);
-                        }
-                        catch (IOException e)
-                        {
-                            System.Diagnostics.Debug.WriteLine("error while processing a function {0}", e);
-                            continue;
-                        }
+                        _canvas.DrawPath(path, paint);
                     }
 
-                    // convert color values from shading color space to RGB
-                    ColorSpaceDetails? shadingColorSpace = shading.ColorSpace;
-                    if (shadingColorSpace is not null)
-                    {
-                        try
-                        {
-                            (double r, double g, double b) = shadingColorSpace.GetColor(tmpValues).ToRGBValues(); // To improve
-                            tmpValues = [r, g, b];
-                        }
-                        catch (IOException e)
-                        {
-                            System.Diagnostics.Debug.WriteLine("error processing color space {0}", e);
-                            continue;
-                        }
-                    }
-                    raster[index] = (byte)(tmpValues[0] * 255);
-                    raster[index + 1] = (byte)(tmpValues[1] * 255);
-                    raster[index + 2] = (byte)(tmpValues[2] * 255);
-                    raster[index + 3] = 255;
+                    dash?.Dispose();
                 }
-            }
-
-            var info = new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul);
-
-            // get a pointer to the buffer, and give it to the skImage
-            var ptr = GCHandle.Alloc(raster, GCHandleType.Pinned);
-
-            var finalShadingMatrix = patternTransformMatrix.PreConcat(shading.Matrix.ToSkMatrix());
-
-            using (SKPixmap pixmap = new SKPixmap(info, ptr.AddrOfPinnedObject(), info.RowBytes))
-            using (SKImage skImage2 = SKImage.FromPixels(pixmap, (addr, ctx) =>
-                {
-                    ptr.Free();
-                    raster = null!;
-                }))
-            using (var shader = SKShader.CreateImage(skImage2, SKShaderTileMode.Decal, SKShaderTileMode.Decal, finalShadingMatrix))
-            using (var paint = new SKPaint())
-            {
-                paint.IsAntialias = shading.AntiAlias;
-                paint.Shader = shader;
-
-                SKPathEffect? dash = null;
-                if (isStroke)
-                {
-                    var currentState = GetCurrentState();
-
-                    // TODO - To Check
-                    paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = (float)currentState.LineWidth;
-                    paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
-                    paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    paint.PathEffect = currentState.LineDashPattern.ToSKPathEffect();
-                }
-
-                if (path is null)
-                {
-                    _canvas.DrawPaint(paint);
-                }
-                else
-                {
-                    _canvas.DrawPath(path, paint);
-                }
-
-                dash?.Dispose();
             }
         }
 
