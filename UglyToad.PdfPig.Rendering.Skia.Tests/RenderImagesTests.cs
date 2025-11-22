@@ -29,11 +29,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 var page = document.GetPage(1);
                 foreach (var pdfImage in page.GetImages())
                 {
-                    var skImage = pdfImage.GetSKImage();
+                    var bitmap = pdfImage.GetSKBitmap();
                     
-                    Assert.NotNull(skImage);
-                    Assert.True(skImage.Width > 0);
-                    Assert.True(skImage.Height > 0);
+                    Assert.NotNull(bitmap);
+                    Assert.True(bitmap!.Width > 0);
+                    Assert.True(bitmap.Height > 0);
                 }
             }
         }

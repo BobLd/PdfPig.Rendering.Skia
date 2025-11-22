@@ -13,7 +13,6 @@
 // limitations under the License.
 
 using System;
-using System.Runtime.InteropServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Graphics;
@@ -34,14 +33,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
             RenderImage(inlineImage);
         }
 
-        private void RenderImage(IPdfImage image)
+        private void RenderImage(IPdfImage pdfImage)
         {
-            if (image.WidthInSamples == 0 || image.HeightInSamples == 0)
+            if (pdfImage.WidthInSamples == 0 || pdfImage.HeightInSamples == 0)
             {
                 return;
             }
 
-            if (image.Bounds.Width == 0 || image.Bounds.Height == 0)
+            if (pdfImage.Bounds.Width == 0 || pdfImage.Bounds.Height == 0)
             {
                 return;
             }
@@ -49,19 +48,27 @@ namespace UglyToad.PdfPig.Rendering.Skia
             try
             {
                 using (new SKAutoCanvasRestore(_canvas, true))
-                using (var skImage = image.GetSKImage())
+                using (var bitmap = pdfImage.GetSKBitmap())
                 {
+                    if (bitmap is null)
+                    {
+                        throw new NullReferenceException("Got a null image.");
+                    }
+
                     // Images are upside down in PDF
                     _canvas.Scale(1, -1, 0, 0.5f);
 
-                    if (!image.IsImageMask)
+                    if (!pdfImage.IsImageMask)
                     {
-                        _canvas.DrawImage(skImage, new SKRect(0, 0, 1, 1), _paintCache.GetPaint(image));
+                        _canvas.DrawBitmap(bitmap, new SKRect(0, 0, 1, 1), _paintCache.GetPaint(pdfImage));
                     }
                     else
                     {
                         // Draw image mask
-                        SKColor colour = GetCurrentState().CurrentNonStrokingColor.ToSKColor(GetCurrentState().AlphaConstantNonStroking);
+                        SKColor colour = GetCurrentState().CurrentNonStrokingColor
+                            .ToSKColor(GetCurrentState().AlphaConstantNonStroking);
+
+                        // TODO - check if color is gray scale only to use Gray8 image
 
                         /*
                         SKMatrix finalMatrix = SKMatrix.CreateScale(destRect.Width / skImage.Width, destRect.Height / skImage.Height)
@@ -81,21 +88,20 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         byte g = colour.Green;
                         byte b = colour.Blue;
 
-                        using (var skImagePixels = skImage.PeekPixels())
+                        Span<byte> span = bitmap.GetPixelSpan();
+
+                        using (SKBitmap maskedBitmap = new SKBitmap(bitmap.Width, bitmap.Height, SKColorType.Rgba8888, SKAlphaType.Premul))
                         {
-                            var raster = new byte[skImage.Width * skImage.Height * 4]; // RGBA
+                            Span<byte> rasterSpan = maskedBitmap.GetPixelSpan();
 
-                            Span<byte> span = skImagePixels.GetPixelSpan<byte>();
-                            Span<byte> rasterSpan = raster;
-
-                            for (int row = 0; row < skImage.Height; ++row)
+                            for (int row = 0; row < bitmap.Height; ++row)
                             {
-                                for (int col = 0; col < skImage.Width; ++col)
+                                for (int col = 0; col < bitmap.Width; ++col)
                                 {
-                                    byte pixel = span[(row * skImage.Width) + col];
+                                    byte pixel = span[(row * bitmap.Width) + col];
                                     if (pixel == byte.MinValue)
                                     {
-                                        var start = (row * (skImage.Width * 4)) + (col * 4);
+                                        var start = (row * (bitmap.Width * 4)) + (col * 4);
                                         rasterSpan[start] = r;
                                         rasterSpan[start + 1] = g;
                                         rasterSpan[start + 2] = b;
@@ -104,21 +110,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                                 }
                             }
 
-                            var info = new SKImageInfo(skImage.Width, skImage.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
-
-                            // get a pointer to the buffer, and give it to the skImage
-                            var ptr = GCHandle.Alloc(raster, GCHandleType.Pinned);
-
-                            using (SKPixmap pixmap = new SKPixmap(info, ptr.AddrOfPinnedObject(), info.RowBytes))
-                            using (SKImage skImage2 = SKImage.FromPixels(pixmap, (addr, ctx) =>
-                                   {
-                                       ptr.Free();
-                                       raster = null;
-                                       //System.Diagnostics.Debug.WriteLine("ptr.Free()");
-                                   }))
-                            {
-                                _canvas.DrawImage(skImage2, new SKRect(0, 0, 1, 1), _paintCache.GetPaint(image));
-                            }
+                            _canvas.DrawBitmap(maskedBitmap, new SKRect(0, 0, 1, 1), _paintCache.GetPaint(pdfImage));
                         }
                     }
                 }

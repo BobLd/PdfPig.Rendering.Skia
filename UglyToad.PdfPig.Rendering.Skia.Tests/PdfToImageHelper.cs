@@ -15,7 +15,6 @@
 using System;
 using System.IO;
 using SkiaSharp;
-using UglyToad.PdfPig.Graphics.Colors;
 
 namespace UglyToad.PdfPig.Rendering.Skia.Tests
 {
@@ -25,7 +24,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         private static SKBitmap createEmptyDiffImage(int minWidth, int minHeight, int maxWidth,
             int maxHeight)
         {
-            SKBitmap bim3 = new SKBitmap(new SKImageInfo(maxWidth, maxHeight, SKColorType.Rgb888x));
+            using (SKBitmap bim3 = new SKBitmap(new SKImageInfo(maxWidth, maxHeight, SKColorType.Rgb888x))) 
             using (SKCanvas canvas = new SKCanvas(bim3))
             {
                 if (minWidth != maxWidth || minHeight != maxHeight)
