@@ -90,7 +90,11 @@ using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instan
 		var page = document.GetPage(p);
 		foreach (var pdfImage in page.GetImages())
 		{
-			var skImage = pdfImage.GetSKImage();			
+			using var skImage = pdfImage.GetSKBitmap();			
+			// Use SKBitmap
+
+			// In order to get the SKImage, use the following:
+			using var image = SKImage.FromBitmap(bitmap);
 			// Use SKImage
 		}
 	}
