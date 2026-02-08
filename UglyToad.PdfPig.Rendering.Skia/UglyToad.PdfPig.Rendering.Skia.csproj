@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.0;net462;net471;net6.0;net8.0;net9.0</TargetFrameworks>
 		<LangVersion>12</LangVersion>
-		<Version>0.1.12.2</Version>
+		<Version>0.1.13.1</Version>
 		<Nullable>enable</Nullable>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
@@ -42,12 +42,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="PdfPig" Version="0.1.12" />
+		<PackageReference Include="PdfPig" Version="0.1.13" />
 		<PackageReference Include="PdfPig.Filters.Dct.JpegLibrary" Version="0.1.12.1" />
 		<PackageReference Include="PdfPig.Filters.Jbig2.PdfboxJbig2" Version="0.1.12.1" />
 		<PackageReference Include="PdfPig.Filters.Jpx.OpenJpeg" Version="0.1.12.1" />
-		<PackageReference Include="SkiaSharp" Version="3.119.1" />
-		<PackageReference Include="SkiaSharp.HarfBuzz" Version="3.119.1" />
+		<PackageReference Include="SkiaSharp" Version="3.119.2" />
+		<PackageReference Include="SkiaSharp.HarfBuzz" Version="3.119.2" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(TargetFramework)'=='net462'">

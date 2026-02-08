@@ -36,7 +36,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         private readonly ReaderWriterLockSlim _lock = new();
 
         private readonly SKFontManager _skFontManager = SKFontManager.CreateDefault();
-        
+
         public SkiaFontCacheItem GetTypefaceOrFallback(IFont font, string unicode)
         {
             if (IsDisposed())
@@ -45,6 +45,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
 
             _lock.EnterReadLock();
+
             try
             {
                 if (IsDisposed())
@@ -62,40 +63,78 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 // Cannot find font ZapfDingbats MOZILLA-LINK-5251-1
 
-                SKTypeface? currentTypeface;
-                using (var style = font.Details.GetFontStyle())
-                {
-                    // Try get font by name
-                    string? cleanFontName = font.GetCleanFontName();
-                    currentTypeface = SKTypeface.FromFamilyName(cleanFontName, style);
+                var style = font.Details.GetFontStyle(); // We don't dispose
 
-                    if (currentTypeface is null || currentTypeface.IsDefault())
+                // Try get font by name
+                string? cleanFontName = font.GetCleanFontName();
+                SKTypeface? currentTypeface = SKTypeface.FromFamilyName(cleanFontName, style);
+
+                if (currentTypeface is null || currentTypeface.IsDefault())
+                {
+                    // We found the default font
+                    // Try get font by substitute name
+                    (string? fontFamilyName, string? psName) = GetSubstituteFontName(cleanFontName);
+
+                    if (!string.IsNullOrEmpty(fontFamilyName))
                     {
-                        // We found the default font
-                        // Try get font by substitute name
-                        string? fontFamilyName = GetTrueTypeFontFontName(cleanFontName);
-                        if (!string.IsNullOrEmpty(fontFamilyName))
+                        currentTypeface?.Dispose();
+                        currentTypeface = null; // Reset
+
+                        if (!string.IsNullOrEmpty(psName))
                         {
-                            currentTypeface?.Dispose();
+                            var styles = _skFontManager.GetFontStyles(fontFamilyName);
+                            
+                            if (styles is not null)
+                            {
+                                for (int j = 0; j < styles.Count; ++j)
+                                {
+                                    var typeface = styles.CreateTypeface(j);
+                                    if (typeface is null)
+                                    {
+                                        continue;
+                                    }
+
+                                    try
+                                    {
+                                        if (psName!.Equals(typeface.PostScriptName, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            currentTypeface = typeface;
+                                            break;
+                                        }
+                                    }
+                                    finally
+                                    {
+                                        if (currentTypeface is null)
+                                        {
+                                            typeface.Dispose();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (currentTypeface is null)
+                        {
                             currentTypeface = SKTypeface.FromFamilyName(fontFamilyName, style);
                         }
                     }
+                }
 
-                    // Fallback font
-                    // https://github.com/mono/SkiaSharp/issues/232
-                    if (currentTypeface is null || (!string.IsNullOrWhiteSpace(unicode) && !currentTypeface.ContainsGlyph(codepoint)))
+                // Fallback font
+                // https://github.com/mono/SkiaSharp/issues/232
+                if (currentTypeface is null ||
+                    (!string.IsNullOrWhiteSpace(unicode) && !currentTypeface.ContainsGlyph(codepoint)))
+                {
+                    // If font cannot render the char
+                    var fallback = _skFontManager.MatchCharacter(codepoint); // Access violation here
+                    if (fallback is not null)
                     {
-                        // If font cannot render the char
-                        var fallback = _skFontManager.MatchCharacter(codepoint); // Access violation here
-                        if (fallback is not null)
-                        {
-                            currentTypeface?.Dispose();
-                            currentTypeface = _skFontManager.MatchFamily(fallback.FamilyName, style);
-                            fallback.Dispose();
-                        }
+                        currentTypeface?.Dispose();
+                        currentTypeface = _skFontManager.MatchFamily(fallback.FamilyName, style);
+                        fallback.Dispose();
                     }
                 }
-                
+
                 // MOZILLA-LINK-625-0 ("BVNSKD+wasy10|0|0") ;
                 // test-2_so_74165171.pdf ("NHVBQA+NotoSansHK-Thin|0|0");
                 // cmap-parsing-exception;
@@ -170,10 +209,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return item;
         }
 
-        private static string? GetTrueTypeFontFontName(string? fontName)
+        private static (string?, string?) GetSubstituteFontName(string? fontName)
         {
-            TrueTypeFont trueTypeFont = SystemFontFinder.Instance.GetTrueTypeFont(fontName);
-            return trueTypeFont?.TableRegister?.NameTable?.FontFamilyName;
+            TrueTypeFont trueTypeFont = SystemFontFinder.Instance.GetTrueTypeFont(fontName); // TODO - Get font name mappings, 
+
+            string? familyName = trueTypeFont?.TableRegister?.NameTable?.FontFamilyName;
+            string? psName = trueTypeFont?.TableRegister?.NameTable?.NameRecords.FirstOrDefault(f => f.NameId == 6)
+                ?.Value;
+
+            return (familyName, psName);
         }
 
         private static string GetFontKey(IFont font)
@@ -200,6 +244,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         public void Dispose()
         {
+            if (IsDisposed())
+            {
+                return;
+            }
+
             _lock.EnterWriteLock();
 
             try
