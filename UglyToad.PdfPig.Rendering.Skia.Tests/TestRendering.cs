@@ -504,6 +504,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "GHOSTSCRIPT-698721-1-rotated_1.png",
                 "GHOSTSCRIPT-698721-1-rotated.pdf", 1, 2
             },
+            new object[]
+            {
+                "blend_opacity_1.png",
+                "blend_opacity.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
