@@ -275,14 +275,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 0, 0, 1);
         }
 
-        private static readonly bool doBlending = false;
-
         public static SKBlendMode ToSKBlendMode(this BlendMode blendMode)
         {
-            if (!doBlending)
-            {
-                return SKBlendMode.SrcOver;
-            }
 
             // https://pdfium.googlesource.com/pdfium/+/refs/heads/main/core/fxge/skia/fx_skia_device.cpp
             switch (blendMode)

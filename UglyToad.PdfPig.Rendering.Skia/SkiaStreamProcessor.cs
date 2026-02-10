@@ -45,6 +45,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
         // Stack to keep track of original transforms for nested form XObjects
         private readonly Stack<SKMatrix> _currentStreamOriginalTransforms = new();
 
+        // Stack to track layer paints for transparency groups (null means regular Save was used)
+        private readonly Stack<SKPaint?> _transparencyLayerPaints = new();
+
+        // Pending layer paint to be used in the next PushState call
+        private SKPaint? _pendingTransparencyLayerPaint;
+
         private SKCanvas _canvas;
 
         private bool _updateCurrentStreamOriginalTransform;
@@ -92,39 +98,31 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 CloneAllStates();
 
-                using (var recorder = new SKPictureRecorder())
-                using (_canvas = recorder.BeginRecording(SKRect.Create(_width, _height), true))
+                using var recorder = new SKPictureRecorder();
+                _canvas = recorder.BeginRecording(SKRect.Create(_width, _height), true);
+
+                // Inverse direction of y-axis
+                _canvas.SetMatrix(SKMatrix.CreateScale(1, -1, 0, _height / 2f));
+                _canvas.Concat(CurrentTransformationMatrix.ToSkMatrix());
+
+                PushState();
+
+                ProcessOperations(operations);
+
+                PopState();
+
+                if (_renderAnnotations)
                 {
-                    // Inverse direction of y-axis
-                    _canvas.SetMatrix(SKMatrix.CreateScale(1, -1, 0, _height / 2f));
-                    _canvas.Concat(CurrentTransformationMatrix.ToSkMatrix());
-
-                    _canvas.Clear(SKColors.White);
-
-                    if (_renderAnnotations)
-                    {
-                        DrawAnnotations(true);
-                    }
-
-                    PushState();
-
-                    ProcessOperations(operations);
-
-                    PopState();
-
-                    if (_renderAnnotations)
-                    {
-                        DrawAnnotations(false);
-                    }
-
-                    _canvas.Flush();
-
-                    return recorder.EndRecording();
+                    DrawAnnotations();
                 }
+
+                _canvas.Flush();
+
+                return recorder.EndRecording();
             }
             finally
             {
-                _paintCache.Dispose();
+                Cleanup();
             }
         }
 
@@ -132,13 +130,31 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             base.PopState();
             _canvas.Restore();
+
+            // Dispose layer paint if one was used for this state
+            var layerPaint = _transparencyLayerPaints.Pop();
+            layerPaint?.Dispose();
+
             EndPath();
         }
 
         public override void PushState()
         {
             base.PushState();
-            _canvas.Save();
+
+            if (_pendingTransparencyLayerPaint != null)
+            {
+                // Use SaveLayer for transparency group - creates offscreen buffer
+                _canvas.SaveLayer(_pendingTransparencyLayerPaint);
+                _transparencyLayerPaints.Push(_pendingTransparencyLayerPaint);
+                _pendingTransparencyLayerPaint = null;
+            }
+            else
+            {
+                _canvas.Save();
+                _transparencyLayerPaints.Push(null);
+            }
+
             EndPath();
         }
 
@@ -189,6 +205,26 @@ namespace UglyToad.PdfPig.Rendering.Skia
         // Note that recursive calls are possible here for nested form XObjects
         protected override void ProcessFormXObject(StreamToken formStream, NameToken xObjectName)
         {
+            // Check if this is a Transparency Group XObject
+            bool isTransparencyGroup = formStream.StreamDictionary.TryGet(NameToken.Group, PdfScanner, out DictionaryToken? formGroupToken)
+                && formGroupToken.TryGet<NameToken>(NameToken.S, PdfScanner, out var sToken)
+                && sToken == NameToken.Transparency;
+
+            if (isTransparencyGroup)
+            {
+                // Capture parent state's blend mode and alpha before PushState
+                var parentState = GetCurrentState();
+
+                // Set pending layer paint - will be used in PushState called by base.ProcessFormXObject
+                // The transparency group will be composited with parent's blend mode and alpha when the layer is restored
+                _pendingTransparencyLayerPaint = new SKPaint
+                {
+                    IsAntialias = _antiAliasing,
+                    BlendMode = parentState.BlendMode.ToSKBlendMode(),
+                    Color = SKColors.White.WithAlpha((byte)(parentState.AlphaConstantNonStroking * 255))
+                };
+            }
+
             // Indicate that we want to update the original transform for form XObject
             _updateCurrentStreamOriginalTransform = true;
 
@@ -196,6 +232,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             // Restore previous original transform
             _currentStreamOriginalTransforms.Pop();
+        }
+
+        private void Cleanup()
+        {
+            _paintCache.Dispose();
+            _pendingTransparencyLayerPaint?.Dispose();
+            _pendingTransparencyLayerPaint = null;
+            foreach (var paint in _transparencyLayerPaints)
+            {
+                paint?.Dispose();
+            }
+            _transparencyLayerPaints.Clear();
         }
     }
 }

@@ -42,19 +42,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </summary>
         public static readonly RGBColor DefaultRequiredFieldsHighlightColor = new RGBColor(1, 0, 0);
 
-        private static bool IsAnnotationBelowText(Annotation annotation)
-        {
-            // TODO - Very hackish
-            switch (annotation.Type)
-            {
-                case AnnotationType.Highlight:
-                    return true;
-
-                default:
-                    return false;
-            }
-        }
-
         private static bool ShouldRender(Annotation annotation)
         {
             // cf. ISO 32000-2:2020(E) - Table 167 — Annotation flags
@@ -70,11 +57,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         private readonly Lazy<Annotation[]> _annotations;
 
-        private void DrawAnnotations(bool isBelowText)
+        private void DrawAnnotations()
         {
             // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/rendering/PageDrawer.java
             // https://github.com/apache/pdfbox/blob/c4b212ecf42a1c0a55529873b132ea338a8ba901/pdfbox/src/main/java/org/apache/pdfbox/contentstream/PDFStreamEngine.java#L312
-            foreach (Annotation annotation in _annotations.Value.Where(a => IsAnnotationBelowText(a) == isBelowText))
+            foreach (Annotation annotation in _annotations.Value)
             {
                 // Check if visible
                 if (!ShouldRender(annotation))
