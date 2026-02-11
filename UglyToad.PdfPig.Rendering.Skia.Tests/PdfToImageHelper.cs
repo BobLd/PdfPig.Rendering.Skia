@@ -24,7 +24,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
         private static SKBitmap createEmptyDiffImage(int minWidth, int minHeight, int maxWidth,
             int maxHeight)
         {
-            using (SKBitmap bim3 = new SKBitmap(new SKImageInfo(maxWidth, maxHeight, SKColorType.Rgb888x))) 
+            var bim3 = new SKBitmap(new SKImageInfo(maxWidth, maxHeight, SKColorType.Rgb888x));
             using (SKCanvas canvas = new SKCanvas(bim3))
             {
                 if (minWidth != maxWidth || minHeight != maxHeight)
@@ -45,14 +45,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
         private const byte _threshold = 2;
 
-        private static SKBitmap diffImages(SKBitmap bim1, SKBitmap bim2)
+        private static SKBitmap? diffImages(SKBitmap bim1, SKBitmap bim2)
         {
             int minWidth = Math.Min(bim1.Width, bim2.Width);
             int minHeight = Math.Min(bim1.Height, bim2.Height);
             int maxWidth = Math.Max(bim1.Width, bim2.Width);
             int maxHeight = Math.Max(bim1.Height, bim2.Height);
 
-            SKBitmap bim3 = null;
+            SKBitmap? bim3 = null;
             if (minWidth != maxWidth || minHeight != maxHeight)
             {
                 bim3 = createEmptyDiffImage(minWidth, minHeight, maxWidth, maxHeight);
@@ -121,7 +121,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 using (var document = PdfDocument.Open(docPath, SkiaRenderingParsingOptions.Instance))
                 {
                     document.AddSkiaPageFactory();
-                    using (var actual = document.GetPageAsSKBitmap(pageNumber, scale))
+                    using (var actual = document.GetPageAsSKBitmap(pageNumber, scale, SKColors.White))
                     {
                         var skInfo = new SKImageInfo()
                         {
@@ -150,7 +150,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                                     return true;
                                 }
 
-                                SKBitmap bim3 = diffImages(expectedResize, actualResize);
+                                using var bim3 = diffImages(expectedResize, actualResize);
                                 if (bim3 is null)
                                 {
                                     return true;
@@ -189,7 +189,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 using (var document = PdfDocument.Open(docPath, SkiaRenderingParsingOptions.Instance))
                 {
                     document.AddSkiaPageFactory();
-                    using (var actual = document.GetPageAsSKBitmap(pageNumber, scale))
+                    using (var actual = document.GetPageAsSKBitmap(pageNumber, scale, SKColors.White))
                     {
                         if (filesAreIdentical(expected, actual))
                         {

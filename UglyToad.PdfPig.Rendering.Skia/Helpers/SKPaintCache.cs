@@ -26,9 +26,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         private readonly bool _isAntialias;
 
         private readonly Dictionary<int, SKPaint> _cache = new();
-
-        private readonly SKPaint _antialiasingPaint;
-        private readonly SKPaint _noAntialiasingPaint;
+        private readonly Dictionary<(bool, BlendMode), SKPaint> _imagePaintCache = new();
 
 #if DEBUG
         private readonly SKPaint _imageDebugPaint;
@@ -38,9 +36,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         {
             _isAntialias = isAntialias;
             // minimumLineWidth not in use
-            _antialiasingPaint = new SKPaint() { IsAntialias = true };
 
-            _noAntialiasingPaint = new SKPaint() { IsAntialias = false };
 #if DEBUG
             _imageDebugPaint = new SKPaint()
             {
@@ -53,15 +49,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         }
 
         private static int GetPaintKey(IColor color, double alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,
-            LineCapStyle? capStyle, LineDashPattern? dashPattern)
+            LineCapStyle? capStyle, LineDashPattern? dashPattern, BlendMode blendMode)
         {
-            return HashCode.Combine(color, alpha, stroke, strokeWidth, joinStyle, capStyle, GetHash(dashPattern));
+            return HashCode.Combine(color, alpha, stroke, strokeWidth, joinStyle, capStyle, GetHash(dashPattern), blendMode);
         }
 
         public SKPaint GetPaint(IColor color, double alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,
-            LineCapStyle? capStyle, LineDashPattern? dashPattern)
+            LineCapStyle? capStyle, LineDashPattern? dashPattern, BlendMode blendMode)
         {
-            var key = GetPaintKey(color, alpha, stroke, strokeWidth, joinStyle, capStyle, dashPattern);
+            var key = GetPaintKey(color, alpha, stroke, strokeWidth, joinStyle, capStyle, dashPattern, blendMode);
 
             if (_cache.TryGetValue(key, out var paint))
             {
@@ -73,6 +69,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 IsAntialias = _isAntialias,
                 Color = color.ToSKColor(alpha),
                 Style = stroke ? SKPaintStyle.Stroke : SKPaintStyle.Fill,
+                BlendMode = blendMode.ToSKBlendMode()
             };
             
             if (stroke)
@@ -104,18 +101,25 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return key;
         }
 
-        public SKPaint GetPaint(IPdfImage pdfImage)
+        public SKPaint GetPaint(IPdfImage pdfImage, BlendMode blendMode)
         {
-            if (!pdfImage.Interpolate)
-            {
-                return _noAntialiasingPaint;
-            }
-            return _antialiasingPaint;
-        }
+            // For non-Normal blend modes, use general cache with ValueTuple key
+            var key = (pdfImage.Interpolate, blendMode);
 
-        public SKPaint GetAntialiasing()
-        {
-            return _antialiasingPaint;
+            if (_imagePaintCache.TryGetValue(key, out var paint))
+            {
+                return paint;
+            }
+
+            paint = new SKPaint
+            {
+                IsAntialias = pdfImage.Interpolate,
+                BlendMode = blendMode.ToSKBlendMode()
+            };
+            
+            _imagePaintCache[key] = paint;
+
+            return paint;
         }
 
 #if DEBUG
@@ -130,15 +134,18 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 #if DEBUG
             _imageDebugPaint.Dispose();
 #endif
-            _antialiasingPaint.Dispose();
-            _noAntialiasingPaint.Dispose();
-
             foreach (var pair in _cache)
             {
                 pair.Value.PathEffect?.Dispose();
                 pair.Value.Dispose();
             }
             _cache.Clear();
+
+            foreach (var pair in _imagePaintCache)
+            {
+                pair.Value.Dispose();
+            }
+            _imagePaintCache.Clear();
         }
     }
 }

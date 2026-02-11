@@ -47,60 +47,62 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             try
             {
-                using (new SKAutoCanvasRestore(_canvas, true))
-                using (var bitmap = pdfImage.GetSKBitmap(ParsingOptions.Logger))
+                using SKAutoCanvasRestore skAutoCanvasRestore = new SKAutoCanvasRestore(_canvas, true);
+                using var bitmap = pdfImage.GetSKBitmap(ParsingOptions.Logger);
+
+                if (bitmap is null)
                 {
-                    if (bitmap is null)
-                    {
-                        throw new NullReferenceException("Got a null image.");
-                    }
+                    throw new NullReferenceException("Got a null image.");
+                }
 
-                    bitmap.SetImmutable();
+                bitmap.SetImmutable();
 
-                    // Images are upside down in PDF
-                    _canvas.Scale(1, -1, 0, 0.5f);
+                // Images are upside down in PDF
+                _canvas.Scale(1, -1, 0, 0.5f);
 
-                    if (!pdfImage.IsImageMask)
-                    {
-                        _canvas.DrawBitmap(bitmap, new SKRect(0, 0, 1, 1), _paintCache.GetPaint(pdfImage));
-                    }
-                    else
-                    {
-                        // Draw image mask
-                        var currentState = GetCurrentState();
-                        SKColor colour = currentState.CurrentNonStrokingColor
-                            .ToSKColor(currentState.AlphaConstantNonStroking);
+                var currentState = GetCurrentState();
+
+                if (!pdfImage.IsImageMask)
+                {
+                    var imagePaint = _paintCache.GetPaint(pdfImage, currentState.BlendMode);
+                    using SKImage image = SKImage.FromBitmap(bitmap);
+                    _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, imagePaint);
+                }
+                else
+                {
+                    // Draw image mask
+                    SKColor colour = currentState.CurrentNonStrokingColor
+                        .ToSKColor(currentState.AlphaConstantNonStroking);
                         
-                        byte r = colour.Red;
-                        byte g = colour.Green;
-                        byte b = colour.Blue;
-                        byte a = byte.MaxValue; // TODO - Use colour.Alpha?
+                    byte r = colour.Red;
+                    byte g = colour.Green;
+                    byte b = colour.Blue;
+                    byte a = byte.MaxValue; // TODO - Use colour.Alpha?
 
-                        using (SKBitmap maskedBitmap = new SKBitmap(bitmap.Width, bitmap.Height, SKColorType.Rgba8888, SKAlphaType.Premul))
+                    using SKBitmap maskedBitmap = new SKBitmap(bitmap.Width, bitmap.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+                    Span<byte> rasterSpan = maskedBitmap.GetPixelSpan();
+                    Span<byte> span = bitmap.GetPixelSpan();
+
+                    for (int row = 0; row < bitmap.Height; ++row)
+                    {
+                        for (int col = 0; col < bitmap.Width; ++col)
                         {
-                            Span<byte> rasterSpan = maskedBitmap.GetPixelSpan();
-                            Span<byte> span = bitmap.GetPixelSpan();
+                            byte pixel = span[(row * bitmap.Width) + col];
+                            if (pixel != byte.MinValue)
+                                continue;
 
-                            for (int row = 0; row < bitmap.Height; ++row)
-                            {
-                                for (int col = 0; col < bitmap.Width; ++col)
-                                {
-                                    byte pixel = span[(row * bitmap.Width) + col];
-                                    if (pixel == byte.MinValue)
-                                    {
-                                        var start = (row * (bitmap.Width * 4)) + (col * 4);
-                                        rasterSpan[start] = r;
-                                        rasterSpan[start + 1] = g;
-                                        rasterSpan[start + 2] = b;
-                                        rasterSpan[start + 3] = a;
-                                    }
-                                }
-                            }
-
-                            maskedBitmap.SetImmutable();
-                            _canvas.DrawBitmap(maskedBitmap, new SKRect(0, 0, 1, 1), _paintCache.GetPaint(pdfImage));
+                            var start = (row * (bitmap.Width * 4)) + (col * 4);
+                            rasterSpan[start] = r;
+                            rasterSpan[start + 1] = g;
+                            rasterSpan[start + 2] = b;
+                            rasterSpan[start + 3] = a;
                         }
                     }
+
+                    maskedBitmap.SetImmutable();
+                    var maskPaint = _paintCache.GetPaint(pdfImage, currentState.BlendMode);
+                    using SKImage image = SKImage.FromBitmap(maskedBitmap);
+                    _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, maskPaint);
                 }
 
                 return;

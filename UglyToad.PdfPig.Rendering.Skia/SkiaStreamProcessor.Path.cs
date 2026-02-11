@@ -160,7 +160,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 var paint = _paintCache.GetPaint(currentState.CurrentStrokingColor, currentState.AlphaConstantStroking, true,
                     (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
-                    currentState.LineDashPattern);
+                    currentState.LineDashPattern, currentState.BlendMode);
                 _canvas.DrawPath(_currentPath, paint);
             }
         }
@@ -215,7 +215,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             else
             {
                 var paint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
-                    currentState.AlphaConstantNonStroking, false, null, null, null, null);
+                    currentState.AlphaConstantNonStroking, false, null, null, null, null, currentState.BlendMode);
                 _canvas.DrawPath(_currentPath, paint);
 
                 /* No cache method

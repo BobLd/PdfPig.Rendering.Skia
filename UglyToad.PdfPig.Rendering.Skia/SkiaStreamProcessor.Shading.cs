@@ -67,7 +67,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 paint.IsAntialias = shading.AntiAlias;
                 paint.Shader = shader;
-                //paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode(); // TODO - check if correct
+                paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
 
                 // check if bbox not null
 
@@ -154,9 +154,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 paint.IsAntialias = shading.AntiAlias;
                 paint.Shader = shader;
+                paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
 
                 // check if bbox not null
 
+                SKPathEffect? dash = null;
                 if (isStroke)
                 {
                     // TODO - To finish
@@ -164,7 +166,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     paint.StrokeWidth = (float)currentState.LineWidth;
                     paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
                     paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    paint.PathEffect = currentState.LineDashPattern.ToSKPathEffect();
+                    dash = currentState.LineDashPattern.ToSKPathEffect();
+                    paint.PathEffect = dash;
                 }
 
                 if (path is null)
@@ -175,6 +178,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 {
                     _canvas.DrawPath(path, paint);
                 }
+
+                dash?.Dispose();
             }
         }
 
@@ -226,6 +231,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 paint.IsAntialias = shading.AntiAlias;
                 paint.Shader = shader;
+                paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
 
                 // check if bbox not null
 
@@ -343,23 +349,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 var finalShadingMatrix = patternTransformMatrix.PreConcat(shading.Matrix.ToSkMatrix());
 
+                var currentState = GetCurrentState();
+
                 using (var shader = SKShader.CreateBitmap(shaderBitmap, SKShaderTileMode.Decal, SKShaderTileMode.Decal, finalShadingMatrix))
                 using (var paint = new SKPaint())
                 {
                     paint.IsAntialias = shading.AntiAlias;
                     paint.Shader = shader;
+                    paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
 
                     SKPathEffect? dash = null;
                     if (isStroke)
                     {
-                        var currentState = GetCurrentState();
-
                         // TODO - To Check
                         paint.Style = SKPaintStyle.Stroke;
                         paint.StrokeWidth = (float)currentState.LineWidth;
                         paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
                         paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                        paint.PathEffect = currentState.LineDashPattern.ToSKPathEffect();
+                        dash = currentState.LineDashPattern.ToSKPathEffect();
+                        paint.PathEffect = dash;
                     }
 
                     if (path is null)
@@ -485,6 +493,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 paint.IsAntialias = _antiAliasing;
                 paint.Shader = shader;
+                paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
 
 //#if DEBUG
 //                _canvas.DrawPath(path, new SKPaint() { Color = SKColors.Blue.WithAlpha(150) });
