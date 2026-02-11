@@ -509,6 +509,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "blend_opacity_1.png",
                 "blend_opacity.pdf", 1, 2
             },
+            new object[]
+            {
+                "issue-50_2.png",
+                "issue-50.pdf", 2, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
