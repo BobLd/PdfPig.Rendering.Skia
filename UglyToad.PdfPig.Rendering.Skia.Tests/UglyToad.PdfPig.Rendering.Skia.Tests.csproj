@@ -299,6 +299,9 @@
 	  <None Update="Documents\SPARC - v9 Architecture Manual.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
+	  <None Update="Documents\issue-50.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	  <None Update="Documents\TIKA-1552-0.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
@@ -525,6 +528,9 @@
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\ICML03-081_6.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\issue-50_2.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\journal.pone.0196757_1.png">
