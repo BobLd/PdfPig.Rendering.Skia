@@ -51,7 +51,7 @@ using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instan
 
 	for (int p = 1; p <= document.NumberOfPages; p++)
 	{
-		var bitmap = document.GetPageAsSKBitmap(p, _scale, RGBColor.White);
+		using var skBitmap = document.GetPageAsSKBitmap(p, _scale, RGBColor.White);
 		// Use the SKBitmap
 	}
 }
@@ -73,7 +73,7 @@ using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instan
 
 	for (int p = 1; p <= document.NumberOfPages; p++)
 	{
-		var picture = document.GetPage<SKPicture>(p);
+		using var skPicture = document.GetPage<SKPicture>(p);
 		// Use the SKPicture
 	}
 }
@@ -91,11 +91,11 @@ using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instan
 		var page = document.GetPage(p);
 		foreach (var pdfImage in page.GetImages())
 		{
-			using var skImage = pdfImage.GetSKBitmap();			
+			using var skBitmap = pdfImage.GetSKBitmap();			
 			// Use SKBitmap
 
 			// In order to get the SKImage, use the following:
-			using var image = SKImage.FromBitmap(bitmap);
+			using var skImage = SKImage.FromBitmap(skBitmap);
 			// Use SKImage
 		}
 	}
