@@ -196,7 +196,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                             return true;
                         }
 
-                        SKBitmap bim3 = diffImages(expected, actual);
+                        SKBitmap? bim3 = diffImages(expected, actual);
                         if (bim3 is null)
                         {
                             return true;

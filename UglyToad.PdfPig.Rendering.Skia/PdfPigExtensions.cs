@@ -18,88 +18,112 @@ using SkiaSharp;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Tokens;
 
-namespace UglyToad.PdfPig.Rendering.Skia
+namespace UglyToad.PdfPig.Rendering.Skia;
+
+/// <summary>
+/// Extension methods for PdfPig.
+/// </summary>
+public static class PdfPigExtensions
 {
     /// <summary>
-    /// Extension methods for PdfPig.
+    /// Add the Skia page and the page size` factories.
     /// </summary>
-    public static class PdfPigExtensions
+    public static void AddSkiaPageFactory(this PdfDocument document)
     {
-        /// <summary>
-        /// Add the Skia page factory.
-        /// </summary>
-        public static void AddSkiaPageFactory(this PdfDocument document)
-        {
-            document.AddPageFactory<SKPicture, SkiaPageFactory>();
-        }
+        document.AddPageFactory<PdfPageSize, PageSizeFactory>();
+        document.AddPageFactory<SKPicture, SkiaPageFactory>();
+    }
 
-        /// <summary>
-        /// Get the pdf page as a <see cref="SKBitmap"/>.
-        /// </summary>
-        /// <param name="document">The pdf document.</param>
-        /// <param name="pageNumber">The number of the page to return, this starts from 1.</param>
-        /// <param name="scale">The scale factor to use when rendering the page.</param>
-        /// <param name="clearColor">Optional background color to clear the canvas with before rendering. If null, the canvas is not cleared.</param>
-        /// <returns>The <see cref="SKBitmap"/>.</returns>
-        public static SKBitmap GetPageAsSKBitmap(this PdfDocument document, int pageNumber, float scale = 1, SKColor? clearColor = null)
+    /// <summary>
+    /// Get the page size as defined in the document.
+    /// <para>Lightweight alternative to <see cref="PdfDocument.GetPage"/> to get the page size.</para>
+    /// </summary>
+    /// <param name="document">The pdf document.</param>
+    /// <param name="pageNumber">The number of the page to return, this starts from 1.</param>
+    /// <returns></returns>
+    public static PdfPageSize GetPageSize(this PdfDocument document, int pageNumber)
+    {
+        return document.GetPage<PdfPageSize>(pageNumber);
+    }
+
+    /// <summary>
+    /// Get the pdf page as a <see cref="SKPicture"/>.
+    /// <para>Do not relly on <see cref="SKPicture.CullRect"/> to get the page size. Use <see cref="GetPageSize"/> instead.</para>
+    /// </summary>
+    /// <param name="document">The pdf document.</param>
+    /// <param name="pageNumber">The number of the page to return, this starts from 1.</param>
+    /// <returns>The <see cref="SKPicture"/>.</returns>
+    public static SKPicture GetPageAsSKPicture(this PdfDocument document, int pageNumber)
+    {
+        return document.GetPage<SKPicture>(pageNumber);
+    }
+
+    /// <summary>
+    /// Get the pdf page as a <see cref="SKBitmap"/>.
+    /// </summary>
+    /// <param name="document">The pdf document.</param>
+    /// <param name="pageNumber">The number of the page to return, this starts from 1.</param>
+    /// <param name="scale">The scale factor to use when rendering the page.</param>
+    /// <param name="clearColor">Optional background color to clear the canvas with before rendering. If null, the canvas is not cleared.</param>
+    /// <returns>The <see cref="SKBitmap"/>.</returns>
+    public static SKBitmap GetPageAsSKBitmap(this PdfDocument document, int pageNumber, float scale = 1, SKColor? clearColor = null)
+    {
+        using (var picture = document.GetPage<SKPicture>(pageNumber))
         {
-            using (var picture = document.GetPage<SKPicture>(pageNumber))
+            var page = document.GetPageSize(pageNumber);
+            var size = new SKSizeI((int)Math.Ceiling(page.Width * scale), (int)Math.Ceiling(page.Height * scale));
+            var scaleMatrix = SKMatrix.CreateScale(scale, scale);
+
+            var bitmap = new SKBitmap(size.Width, size.Height);
+            using (var canvas = new SKCanvas(bitmap))
             {
-                var page = document.GetPage(pageNumber);
-                var size = new SKSizeI((int)Math.Ceiling(page.Width * scale), (int)Math.Ceiling(page.Height * scale));
-                var scaleMatrix = SKMatrix.CreateScale(scale, scale);
-
-                var bitmap = new SKBitmap(size.Width, size.Height);
-                using (var canvas = new SKCanvas(bitmap))
+                if (clearColor.HasValue)
                 {
-                    if (clearColor.HasValue)
-                    {
-                        canvas.Clear(clearColor.Value);
-                    }
-                    canvas.DrawPicture(picture, in scaleMatrix);
-                    return bitmap;
+                    canvas.Clear(clearColor.Value);
                 }
+                canvas.DrawPicture(picture, in scaleMatrix);
+                return bitmap;
             }
         }
+    }
 
-        /// <summary>
-        /// Get the pdf page as a Png stream.
-        /// </summary>
-        /// <param name="document">The pdf document.</param>
-        /// <param name="pageNumber">The number of the page to return, this starts from 1.</param>
-        /// <param name="scale">The scale factor to use when rendering the page.</param>
-        /// <param name="quality">The Png quality.</param>
-        /// <returns>The Png stream.</returns>
-        public static MemoryStream GetPageAsPng(this PdfDocument document, int pageNumber, float scale = 1, int quality = 100)
+    /// <summary>
+    /// Get the pdf page as a Png stream.
+    /// </summary>
+    /// <param name="document">The pdf document.</param>
+    /// <param name="pageNumber">The number of the page to return, this starts from 1.</param>
+    /// <param name="scale">The scale factor to use when rendering the page.</param>
+    /// <param name="quality">The Png quality.</param>
+    /// <returns>The Png stream.</returns>
+    public static MemoryStream GetPageAsPng(this PdfDocument document, int pageNumber, float scale = 1, int quality = 100)
+    {
+        var ms = new MemoryStream();
+        using (var bitmap = document.GetPageAsSKBitmap(pageNumber, scale, SKColors.White))
         {
-            var ms = new MemoryStream();
-            using (var bitmap = document.GetPageAsSKBitmap(pageNumber, scale, SKColors.White))
-            {
-                bitmap.Encode(ms, SKEncodedImageFormat.Png, quality);
-                ms.Position = 0;
-                return ms;
-            }
+            bitmap.Encode(ms, SKEncodedImageFormat.Png, quality);
+            ms.Position = 0;
+            return ms;
         }
+    }
 
-        internal static ArrayToken ToArrayToken(this PdfRectangle rectangle)
+    internal static ArrayToken ToArrayToken(this PdfRectangle rectangle)
+    {
+        return new ArrayToken(new[]
         {
-            return new ArrayToken(new[]
-            {
                 new NumericToken(rectangle.Left),
                 new NumericToken(rectangle.Bottom),
                 new NumericToken(rectangle.Right),
                 new NumericToken(rectangle.Top)
             });
-        }
+    }
 
-        internal static ArrayToken ToArrayToken(this TransformationMatrix matrix)
+    internal static ArrayToken ToArrayToken(this TransformationMatrix matrix)
+    {
+        return new ArrayToken(new[]
         {
-            return new ArrayToken(new[]
-            {
                 new NumericToken(matrix.A), new NumericToken(matrix.B), new NumericToken(matrix[0, 2]),
                 new NumericToken(matrix.C), new NumericToken(matrix.D), new NumericToken(matrix[1, 2]),
                 new NumericToken(matrix.E), new NumericToken(matrix.F), new NumericToken(matrix[2, 2]),
             });
-        }
     }
 }
