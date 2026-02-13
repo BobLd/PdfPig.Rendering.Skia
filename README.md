@@ -23,7 +23,7 @@ using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instan
 {
 	string fileName = Path.GetFileName(_path);
 
-	document.AddSkiaPageFactory(); // Same as document.AddPageFactory<SKPicture, SkiaPageFactory>()
+	document.AddSkiaPageFactory(); // Same as document.AddPageFactory<SKPicture, SkiaPageFactory>() and document.AddPageFactory<PdfPageSize, PageSizeFactory>()
 
 	for (int p = 1; p <= document.NumberOfPages; p++)
 	{
@@ -47,7 +47,7 @@ using SkiaSharp;
 
 using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instance))
 {
-	document.AddSkiaPageFactory(); // Same as document.AddPageFactory<SKPicture, SkiaPageFactory>()
+	document.AddSkiaPageFactory(); // Same as document.AddPageFactory<SKPicture, SkiaPageFactory>() and document.AddPageFactory<PdfPageSize, PageSizeFactory>()
 
 	for (int p = 1; p <= document.NumberOfPages; p++)
 	{
@@ -58,6 +58,7 @@ using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instan
 ```
 
 ### Get the `SKPicture` from a page
+Starting from version `0.1.14.1`, the `SKPicture.CullRect` cannot be used anymore to get the page size.
 ```csharp
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig;
@@ -68,7 +69,7 @@ using SkiaSharp;
 
 using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instance))
 {
-	document.AddSkiaPageFactory(); // Same as document.AddPageFactory<SKPicture, SkiaPageFactory>()
+	document.AddSkiaPageFactory(); // Same as document.AddPageFactory<SKPicture, SkiaPageFactory>() and document.AddPageFactory<PdfPageSize, PageSizeFactory>()
 
 	for (int p = 1; p <= document.NumberOfPages; p++)
 	{
