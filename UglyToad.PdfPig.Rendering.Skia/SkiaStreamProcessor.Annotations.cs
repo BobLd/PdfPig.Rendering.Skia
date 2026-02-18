@@ -484,7 +484,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     var dict = annotation.AnnotationDictionary
                         .With(NameToken.Rect, rect.ToArrayToken());
-                    dict = setTransformationMatrix(dict, annotation.Rectangle);
+                    dict = SetTransformationMatrix(dict, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -674,7 +674,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     var dict = annotation.AnnotationDictionary
                         .With(NameToken.Rect, rect.ToArrayToken());
-                    dict = setTransformationMatrix(dict, annotation.Rectangle);
+                    dict = SetTransformationMatrix(dict, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -794,7 +794,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     var dict = annotation.AnnotationDictionary
                         .With(NameToken.Rect, rect.ToArrayToken());
-                    dict = setTransformationMatrix(dict, annotation.Rectangle);
+                    dict = SetTransformationMatrix(dict, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -940,7 +940,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     var dict = annotation.AnnotationDictionary
                         .With(NameToken.Rect, rect.ToArrayToken());
-                    dict = setTransformationMatrix(dict, annotation.Rectangle);
+                    dict = SetTransformationMatrix(dict, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -1019,13 +1019,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 var dict = annotation.AnnotationDictionary
                     .With(NameToken.Rect, rect.ToArrayToken());
-                dict = setTransformationMatrix(dict, annotation.Rectangle);
+                dict = SetTransformationMatrix(dict, annotation.Rectangle);
 
                 return new StreamToken(dict, ms.ToArray());
             }
         }
 
-        private static DictionaryToken setTransformationMatrix(DictionaryToken annotationDictionary, PdfRectangle bbox)
+        private static DictionaryToken SetTransformationMatrix(DictionaryToken annotationDictionary, PdfRectangle bbox)
         {
             // https://github.com/apache/pdfbox/blob/c4b212ecf42a1c0a55529873b132ea338a8ba901/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/interactive/annotation/handlers/PDAbstractAppearanceHandler.java#L511
             return annotationDictionary

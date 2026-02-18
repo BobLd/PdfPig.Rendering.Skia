@@ -16,7 +16,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using SkiaSharp;
 using UglyToad.PdfPig.Fonts.SystemFonts;
@@ -142,23 +141,34 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         private SkiaFontCacheItem SetFontCacheItem(string fontKey, SKTypeface? typeface)
         {
+            // Resolve the item first so we can use reference equality for the default.
+            var item = typeface is null || typeface.IsDefault()
+                ? DefaultSkiaFontCacheItem.Value
+                : new SkiaFontCacheItem(typeface);
+
             if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem>? skiaFontCacheItems))
             {
-                // Make sure the font is not already cached
-                SkiaFontCacheItem? skiaFontCacheItem = skiaFontCacheItems.FirstOrDefault(x => x.Typeface.Equals(typeface));
-                if (skiaFontCacheItem is not null)
+                // For the singleton default item use reference equality so we don't keep
+                // appending it to the list on every call when the typeface is null/default.
+                if (ReferenceEquals(item, DefaultSkiaFontCacheItem.Value))
+                {
+                    if (skiaFontCacheItems.Any(x => ReferenceEquals(x, item)))
+                    {
+                        return item;
+                    }
+                }
+                else
                 {
                     // TODO - We might want to improve the equality check here
                     // This is the best we could find, might not render
                     // properly though (see MOZILLA-3136-0.pdf)
-                    return skiaFontCacheItem;
+                    SkiaFontCacheItem? existing = skiaFontCacheItems.FirstOrDefault(x => x.Typeface.Equals(typeface));
+                    if (existing is not null)
+                    {
+                        return existing;
+                    }
                 }
             }
-
-            // Check if we need to create cache item
-            var item = typeface is null || typeface.IsDefault()
-                ? DefaultSkiaFontCacheItem.Value
-                : new SkiaFontCacheItem(typeface);
 
             if (skiaFontCacheItems is null)
             {
@@ -188,7 +198,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         private static int GetCodepoint(string unicode)
         {
-            return BitConverter.ToInt32(Encoding.UTF32.GetBytes(unicode), 0);
+            return string.IsNullOrEmpty(unicode) ? 0 : char.ConvertToUtf32(unicode, 0);
         }
 
         private bool IsDisposed()

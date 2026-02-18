@@ -110,20 +110,20 @@ public static class PdfPigExtensions
     {
         return new ArrayToken(new[]
         {
-                new NumericToken(rectangle.Left),
-                new NumericToken(rectangle.Bottom),
-                new NumericToken(rectangle.Right),
-                new NumericToken(rectangle.Top)
-            });
+            new NumericToken(rectangle.Left),
+            new NumericToken(rectangle.Bottom),
+            new NumericToken(rectangle.Right),
+            new NumericToken(rectangle.Top)
+        });
     }
 
     internal static ArrayToken ToArrayToken(this TransformationMatrix matrix)
     {
         return new ArrayToken(new[]
         {
-                new NumericToken(matrix.A), new NumericToken(matrix.B), new NumericToken(matrix[0, 2]),
-                new NumericToken(matrix.C), new NumericToken(matrix.D), new NumericToken(matrix[1, 2]),
-                new NumericToken(matrix.E), new NumericToken(matrix.F), new NumericToken(matrix[2, 2]),
-            });
+            new NumericToken(matrix.A), new NumericToken(matrix.B),
+            new NumericToken(matrix.C), new NumericToken(matrix.D),
+            new NumericToken(matrix.E), new NumericToken(matrix.F),
+        });
     }
 }
