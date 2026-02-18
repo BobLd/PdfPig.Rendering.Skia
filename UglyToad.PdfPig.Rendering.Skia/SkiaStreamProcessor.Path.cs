@@ -70,7 +70,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            _currentPath.QuadTo((float)x2, (float)y2, (float)x3, (float)y3);
+            var cp = _currentPath.LastPoint;
+            _currentPath.CubicTo(cp.X, cp.Y, (float)x2, (float)y2, (float)x3, (float)y3);
         }
 
         public override void BezierCurveTo(double x1, double y1, double x2, double y2, double x3, double y3)
@@ -198,7 +199,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 if (currentState.CurrentNonStrokingColor is not PatternColor pattern)
                 {
-                    throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got {currentState.CurrentStrokingColor.GetType()}");
+                    throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got {currentState.CurrentNonStrokingColor.GetType()}");
                 }
 
                 switch (pattern.PatternType)
