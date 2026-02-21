@@ -174,8 +174,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         }
 
                         // TODO - Add tests
-                        CmykToRgb(in range[0], in range[1], in range[2], in range[3], out rMin, out gMin, out bMin);
-                        CmykToRgb(in range[4], in range[5], in range[6], in range[7], out rMax, out gMax, out bMax);
+                        SkiaExtensions.ApproximateCmykToRgb(in range[0], in range[1], in range[2], in range[3], out rMin, out gMin, out bMin);
+                        SkiaExtensions.ApproximateCmykToRgb(in range[4], in range[5], in range[6], in range[7], out rMax, out gMax, out bMax);
                     }
                     else if (numberOfComponents == 3)
                     {
@@ -219,7 +219,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     {
                         for (int col = 0; col < width; ++col)
                         {
-                            CmykToRgb(in imageSpan[i++], in imageSpan[i++], in imageSpan[i++], in imageSpan[i++],
+                            SkiaExtensions.ApproximateCmykToRgb(in imageSpan[i++], in imageSpan[i++], in imageSpan[i++], in imageSpan[i++],
                                 out byte r, out byte g, out byte b);
 
                             var start = (row * (width * bytesPerPixel)) + (col * bytesPerPixel);
@@ -309,24 +309,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             skBitmap?.Dispose();
             return false;
-        }
-
-        private static void CmykToRgb(in byte c, in byte m, in byte y, in byte k, out byte r, out byte g, out byte b)
-        {
-            /*
-             * Where CMYK in 0..1
-             * R = 255 × (1-C) × (1-K)
-             * G = 255 × (1-M) × (1-K)
-             * B = 255 × (1-Y) × (1-K)
-             */
-
-            double cD = c / 255d;
-            double mD = m / 255d;
-            double yD = y / 255d;
-            double kD = k / 255d;
-            r = (byte)(255 * (1 - cD) * (1 - kD));
-            g = (byte)(255 * (1 - mD) * (1 - kD));
-            b = (byte)(255 * (1 - yD) * (1 - kD));
         }
 
         private static SKSamplingOptions GetSamplingOption(this IPdfImage pdfImage)
