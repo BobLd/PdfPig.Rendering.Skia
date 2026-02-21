@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System;
+using System.Runtime.CompilerServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Colors;
@@ -234,6 +235,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         {
             if (pdfColor is not null)
             {
+                if (pdfColor is CMYKColor cmyk)
+                {
+                    return cmyk.ToSKColor(alpha);
+                }
+
                 var (r, g, b) = pdfColor.ToRGBValues();
 
                 if (r >= 0 && r <= 1 && g >= 0 && g <= 1 && b >= 0 && b <= 1)
@@ -257,6 +263,32 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return SKColors.Black.WithAlpha(Convert.ToByte(alpha * 255));
         }
 
+        public static SKColor ToSKColor(this CMYKColor cmyk, double alpha)
+        {
+            byte c, m, y, k;
+            if (cmyk.C >= 0 && cmyk.C <= 1 && cmyk.M >= 0 && cmyk.M <= 1 &&
+                cmyk.Y >= 0 && cmyk.Y <= 1 && cmyk.K >= 0 && cmyk.K <= 1)
+            {
+                // This is the expected case
+                c = ConvertToByte(cmyk.C * 255);
+                m = ConvertToByte(cmyk.M * 255);
+                y = ConvertToByte(cmyk.Y * 255);
+                k  = ConvertToByte(cmyk.K * 255);
+            }
+            else
+            {
+                // Should never happen, but happens with RGB color space in GHOSTSCRIPT-686749-1.pdf
+                c = ConvertToByte(cmyk.C);
+                m = ConvertToByte(cmyk.M);
+                y = ConvertToByte(cmyk.Y);
+                k = ConvertToByte(cmyk.K);
+            }
+
+            ApproximateCmykToRgb(c, m, y, k, out byte r, out byte g, out byte b);
+            return new SKColor(r, g, b, Convert.ToByte(alpha * 255));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static byte ConvertToByte(double v)
         {
             return v switch
@@ -266,7 +298,37 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 _ => (byte)v
             };
         }
-        
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void ApproximateCmykToRgb(in byte cIn, in byte mIn, in byte yIn, in byte kIn, out byte r, out byte g, out byte b)
+        {
+            // From https://graphicdesign.stackexchange.com/questions/114260/alternative-formulae-for-cmyk-to-rgb-conversion-for-display-on-screen
+
+            // inputs are c,m,y,k components on a 0-1 scale
+            // work with INVERSE of CMYK values, on a 0-255 scale
+            float c = 255 * (1 - cIn / 255f);
+            float m = 255 * (1 - mIn / 255f);
+            float y = 255 * (1 - yIn / 255f);
+            float k = 255 * (1 - kIn / 255f);
+
+            float rf = 80 + 0.5882f * c - 0.3529f * m - 0.1373f * y + 0.00185f * c * m + 0.00046f * y * c; // no YM
+            float gf = 66 - 0.1961f * c + 0.2745f * m - 0.0627f * y + 0.00215f * c * m + 0.00008f * y * c + 0.00062f * y * m;
+            float bf = 86 - 0.3255f * c - 0.1569f * m + 0.1647f * y + 0.00046f * c * m + 0.00123f * y * c + 0.00215f * y * m;
+
+            r = Clamp(rf * k / 255);
+            g = Clamp(gf * k / 255);
+            b = Clamp(bf * k / 255);
+
+            static byte Clamp(float value)
+            {
+                if (value < 0) return 0;
+                if (value > 255) return 255;
+                return (byte)value;
+            }
+
+            // See also https://github.com/UglyToad/PdfPig/issues/1144
+        }
+
         public static SKMatrix ToSkMatrix(this TransformationMatrix transformationMatrix)
         {
             return new SKMatrix((float)transformationMatrix.A, (float)transformationMatrix.C,
