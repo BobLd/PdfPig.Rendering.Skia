@@ -19,6 +19,7 @@ using UglyToad.PdfPig.Annotations;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Geometry;
 using UglyToad.PdfPig.Graphics.Colors;
+using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.Graphics.Operations;
 using UglyToad.PdfPig.Graphics.Operations.MarkedContent;
 using UglyToad.PdfPig.Graphics.Operations.PathConstruction;
@@ -109,6 +110,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     PushState();
                     int gsCount = GraphicsStack.Count;
 
+                    // For annotations rendered from a generated appearance stream (no real AP entry),
+                    // apply annotation-specific blend mode and constant opacity (CA).
+                    if (GetAppearance(annotation) is null)
+                    {
+                        ApplyAnnotationGraphicsState(annotation);
+                    }
+
                     // https://github.com/apache/pdfbox/blob/47867f7eee275e9e54a87222b66ab14a8a3a062a/pdfbox/src/main/java/org/apache/pdfbox/contentstream/PDFStreamEngine.java#L310
                     // transformed appearance box  fixme: may be an arbitrary shape
                     PdfRectangle transformedBox = matrix.Transform(bbox.Value).Normalise();
@@ -153,6 +161,30 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 x0, x1, x2,
                 y0, y1, y2,
                 matrix[2, 0], matrix[2, 1], matrix[2, 2]);
+        }
+
+        /// <summary>
+        /// Applies annotation-specific blend mode and constant opacity (CA) to the current graphics
+        /// state for annotations rendered from a generated appearance stream.
+        /// </summary>
+        private void ApplyAnnotationGraphicsState(Annotation annotation)
+        {
+            // Read the annotation's constant opacity (CA); defaults to fully opaque.
+            double opacity = 1.0;
+            if (annotation.AnnotationDictionary.TryGet<NumericToken>(NameToken.Ca, PdfScanner, out var caToken))
+            {
+                opacity = caToken.Double;
+            }
+
+            var currentState = GetCurrentState();
+            currentState.AlphaConstantNonStroking = opacity;
+            currentState.AlphaConstantStroking = opacity;
+
+            // Highlight annotations use Multiply blend mode to simulate a transparent highlighter pen.
+            if (annotation.Type == AnnotationType.Highlight)
+            {
+                currentState.BlendMode = BlendMode.Multiply;
+            }
         }
 
         private StreamToken? GetNormalAppearanceAsStream(Annotation annotation)
@@ -430,7 +462,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 using (var ms = new MemoryStream())
                 {
-                    //setOpacity(cs, annotation.getConstantOpacity()); // TODO
 
                     GetAnnotationStrokeColorOperation(color)?.Write(ms);
 
@@ -746,7 +777,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 using (var ms = new MemoryStream())
                 {
-                    //setOpacity(cs, annotation.getConstantOpacity()); // TODO
 
                     GetAnnotationStrokeColorOperation(color)?.Write(ms);
 
