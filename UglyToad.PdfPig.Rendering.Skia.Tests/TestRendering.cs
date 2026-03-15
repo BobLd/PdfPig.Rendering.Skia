@@ -528,7 +528,34 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             {
                 "GHOSTSCRIPT-692958-0.zip-2_1.png",
                 "GHOSTSCRIPT-692958-0.zip-2.pdf", 1, 2
-            }
+            },
+
+            new object[]
+            {
+                "PDFBOX-2100-gouraud-RGB-function_1.png",
+                "PDFBOX-2100-gouraud-RGB-function.pdf", 1, 2
+            },
+            
+            new object[]
+            {
+                "MOZILLA-LINK-6305-5_1.png",
+                "MOZILLA-LINK-6305-5.pdf", 1, 2
+            },
+            new object[]
+            {
+                "MOZILLA-LINK-6305-5_13.png",
+                "MOZILLA-LINK-6305-5.pdf", 13, 2
+            },
+            new object[]
+            {
+                "MOZILLA-LINK-6305-5_15.png",
+                "MOZILLA-LINK-6305-5.pdf", 15, 2
+            },
+            new object[]
+            {
+                "MOZILLA-LINK-6305-5_20.png",
+                "MOZILLA-LINK-6305-5.pdf", 20, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
