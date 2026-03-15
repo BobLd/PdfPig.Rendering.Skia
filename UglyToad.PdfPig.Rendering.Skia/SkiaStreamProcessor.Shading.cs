@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using SkiaSharp;
@@ -50,6 +51,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     break;
 
                 case ShadingType.FreeFormGouraud:
+                    RenderFreeFormGouraudShading(shading as FreeFormGouraudShading, in SKMatrix.Identity, minX, minY, maxX, maxY);
+                    break;
+
                 case ShadingType.LatticeFormGouraud:
                 case ShadingType.CoonsPatch:
                 case ShadingType.TensorProductPatch:
@@ -260,6 +264,196 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <summary>
+        /// Renders a Type 4 Free-Form Gouraud-Shaded Triangle Mesh.
+        /// <para>
+        /// Parses vertex records from the shading stream (each record: BitsPerFlag flag bits,
+        /// BitsPerCoordinate x bits, BitsPerCoordinate y bits, BitsPerComponent × n colour bits,
+        /// padded to a byte boundary), decodes coordinates and colours using the Decode array,
+        /// builds triangles according to the edge-flag rules (0 = new free triangle; 1 = share
+        /// edge v[−2]–v[−1]; 2 = share edge v[−3]–v[−1]), and draws them via
+        /// <see cref="SKCanvas.DrawVertices"/> for hardware-accelerated Gouraud interpolation.
+        /// </para>
+        /// Based on https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/graphics/shading/GouraudShadingContext.java
+        /// and https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/graphics/shading/TriangleBasedShadingContext.java
+        /// </summary>
+        private void RenderFreeFormGouraudShading(FreeFormGouraudShading shading, in SKMatrix patternTransformMatrix,
+            float minX, float minY, float maxX, float maxY, bool isStroke = false, SKPath? path = null)
+        {
+            if (shading.Data.IsEmpty)
+            {
+                return;
+            }
+
+            var currentState = GetCurrentState();
+
+            int bitsPerFlag = shading.BitsPerFlag;
+            int bitsPerCoordinate = shading.BitsPerCoordinate;
+            int bitsPerComponent = shading.BitsPerComponent;
+            var decode = shading.Decode;
+
+            // Number of colour components encoded per vertex in the stream:
+            // 1 if a Function is present (parametric variable), otherwise n = colour-space components.
+            // Derived from the Decode array: [xmin xmax ymin ymax c1min c1max … cnmin cnmax]
+            int numStreamColorComponents = (decode.Length - 4) / 2;
+
+            double maxCoordRaw = (1L << bitsPerCoordinate) - 1.0;
+            double maxColorRaw = (1L << bitsPerComponent) - 1.0;
+
+            double xMin = decode[0], xMax = decode[1];
+            double yMin = decode[2], yMax = decode[3];
+
+            // Storage for the triangles that will be passed to DrawVertices.
+            // Each triangle contributes exactly 3 entries (one per corner).
+            var positions = new List<SKPoint>();
+            var colors = new List<SKColor>();
+
+            // The three corners of the most-recently completed triangle.
+            // Required for edge-sharing flags 1 and 2.
+            var prevTri = new (SKPoint pt, SKColor col)[3];
+            bool hasPrevTri = false;
+
+            // Accumulator for consecutive flag-0 vertices (need 3 to form a free triangle).
+            var flag0Buf = new (SKPoint pt, SKColor col)[3];
+            int flag0Count = 0;
+
+            var bitReader = new GouraudBitReader(shading.Data.Span);
+
+            while (bitReader.HasData)
+            {
+                int flag;
+                long rawX, rawY;
+                double[] rawC = new double[numStreamColorComponents];
+
+                try
+                {
+                    flag = (int)(bitReader.ReadBits(bitsPerFlag) & 3);
+                    rawX = bitReader.ReadBits(bitsPerCoordinate);
+                    rawY = bitReader.ReadBits(bitsPerCoordinate);
+                    for (int i = 0; i < numStreamColorComponents; i++)
+                    {
+                        rawC[i] = bitReader.ReadBits(bitsPerComponent);
+                    }
+
+                    // PDF spec: each vertex record occupies a whole number of bytes.
+                    bitReader.AlignToByte();
+                }
+                catch
+                {
+                    break;
+                }
+
+                // Decode coordinates via linear interpolation from raw integer range to Decode range.
+                double x = xMin + (rawX / maxCoordRaw) * (xMax - xMin);
+                double y = yMin + (rawY / maxCoordRaw) * (yMax - yMin);
+
+                // Decode colour components.
+                double[] colorComponents = new double[numStreamColorComponents];
+                for (int i = 0; i < numStreamColorComponents; i++)
+                {
+                    double cMin = decode[4 + i * 2];
+                    double cMax = decode[5 + i * 2];
+                    colorComponents[i] = cMin + (rawC[i] / maxColorRaw) * (cMax - cMin);
+                }
+
+                // Evaluate optional function and convert to an SKColor through the colour space.
+                double[] evalResult = shading.Eval(colorComponents);
+                SKColor skColor = shading.ColorSpace.GetColor(evalResult).ToSKColor(currentState.AlphaConstantNonStroking);
+
+                // Transform the vertex from shading/pattern space to canvas space.
+                SKPoint pt = patternTransformMatrix.MapPoint(new SKPoint((float)x, (float)y));
+
+                // Build triangles according to the edge-flag value (PDF spec Table 92).
+                switch (flag)
+                {
+                    case 0:
+                        // Accumulate free vertices; emit a triangle once three are collected.
+                        flag0Buf[flag0Count] = (pt, skColor);
+                        flag0Count++;
+
+                        if (flag0Count == 3)
+                        {
+                            for (int i = 0; i < 3; i++)
+                            {
+                                positions.Add(flag0Buf[i].pt);
+                                colors.Add(flag0Buf[i].col);
+                                prevTri[i] = flag0Buf[i];
+                            }
+                            hasPrevTri = true;
+                            flag0Count = 0;
+                        }
+                        break;
+
+                    case 1:
+                        // New triangle shares edge prevTri[1]–prevTri[2] with the previous triangle.
+                        if (hasPrevTri)
+                        {
+                            positions.Add(prevTri[1].pt);
+                            positions.Add(prevTri[2].pt);
+                            positions.Add(pt);
+                            colors.Add(prevTri[1].col);
+                            colors.Add(prevTri[2].col);
+                            colors.Add(skColor);
+
+                            // Slide the window: new prevTri = [prevTri[1], prevTri[2], newVertex]
+                            prevTri[0] = prevTri[1];
+                            prevTri[1] = prevTri[2];
+                            prevTri[2] = (pt, skColor);
+                            flag0Count = 0;
+                        }
+                        break;
+
+                    case 2:
+                        // New triangle shares edge prevTri[0]–prevTri[2] with the previous triangle.
+                        if (hasPrevTri)
+                        {
+                            positions.Add(prevTri[0].pt);
+                            positions.Add(prevTri[2].pt);
+                            positions.Add(pt);
+                            colors.Add(prevTri[0].col);
+                            colors.Add(prevTri[2].col);
+                            colors.Add(skColor);
+
+                            // Slide the window: new prevTri = [prevTri[0], prevTri[2], newVertex]
+                            prevTri[1] = prevTri[2];
+                            prevTri[2] = (pt, skColor);
+                            flag0Count = 0;
+                        }
+                        break;
+                }
+            }
+
+            if (positions.Count == 0)
+            {
+                return;
+            }
+
+            SKPoint[] posArray = positions.ToArray();
+            SKColor[] colArray = colors.ToArray();
+
+            using var paint = new SKPaint();
+            paint.IsAntialias = shading.AntiAlias;
+            paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
+            // White paint + Modulate: vertex_colour × (1,1,1,1) = vertex_colour.
+            // This preserves the Gouraud-interpolated colours regardless of which role
+            // (src / dst) SkiaSharp assigns to the vertex vs. paint colour.
+            paint.Color = SKColors.White;
+
+            if (path is not null)
+            {
+                _canvas.Save();
+                _canvas.ClipPath(path);
+            }
+
+            // paint.BlendMode handles compositing the result with the existing canvas content.
+            _canvas.DrawVertices(SKVertexMode.Triangles, posArray, null, colArray, SKBlendMode.Modulate, null, paint);
+
+            if (path is not null)
+            {
+                _canvas.Restore();
+            }
+        }
+
+        /// <summary>
         /// see PDFBOX-1869-4.pdf
         /// </summary>
         private void RenderFunctionBasedShading(FunctionBasedShading shading, in SKMatrix patternTransformMatrix,
@@ -421,6 +615,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     break;
 
                 case ShadingType.FreeFormGouraud:
+                    RenderFreeFormGouraudShading(pattern.Shading as FreeFormGouraudShading, in patternTransform, minX, minY, maxX, maxY, isStroke, path);
+                    break;
+
                 case ShadingType.LatticeFormGouraud:
                 case ShadingType.CoonsPatch:
                 case ShadingType.TensorProductPatch:
@@ -433,6 +630,62 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private void RenderTilingPatternCurrentPath(TilingPatternColor pattern, bool isStroke)
         {
             RenderTilingPattern(_currentPath, pattern, isStroke);
+        }
+
+        /// <summary>
+        /// Reads a packed bit-stream MSB-first, as required by PDF Type 4–7 shading vertex data.
+        /// Each vertex record is padded to a whole number of bytes (<see cref="AlignToByte"/>).
+        /// </summary>
+        private ref struct GouraudBitReader
+        {
+            private readonly ReadOnlySpan<byte> _data;
+            private int _bytePos;
+            private int _bitPos; // 7 = MSB of current byte, 0 = LSB
+
+            public GouraudBitReader(ReadOnlySpan<byte> data)
+            {
+                _data = data;
+                _bytePos = 0;
+                _bitPos = 7;
+            }
+
+            /// <summary>Returns <see langword="true"/> when there is at least one more byte to read.</summary>
+            public readonly bool HasData => _bytePos < _data.Length;
+
+            /// <summary>Reads <paramref name="count"/> bits and returns them as a non-negative <see cref="long"/>, MSB first.</summary>
+            public long ReadBits(int count)
+            {
+                long result = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    if (_bytePos >= _data.Length)
+                    {
+                        throw new InvalidOperationException("Unexpected end of shading stream.");
+                    }
+
+                    result = (result << 1) | (long)((_data[_bytePos] >> _bitPos) & 1);
+                    if (--_bitPos < 0)
+                    {
+                        _bitPos = 7;
+                        _bytePos++;
+                    }
+                }
+                return result;
+            }
+
+            /// <summary>
+            /// Advances the read position to the start of the next byte,
+            /// discarding any remaining bits in the current byte.
+            /// No-op when already at a byte boundary.
+            /// </summary>
+            public void AlignToByte()
+            {
+                if (_bitPos != 7)
+                {
+                    _bitPos = 7;
+                    _bytePos++;
+                }
+            }
         }
 
         private void RenderTilingPattern(SKPath path, TilingPatternColor pattern, bool isStroke)
