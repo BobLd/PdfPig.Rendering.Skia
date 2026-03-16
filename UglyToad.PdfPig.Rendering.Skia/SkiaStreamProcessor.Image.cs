@@ -71,6 +71,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 else
                 {
                     // Draw image mask
+                    if (Helpers.SkiaExtensions.ShouldSkipForOverprint(currentState.NonStrokingOverprint, currentState.OverprintMode,
+                        currentState.CurrentNonStrokingColor,
+                        currentState.ColorSpaceContext?.CurrentNonStrokingColorSpace))
+                    {
+                        return;
+                    }
+
                     SKColor colour = currentState.CurrentNonStrokingColor
                         .ToSKColor(currentState.AlphaConstantNonStroking);
                         

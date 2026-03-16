@@ -123,7 +123,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                                 break;
                         }
                     }
-                    else
+                    else if (!Helpers.SkiaExtensions.ShouldSkipForOverprint(currentState.NonStrokingOverprint, currentState.OverprintMode,
+                        nonStrokingColor, currentState.ColorSpaceContext?.CurrentNonStrokingColorSpace))
                     {
                         var fillBrush = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
                             null, null, null, null, currentState.BlendMode);
@@ -134,10 +135,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 if (stroke)
                 {
                     // Then stroke
-                    var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
-                        (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
-                        currentState.LineDashPattern, currentState.BlendMode);
-                    _canvas.DrawPath(transformedPath, strokePaint);
+                    if (!Helpers.SkiaExtensions.ShouldSkipForOverprint(currentState.Overprint, currentState.OverprintMode,
+                        strokingColor, currentState.ColorSpaceContext?.CurrentStrokingColorSpace))
+                    {
+                        var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
+                            (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
+                            currentState.LineDashPattern, currentState.BlendMode);
+                        _canvas.DrawPath(transformedPath, strokePaint);
+                    }
                 }
             }
         }
@@ -182,6 +187,17 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var color = style == SKPaintStyle.Stroke ? strokingColor : nonStrokingColor; // TODO - very not correct
 
             var currentState = GetCurrentState();
+
+            bool overprintActive = style == SKPaintStyle.Stroke
+                ? currentState.Overprint
+                : currentState.NonStrokingOverprint;
+            var overprintColorSpace = style == SKPaintStyle.Stroke
+                ? currentState.ColorSpaceContext?.CurrentStrokingColorSpace
+                : currentState.ColorSpaceContext?.CurrentNonStrokingColorSpace;
+            if (Helpers.SkiaExtensions.ShouldSkipForOverprint(overprintActive, currentState.OverprintMode, color, overprintColorSpace))
+            {
+                return;
+            }
 
             using (var skFont = drawTypeface.Typeface.ToFont(1f))
             using (var paint = new SKPaint())

@@ -337,6 +337,88 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 0, 0, 1);
         }
 
+        /// <summary>
+        /// Returns <see langword="true"/> if the paint operation should be skipped due to overprint.
+        /// <para>
+        /// Implements a screen-rendering approximation of PDF overprint control (§8.6.7):
+        /// <list type="bullet">
+        ///   <item><b>DeviceCMYK + OPM=1:</b> A zero-valued component is preserved from the background.
+        ///   We skip the paint only when ALL four components are zero (white/no-ink overprint).
+        ///   Partial-zero cases require per-channel compositing which is not feasible in Skia.</item>
+        ///   <item><b>Separation + overprint:</b> A tint of 0 applies no colorant; skip when the
+        ///   resolved alternate-space color carries no ink.</item>
+        ///   <item><b>DeviceN + overprint:</b> Skip when all components resolve to no ink.</item>
+        ///   <item><b>OPM=0 / DeviceGray / DeviceRGB / …:</b> No skip; current painting is already
+        ///   correct for a screen renderer.</item>
+        /// </list>
+        /// </para>
+        /// </summary>
+        internal static bool ShouldSkipForOverprint(
+            bool overprintActive,
+            double overprintMode,
+            IColor? color,
+            ColorSpaceDetails? colorSpaceDetails)
+        {
+            if (!overprintActive || color is null)
+            {
+                return false;
+            }
+
+            switch (colorSpaceDetails?.Type ?? color.ColorSpace)
+            {
+                case ColorSpace.DeviceCMYK:
+                    // OPM=0: zero components knock out that channel, which is the default raster
+                    // behaviour — no change needed.
+                    // OPM=1: zero components are preserved from the background.
+                    //   Approximation: skip only when ALL components are zero (no-ink / white overprint).
+                    if (overprintMode >= 1 && color is CMYKColor cmyk)
+                    {
+                        return cmyk.C == 0 && cmyk.M == 0 && cmyk.Y == 0 && cmyk.K == 0;
+                    }
+                    return false;
+
+                case ColorSpace.Separation:
+                    // A Separation tint of 0 means no colorant is applied; with overprint the
+                    // background for that colorant is preserved → no-op on screen.
+                    return IsNoInk(color);
+
+                case ColorSpace.DeviceN:
+                    // All-zero DeviceN components means no colorant; with overprint → no-op.
+                    return IsNoInk(color);
+
+                default:
+                    // DeviceGray, DeviceRGB, CIE-based, ICCBased (non-CMYK), Indexed, Pattern:
+                    // Overprint is not approximatable for screen rendering.
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns <see langword="true"/> when <paramref name="color"/> carries no ink
+        /// (i.e. it is the subtractive equivalent of white / no colorant applied).
+        /// </summary>
+        private static bool IsNoInk(IColor color)
+        {
+            if (color is CMYKColor cmyk)
+            {
+                return cmyk.C == 0 && cmyk.M == 0 && cmyk.Y == 0 && cmyk.K == 0;
+            }
+
+            if (color is GrayColor gray)
+            {
+                // Gray=1.0 is white; white = no ink in a subtractive model.
+                return gray.Gray >= 1.0;
+            }
+
+            if (color is RGBColor rgb)
+            {
+                // RGB(1,1,1) is white; treat as no ink for Separation/DeviceN alternate spaces.
+                return rgb.R >= 1.0 && rgb.G >= 1.0 && rgb.B >= 1.0;
+            }
+
+            return false;
+        }
+
         public static SKBlendMode ToSKBlendMode(this BlendMode blendMode)
         {
 

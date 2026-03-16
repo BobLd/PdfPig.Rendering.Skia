@@ -159,6 +159,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
             else
             {
+                if (Helpers.SkiaExtensions.ShouldSkipForOverprint(currentState.Overprint, currentState.OverprintMode,
+                    currentState.CurrentStrokingColor,
+                    currentState.ColorSpaceContext?.CurrentStrokingColorSpace))
+                {
+                    return;
+                }
+
                 var paint = _paintCache.GetPaint(currentState.CurrentStrokingColor, currentState.AlphaConstantStroking, true,
                     (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
                     currentState.LineDashPattern, currentState.BlendMode);
@@ -215,6 +222,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
             else
             {
+                if (Helpers.SkiaExtensions.ShouldSkipForOverprint(currentState.NonStrokingOverprint, currentState.OverprintMode,
+                    currentState.CurrentNonStrokingColor,
+                    currentState.ColorSpaceContext?.CurrentNonStrokingColorSpace))
+                {
+                    return;
+                }
+
                 var paint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
                     currentState.AlphaConstantNonStroking, false, null, null, null, null, currentState.BlendMode);
                 _canvas.DrawPath(_currentPath, paint);
