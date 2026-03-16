@@ -132,14 +132,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             for (int t = 0; t <= factor; t++)
             {
-                double tx = t0 + (t / (double)factor * t1);
+                double normalized = t / (double)factor;
+                double tx = t0 + normalized * (t1 - t0);
                 double[] v = shading.Eval(tx);
 
                 FixIncorrectValues(v, domain); // This is a hack, this should never happen
 
                 colors[t] = shading.ColorSpace.GetColor(v).ToSKColor(currentState.AlphaConstantNonStroking);
                 // TODO - is it non stroking??
-                colorPos[t] = (float)tx;
+                colorPos[t] = (float)normalized;
             }
 
             if (shading.BBox.HasValue)
@@ -151,7 +152,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 // TODO
             }
-            
+
             using (var shader = SKShader.CreateTwoPointConicalGradient(new SKPoint(x0, y0), r0, new SKPoint(x1, y1), r1,
                        colors, colorPos, SKShaderTileMode.Clamp, patternTransformMatrix))
             using (var paint = new SKPaint())
@@ -221,13 +222,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             for (int t = 0; t <= factor; t++)
             {
-                double tx = t0 + (t / (double)factor * t1);
+                double normalized = t / (double)factor;
+                double tx = t0 + normalized * (t1 - t0);
                 double[] v = shading.Eval(tx);
 
                 FixIncorrectValues(v, domain); // This is a hack, this should never happen, see GHOSTSCRIPT-693154-0
 
                 colors[t] = shading.ColorSpace.GetColor(v).ToSKColor(currentState.AlphaConstantNonStroking); // TODO - is it non stroking??
-                colorPos[t] = (float)tx;
+                colorPos[t] = (float)normalized;
             }
 
             using (var shader = SKShader.CreateLinearGradient(new SKPoint(x0, y0), new SKPoint(x1, y1), colors, colorPos, SKShaderTileMode.Clamp, patternTransformMatrix))
@@ -472,8 +474,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             // Based on https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/graphics/shading/Type1ShadingContext.java
 
-            int w = (int)(x1 - x0);
-            int h = (int)(y1 - y0);
+            // Use canvas bounds to determine bitmap resolution, capped to avoid excessive memory use
+            int w = Math.Max(2, Math.Min(512, (int)Math.Ceiling(Math.Abs(maxX - minX))));
+            int h = Math.Max(2, Math.Min(512, (int)Math.Ceiling(Math.Abs(maxY - minY))));
 
             using (SKBitmap shaderBitmap = new SKBitmap(w, h, SKColorType.Rgba8888, SKAlphaType.Premul))
             {
@@ -487,9 +490,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     {
                         int index = (j * w + i) * 4;
                         bool useBackground = false;
-                        values[0] = x0 + i;
-                        values[1] = y0 + j;
-                        //rat.transform(values, 0, values, 0, 1);
+                        // Map pixel (i, j) to domain coordinates via linear interpolation
+                        values[0] = x0 + (double)i / (w - 1) * (x1 - x0);
+                        values[1] = y0 + (double)j / (h - 1) * (y1 - y0);
                         if (values[0] < domain[0] || values[0] > domain[1] ||
                             values[1] < domain[2] || values[1] > domain[3])
                         {
@@ -541,7 +544,19 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
                 }
 
-                var finalShadingMatrix = patternTransformMatrix.PreConcat(shading.Matrix.ToSkMatrix());
+                // Build local matrix mapping bitmap pixel space → canvas space.
+                // SKShader.CreateBitmap local matrix follows the same convention as gradient shaders:
+                // it maps FROM shader/bitmap local space TO canvas space (Skia inverts it when sampling).
+                // Pipeline: pixel(i,j) → domain(x,y) → shading target space → canvas
+                //   pixel → domain:  Translate(x0,y0) × Scale(dx, dy)
+                //   domain → shading: shading.Matrix
+                //   shading → canvas: patternTransformMatrix
+                float dx = (w > 1) ? (float)((x1 - x0) / (w - 1)) : 1f;
+                float dy = (h > 1) ? (float)((y1 - y0) / (h - 1)) : 1f;
+                var finalShadingMatrix = SKMatrix.CreateScale(dx, dy)
+                    .PostConcat(SKMatrix.CreateTranslation((float)x0, (float)y0))
+                    .PostConcat(shading.Matrix.ToSkMatrix())
+                    .PostConcat(patternTransformMatrix);
 
                 var currentState = GetCurrentState();
 
