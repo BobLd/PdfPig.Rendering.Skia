@@ -26,6 +26,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <None Update="Documents\0000190.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\0000190_cropped.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	  <None Update="Documents\annots_rotated.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
@@ -354,6 +360,15 @@
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\GHOSTSCRIPT-699554-0.zip-4-pdfium-1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\0000190_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\0000190_3.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\0000190_cropped_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\11194059_2017-11_de_s_1.png">

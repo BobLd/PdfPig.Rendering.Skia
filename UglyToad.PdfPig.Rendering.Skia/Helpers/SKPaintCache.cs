@@ -54,9 +54,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return HashCode.Combine(color, alpha, stroke, strokeWidth, joinStyle, capStyle, GetHash(dashPattern), blendMode);
         }
 
-        public SKPaint GetPaint(IColor color, double alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,
+        public SKPaint GetPaint(IColor? color, double alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,
             LineCapStyle? capStyle, LineDashPattern? dashPattern, BlendMode blendMode)
         {
+            color ??= RGBColor.Black;
             var key = GetPaintKey(color, alpha, stroke, strokeWidth, joinStyle, capStyle, dashPattern, blendMode);
 
             if (_cache.TryGetValue(key, out var paint))
