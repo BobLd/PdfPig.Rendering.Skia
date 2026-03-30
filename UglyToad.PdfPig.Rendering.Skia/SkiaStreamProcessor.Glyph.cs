@@ -75,13 +75,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private void ShowVectorFontGlyph(SKPath path, IColor strokingColor, IColor nonStrokingColor,
+        private void ShowVectorFontGlyph(SKPath path, IColor? strokingColor, IColor? nonStrokingColor,
             TextRenderingMode textRenderingMode, in TransformationMatrix renderingMatrix,
             in TransformationMatrix textMatrix)
         {
-            bool stroke = textRenderingMode.IsStroke();
-            bool fill = textRenderingMode.IsFill();
-
             var transformMatrix = renderingMatrix.ToSkMatrix()
                 .PostConcat(textMatrix.ToSkMatrix());
 
@@ -96,7 +93,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     return;
                 }
 
-                if (fill)
+                if (textRenderingMode.IsFill())
                 {
                     // Do fill first
                     if (nonStrokingColor is not null && nonStrokingColor.ColorSpace == ColorSpace.Pattern)
@@ -109,7 +106,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                         if (nonStrokingColor is not PatternColor pattern)
                         {
-                            throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got {nonStrokingColor.GetType()}");
+                            throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got {nonStrokingColor.GetType()}.");
                         }
 
                         switch (pattern.PatternType)
@@ -125,15 +122,21 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
                     else
                     {
-                        var fillBrush = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
+                        var fillPaint = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
                             null, null, null, null, currentState.BlendMode);
-                        _canvas.DrawPath(transformedPath, fillBrush);
+                        _canvas.DrawPath(transformedPath, fillPaint);
                     }
                 }
 
-                if (stroke)
+                if (textRenderingMode.IsStroke())
                 {
                     // Then stroke
+                    if (strokingColor is not null && strokingColor.ColorSpace == ColorSpace.Pattern)
+                    {
+                        // Not supported for now
+                        strokingColor = RGBColor.Black;
+                    }
+
                     var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
                         (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
                         currentState.LineDashPattern, currentState.BlendMode);
@@ -142,7 +145,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private void ShowNonVectorFontGlyph(IFont font, IColor strokingColor, IColor nonStrokingColor,
+        private void ShowNonVectorFontGlyph(IFont font, IColor? strokingColor, IColor? nonStrokingColor,
             TextRenderingMode textRenderingMode,
             double fontSize, string unicode, in TransformationMatrix renderingMatrix,
             in TransformationMatrix textMatrix,
@@ -158,9 +161,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 return;
             }
-
-            // TODO - Handle Fill
-
+            
             var style = textRenderingMode.ToSKPaintStyle();
             if (!style.HasValue)
             {
@@ -179,24 +180,83 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            var color = style == SKPaintStyle.Stroke ? strokingColor : nonStrokingColor; // TODO - very not correct
-
             var currentState = GetCurrentState();
 
-            using (var skFont = drawTypeface.Typeface.ToFont(1f))
-            using (var paint = new SKPaint())
+            if (textRenderingMode.IsFill())
             {
-                paint.Style = style.Value;
-                paint.Color = color.ToSKColor(currentState.AlphaConstantNonStroking);
-                paint.IsAntialias = _antiAliasing;
-                paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
+                // Do fill first
+                if (nonStrokingColor is not null && nonStrokingColor.ColorSpace == ColorSpace.Pattern)
+                {
+                    // See documents:
+                    // - 0000190.pdf
 
-                // TODO - Benchmark with SPARC - v9 Architecture Manual.pdf
-                // as _canvas.DrawShapedText(unicode, startBaseLine, fontPaint); as very slow without 'Shaper' caching
-                _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, paint);
+                    if (nonStrokingColor is not PatternColor)
+                    {
+                        throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got '{nonStrokingColor.GetType()}'.");
+                    }
+
+                    using (var path = GetPath(drawTypeface, unicode))
+                    {
+                        ShowVectorFontGlyph(path, strokingColor, nonStrokingColor,
+                            textRenderingMode, in TransformationMatrix.Identity, in TransformationMatrix.Identity);
+                    }
+                }
+                else
+                {
+                    var fillPaint = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
+                        null, null, null, null, currentState.BlendMode);
+
+                    using (var skFont = drawTypeface.Typeface.ToFont(1f))
+                    {
+                        _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, fillPaint);
+                    }
+                }
+            }
+
+            if (textRenderingMode.IsStroke())
+            {
+                // Then stroke
+                if (strokingColor is not null && strokingColor.ColorSpace == ColorSpace.Pattern)
+                {
+                    // Not supported for now
+                    strokingColor = RGBColor.Black;
+                }
+
+                var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
+                    (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
+                    currentState.LineDashPattern, currentState.BlendMode);
+
+                using (var skFont = drawTypeface.Typeface.ToFont(1f))
+                {
+                    _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, strokePaint);
+                }
             }
         }
 
+        private static SKPath GetPath(SkiaFontCacheItem fontItem, string unicode)
+        {
+            using (var skFont = fontItem.Typeface.ToFont(1f))
+            {
+                var shaped = fontItem.Shaper.Shape(unicode, skFont);
+                
+                var combinedPath = new SKPath();
+                for (int i = 0; i < shaped.Codepoints.Length; ++i)
+                {
+                    uint glyphId = shaped.Codepoints[i];
+                    SKPoint pos = shaped.Points[i];
+
+                    SKPath glyphPath = skFont.GetGlyphPath((ushort)glyphId); // Check for overflow?
+                    if (glyphPath is not null)
+                    {
+                        var matrix = SKMatrix.CreateTranslation(pos.X, pos.Y);
+                        combinedPath.AddPath(glyphPath, in matrix);
+                    }
+                }
+
+                return combinedPath;
+            }
+        }
+        
         private static float ComputeSkewX(PdfRectangle rectangle)
         {
             var rotationRadians = rectangle.Rotation * Math.PI / 180.0;

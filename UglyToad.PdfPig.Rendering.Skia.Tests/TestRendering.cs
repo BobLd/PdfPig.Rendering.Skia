@@ -556,6 +556,25 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "MOZILLA-LINK-6305-5_20.png",
                 "MOZILLA-LINK-6305-5.pdf", 20, 2
             },
+
+            new object[]
+            {
+                // Not completely correct but good start
+                "0000190_1.png",
+                "0000190.pdf", 1, 2
+            },
+            new object[]
+            {
+                // Not completely correct but good start
+                "0000190_3.png",
+                "0000190.pdf", 3, 2
+            },
+            new object[]
+            {
+                // Rendering not correct
+                "0000190_cropped_1.png",
+                "0000190_cropped.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
