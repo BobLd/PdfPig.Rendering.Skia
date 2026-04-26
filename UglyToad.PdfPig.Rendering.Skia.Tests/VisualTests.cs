@@ -15,7 +15,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using UglyToad.PdfPig.Graphics.Colors;
 using Xunit;
 
 namespace UglyToad.PdfPig.Rendering.Skia.Tests
