@@ -575,6 +575,37 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "0000190_cropped_1.png",
                 "0000190_cropped.pdf", 1, 2
             },
+
+            new object[]
+            {
+                "P_1.png",
+                "P.pdf", 1, 2
+            },
+            new object[]
+            {
+                "P_2.png",
+                "P.pdf", 2, 2
+            },
+            new object[]
+            {
+                "P_3.png",
+                "P.pdf", 3, 2
+            },
+            new object[]
+            {
+                "P_4.png",
+                "P.pdf", 4, 2
+            },
+            new object[]
+            {
+                "P_5.png",
+                "P.pdf", 5, 2
+            },
+            new object[]
+            {
+                "P_6.png",
+                "P.pdf", 6, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
