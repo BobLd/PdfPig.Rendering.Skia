@@ -84,7 +84,6 @@ State is stack-based (inherited from PdfPig's `BaseStreamProcessor`). Transparen
 ## Known Limitations
 
 - **Uncoloured tiling patterns**: currently a no-op (returns early).
-- **Gouraud / Coons / Tensor-product mesh shadings**: no-op in Release builds.
 - **Text clip modes** (`FillClip`, `StrokeClip`, etc.): operator is recognised but clipping is not applied.
 - **Image mask alpha**: ignores `colour.Alpha` (hardcoded to 255) in `SkiaStreamProcessor.Image.cs`.
 - **Thread safety**: `SkiaFontCache` mutates its list under a read lock, not a write lock.
