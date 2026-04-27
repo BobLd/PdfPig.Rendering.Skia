@@ -16,7 +16,6 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.InteropServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics;
@@ -67,33 +66,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 case ShadingType.TensorProductPatch:
                     RenderTensorProductPatchShading(shading as TensorProductPatchMeshesShading, in SKMatrix.Identity);
                     break;
-
-                default:
-                    RenderUnsupportedShading(shading, in SKMatrix.Identity);
-                    break;
             }
-        }
-
-        private void RenderUnsupportedShading(Shading shading, in SKMatrix patternTransformMatrix, SKPath? path = null)
-        {
-#if DEBUG
-            using (var shader = SKShader.CreateLinearGradient(SKPoint.Empty, new SKPoint(0, 1), new[] { SKColors.Red, SKColors.Green }, SKShaderTileMode.Clamp))
-            using (var paint = new SKPaint())
-            {
-                paint.IsAntialias = shading.AntiAlias;
-                paint.Shader = shader;
-                paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
-
-                if (path is null)
-                {
-                    _canvas.DrawPaint(paint);
-                }
-                else
-                {
-                    _canvas.DrawPath(path, paint);
-                }
-            }
-#endif
         }
 
         /// <summary>
@@ -148,14 +121,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             for (int t = 0; t <= factor; t++)
             {
-                double tx = t0 + (t / (double)factor * t1);
+                // See RenderAxialShading for the rationale of these two computations:
+                //   - tx walks the user-supplied Domain (correct when t0 ≠ 0)
+                //   - colorPos must be in [0,1] for Skia's gradient shader
+                double frac = t / (double)factor;
+                double tx = t0 + frac * (t1 - t0);
                 double[] v = shading.Eval(tx);
 
                 FixIncorrectValues(v, domain); // This is a hack, this should never happen
 
                 colors[t] = shading.ColorSpace.GetColor(v).ToSKColor(currentState.AlphaConstantNonStroking);
                 // TODO - is it non stroking??
-                colorPos[t] = (float)tx;
+                colorPos[t] = (float)frac;
             }
 
             if (shading.BBox.HasValue)
@@ -167,7 +144,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 // TODO
             }
-            
+
             using (var shader = SKShader.CreateTwoPointConicalGradient(new SKPoint(x0, y0), r0, new SKPoint(x1, y1), r1,
                        colors, colorPos, SKShaderTileMode.Clamp, patternTransformMatrix))
             using (var paint = new SKPaint())
@@ -237,13 +214,21 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             for (int t = 0; t <= factor; t++)
             {
-                double tx = t0 + (t / (double)factor * t1);
+                // Sample the parametric variable across the user-supplied Domain (NOT 0..t1
+                // — the previous form silently broke whenever t0 ≠ 0).
+                double frac = t / (double)factor;
+                double tx = t0 + frac * (t1 - t0);
                 double[] v = shading.Eval(tx);
 
                 FixIncorrectValues(v, domain); // This is a hack, this should never happen, see GHOSTSCRIPT-693154-0
 
                 colors[t] = shading.ColorSpace.GetColor(v).ToSKColor(currentState.AlphaConstantNonStroking); // TODO - is it non stroking??
-                colorPos[t] = (float)tx;
+                // Skia expects colorPos in [0,1] along the gradient line. The previous form
+                // passed raw domain values (e.g. 0..161) which Skia then clamped to [0,1],
+                // collapsing every intermediate stop onto position 1 and rendering the gradient
+                // as a single colour (the most visible casualty was P.pdf's bottom-right
+                // colour-bar legend).
+                colorPos[t] = (float)frac;
             }
 
             using (var shader = SKShader.CreateLinearGradient(new SKPoint(x0, y0), new SKPoint(x1, y1), colors, colorPos, SKShaderTileMode.Clamp, patternTransformMatrix))
@@ -478,10 +463,17 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
         /// <summary>
         /// Number of subdivisions per edge applied to each Gouraud triangle when a Function is
-        /// present, so that piecewise-linear / step Function output is captured visibly.
+        /// present, so that piecewise-linear and step Function output is captured visibly.
         /// Total sub-triangles per parent = GouraudFunctionSubdivisions².
+        /// <para>
+        /// At 128 each sub-cell is ~1–2 output pixels wide on typical Type-4 patches, so
+        /// vertex-colour Gouraud blending across a step boundary stays within sub-pixel range
+        /// while curved boundaries (e.g. P.pdf pages 2/3/5 top-right) follow the parametric
+        /// iso-line smoothly instead of the cell-grid sawtooth a uniform-per-cell approach
+        /// would produce.
+        /// </para>
         /// </summary>
-        private const int GouraudFunctionSubdivisions = 16;
+        private const int GouraudFunctionSubdivisions = 128;
 
         /// <summary>
         /// Emits one Gouraud triangle into the position/colour lists, subdividing it when
@@ -503,66 +495,84 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            const int n = GouraudFunctionSubdivisions;
             int components = a.Components.Length;
+            double alpha = currentState.AlphaConstantNonStroking;
 
-            // (n+1)*(n+2)/2 = 153 sub-vertices on a barycentric grid (i + j ≤ n, with
-            // k = n − i − j). At n=16 each span is 1.2 KB / 612 B respectively — comfortably
-            // within stack budget and avoids two heap allocations per triangle.
-            Span<SKPoint> subPts = stackalloc SKPoint[(n + 1) * (n + 2) / 2];
-            Span<SKColor> subCols = stackalloc SKColor[(n + 1) * (n + 2) / 2];
+            float ax = a.Pt.X, ay = a.Pt.Y;
+            float bx = b.Pt.X, by = b.Pt.Y;
+            float cx = c.Pt.X, cy = c.Pt.Y;
 
-            for (int i = 0; i <= n; i++)
+            const float invN = 1f / GouraudFunctionSubdivisions;
+
+            // (n+1)*(n+2)/2 sub-vertices on a barycentric grid (i + j ≤ n, with k = n − i − j).
+            // At n=128 that's 8385 SKPoints + 8385 SKColors per parent triangle. SKPoint is 8 B
+            // (~67 KB) and SKColor 4 B (~33 KB); both rented from the shared pool to keep heap
+            // pressure flat regardless of how many Type-4 triangles a shading produces.
+            int subVertCount = (GouraudFunctionSubdivisions + 1) * (GouraudFunctionSubdivisions + 2) / 2;
+            var ptsPool = ArrayPool<SKPoint>.Shared;
+            var colsPool = ArrayPool<SKColor>.Shared;
+            SKPoint[] subPts = ptsPool.Rent(subVertCount);
+            SKColor[] subCols = colsPool.Rent(subVertCount);
+
+            try
             {
-                int rowOffset = i * (n + 1) - i * (i - 1) / 2;
-                for (int j = 0; j <= n - i; j++)
+                for (int i = 0; i <= GouraudFunctionSubdivisions; i++)
                 {
-                    int k = n - i - j;
-                    float wa = (float)i / n;
-                    float wb = (float)j / n;
-                    float wc = (float)k / n;
-
-                    SKPoint pt = new SKPoint(
-                        wa * a.Pt.X + wb * b.Pt.X + wc * c.Pt.X,
-                        wa * a.Pt.Y + wb * b.Pt.Y + wc * c.Pt.Y);
-
-                    for (int ci = 0; ci < components; ci++)
+                    int rowOffset = i * (GouraudFunctionSubdivisions + 1) - i * (i - 1) / 2;
+                    for (int j = 0; j <= GouraudFunctionSubdivisions - i; j++)
                     {
-                        interpBuffer[ci] = wa * a.Components[ci] + wb * b.Components[ci] + wc * c.Components[ci];
+                        int k = GouraudFunctionSubdivisions - i - j;
+                        float wa = i * invN;
+                        float wb = j * invN;
+                        float wc = k * invN;
+
+                        SKPoint pt = new SKPoint(
+                            wa * ax + wb * bx + wc * cx,
+                            wa * ay + wb * by + wc * cy);
+
+                        for (int ci = 0; ci < components; ci++)
+                        {
+                            interpBuffer[ci] = wa * a.Components[ci] + wb * b.Components[ci] + wc * c.Components[ci];
+                        }
+
+                        double[] eval = shading.Eval(interpBuffer);
+                        SKColor col = shading.ColorSpace.GetColor(eval).ToSKColor(alpha);
+
+                        int idx = rowOffset + j;
+                        subPts[idx] = pt;
+                        subCols[idx] = col;
                     }
+                }
 
-                    double[] eval = shading.Eval(interpBuffer);
-                    SKColor col = shading.ColorSpace.GetColor(eval).ToSKColor(currentState.AlphaConstantNonStroking);
+                // Stitch the sub-grid into 2 triangles per "rhombus" cell, plus boundary
+                // triangles along the diagonal. For each row i (0..n-1), column j (0..n-1-i):
+                //   upper-tri: (i,j), (i+1,j), (i,j+1)
+                //   lower-tri: (i+1,j), (i+1,j+1), (i,j+1) — only when i+j < n-1
+                for (int i = 0; i < GouraudFunctionSubdivisions; i++)
+                {
+                    int rowOffset = i * (GouraudFunctionSubdivisions + 1) - i * (i - 1) / 2;
+                    int nextRowOffset = (i + 1) * (GouraudFunctionSubdivisions + 1) - (i + 1) * i / 2;
+                    for (int j = 0; j < GouraudFunctionSubdivisions - i; j++)
+                    {
+                        int v0 = rowOffset + j;
+                        int v1 = nextRowOffset + j;
+                        int v2 = rowOffset + j + 1;
+                        outPositions.Add(subPts[v0]); outPositions.Add(subPts[v1]); outPositions.Add(subPts[v2]);
+                        outColors.Add(subCols[v0]); outColors.Add(subCols[v1]); outColors.Add(subCols[v2]);
 
-                    int idx = rowOffset + j;
-                    subPts[idx] = pt;
-                    subCols[idx] = col;
+                        if (i + j < GouraudFunctionSubdivisions - 1)
+                        {
+                            int v3 = nextRowOffset + j + 1;
+                            outPositions.Add(subPts[v1]); outPositions.Add(subPts[v3]); outPositions.Add(subPts[v2]);
+                            outColors.Add(subCols[v1]); outColors.Add(subCols[v3]); outColors.Add(subCols[v2]);
+                        }
+                    }
                 }
             }
-
-            // Stitch the sub-grid into 2 triangles per "rhombus" cell, plus boundary triangles
-            // along the diagonal. For each row i (0..n-1) and column j (0..n-1-i):
-            //   upper-tri:  (i,j), (i+1,j), (i,j+1)
-            //   lower-tri:  (i+1,j), (i+1,j+1), (i,j+1)   -- only when i+j < n-1
-            for (int i = 0; i < n; i++)
+            finally
             {
-                int rowOffset = i * (n + 1) - i * (i - 1) / 2;
-                int nextRowOffset = (i + 1) * (n + 1) - (i + 1) * i / 2;
-                for (int j = 0; j < n - i; j++)
-                {
-                    int v0 = rowOffset + j;
-                    int v1 = nextRowOffset + j;
-                    int v2 = rowOffset + j + 1;
-                    outPositions.Add(subPts[v0]); outPositions.Add(subPts[v1]); outPositions.Add(subPts[v2]);
-                    outColors.Add(subCols[v0]); outColors.Add(subCols[v1]); outColors.Add(subCols[v2]);
-
-                    if (i + j < n - 1)
-                    {
-                        int v3 = nextRowOffset + j + 1;
-                        outPositions.Add(subPts[v1]); outPositions.Add(subPts[v3]); outPositions.Add(subPts[v2]);
-                        outColors.Add(subCols[v1]); outColors.Add(subCols[v3]); outColors.Add(subCols[v2]);
-                    }
-                }
+                ptsPool.Return(subPts);
+                colsPool.Return(subCols);
             }
         }
 
@@ -761,10 +771,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 case ShadingType.TensorProductPatch:
                     RenderTensorProductPatchShading(pattern.Shading as TensorProductPatchMeshesShading, in patternTransform, path);
                     break;
-
-                default:
-                    RenderUnsupportedShading(pattern.Shading, in patternTransform, path);
-                    break;
             }
         }
 
@@ -934,7 +940,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // Each Coons patch tessellates to PatchSubdivisions² × 6 triangle vertices.
             // Pre-size for the common single-patch case so the no-function path doesn't
             // pay log₂(N) doubling re-allocations.
-            int perPatchVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
+            const int perPatchVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
             var positions = hasFunction ? null : new List<SKPoint>(perPatchVertexCount);
             var colors = hasFunction ? null : new List<SKColor>(perPatchVertexCount);
 
@@ -1075,7 +1081,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // See RenderCoonsPatchShading for why the function path uses textured drawing.
             bool hasFunction = shading.Functions is { Length: > 0 };
 
-            int perPatchVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
+            const int perPatchVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
             var positions = hasFunction ? null : new List<SKPoint>(perPatchVertexCount);
             var colors = hasFunction ? null : new List<SKColor>(perPatchVertexCount);
 
@@ -1260,27 +1266,27 @@ namespace UglyToad.PdfPig.Rendering.Skia
             SKPoint[] pts, double[][] cornerColors,
             List<SKPoint> outPositions, List<SKColor> outColors)
         {
-            int n = PatchSubdivisions;
-            var grid = new SKPoint[(n + 1) * (n + 1)];
-            var gridCol = new SKColor[(n + 1) * (n + 1)];
+            const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
+            var grid = new SKPoint[gridCount];
+            var gridCol = new SKColor[gridCount];
 
             // Single reusable buffer for the bilinear corner-colour blend; passed to
             // EvaluatePatchColor for every grid sample so we allocate once instead of (n+1)².
             double[] interpBuffer = new double[cornerColors[0].Length];
 
-            for (int j = 0; j <= n; j++)
+            for (int j = 0; j <= PatchSubdivisions; j++)
             {
-                float v = (float)j / n;
-                for (int i = 0; i <= n; i++)
+                float v = (float)j / PatchSubdivisions;
+                for (int i = 0; i <= PatchSubdivisions; i++)
                 {
-                    float u = (float)i / n;
+                    float u = (float)i / PatchSubdivisions;
 
-                    grid[j * (n + 1) + i] = EvaluateCoonsSurface(pts, u, v);
-                    gridCol[j * (n + 1) + i] = EvaluatePatchColor(shading, currentState, cornerColors, u, v, interpBuffer);
+                    grid[j * (PatchSubdivisions + 1) + i] = EvaluateCoonsSurface(pts, u, v);
+                    gridCol[j * (PatchSubdivisions + 1) + i] = EvaluatePatchColor(shading, currentState, cornerColors, u, v, interpBuffer);
                 }
             }
 
-            EmitTrianglesFromGrid(grid, gridCol, n, outPositions, outColors);
+            EmitTrianglesFromGrid(grid, gridCol, PatchSubdivisions, outPositions, outColors);
         }
 
         /// <summary>
@@ -1305,35 +1311,36 @@ namespace UglyToad.PdfPig.Rendering.Skia
             p[2, 0] = tcp[10]; p[2, 1] = tcp[15]; p[2, 2] = tcp[14]; p[2, 3] = tcp[5];
             p[3, 0] = tcp[9]; p[3, 1] = tcp[8]; p[3, 2] = tcp[7]; p[3, 3] = tcp[6];
 
-            int n = PatchSubdivisions;
-            var grid = new SKPoint[(n + 1) * (n + 1)];
-            var gridCol = new SKColor[(n + 1) * (n + 1)];
+            const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
+            var grid = new SKPoint[gridCount];
+            var gridCol = new SKColor[gridCount];
 
             // Precompute Bernstein basis values for each sampled u and v into flat 4×(n+1)
             // spans so the inner sampling loop reads contiguous memory and skips the
             // jagged-array allocations the previous float[][] form required.
-            Span<float> bU = stackalloc float[4 * (n + 1)];
-            Span<float> bV = stackalloc float[4 * (n + 1)];
-            for (int i = 0; i <= n; i++)
+            const int bCount = 4 * (PatchSubdivisions + 1);
+            Span<float> bU = stackalloc float[bCount];
+            Span<float> bV = stackalloc float[bCount];
+            for (int i = 0; i <= PatchSubdivisions; i++)
             {
-                BernsteinCubic((float)i / n, bU.Slice(i * 4, 4));
+                BernsteinCubic((float)i / PatchSubdivisions, bU.Slice(i * 4, 4));
             }
-            for (int j = 0; j <= n; j++)
+            for (int j = 0; j <= PatchSubdivisions; j++)
             {
-                BernsteinCubic((float)j / n, bV.Slice(j * 4, 4));
+                BernsteinCubic((float)j / PatchSubdivisions, bV.Slice(j * 4, 4));
             }
 
             // Single reusable buffer for the bilinear corner-colour blend; passed to
             // EvaluatePatchColor for every grid sample so we allocate once instead of (n+1)².
             double[] interpBuffer = new double[cornerColors[0].Length];
 
-            for (int j = 0; j <= n; j++)
+            for (int j = 0; j <= PatchSubdivisions; j++)
             {
-                float v = (float)j / n;
+                float v = (float)j / PatchSubdivisions;
                 ReadOnlySpan<float> bv = bV.Slice(j * 4, 4);
-                for (int i = 0; i <= n; i++)
+                for (int i = 0; i <= PatchSubdivisions; i++)
                 {
-                    float u = (float)i / n;
+                    float u = (float)i / PatchSubdivisions;
                     ReadOnlySpan<float> bu = bU.Slice(i * 4, 4);
 
                     float x = 0, y = 0;
@@ -1348,12 +1355,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         }
                     }
 
-                    grid[j * (n + 1) + i] = new SKPoint(x, y);
-                    gridCol[j * (n + 1) + i] = EvaluatePatchColor(shading, currentState, cornerColors, u, v, interpBuffer);
+                    grid[j * (PatchSubdivisions + 1) + i] = new SKPoint(x, y);
+                    gridCol[j * (PatchSubdivisions + 1) + i] = EvaluatePatchColor(shading, currentState, cornerColors, u, v, interpBuffer);
                 }
             }
 
-            EmitTrianglesFromGrid(grid, gridCol, n, outPositions, outColors);
+            EmitTrianglesFromGrid(grid, gridCol, PatchSubdivisions, outPositions, outColors);
         }
 
         /// <summary>
@@ -1566,9 +1573,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
 
-            int n = PatchSubdivisions;
-            int gridLen = (n + 1) * (n + 1);
-            int triVertexCount = n * n * 6;
+            const int gridLen = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
+            const int triVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
 
             // The (n+1)² grid arrays are scratch — rent from the shared pool to avoid the
             // ~17 KB heap allocation per patch. Triangle arrays are passed straight to
@@ -1579,14 +1585,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
             SKPoint[] texCoords = pool.Rent(gridLen);
             try
             {
-                int stride = n + 1;
-                float texScale = PatchTextureSize - 1;
-                for (int j = 0; j <= n; j++)
+                const int stride = PatchSubdivisions + 1;
+                const float texScale = PatchTextureSize - 1;
+                
+                for (int j = 0; j <= PatchSubdivisions; j++)
                 {
-                    float v = (float)j / n;
-                    for (int i = 0; i <= n; i++)
+                    float v = (float)j / PatchSubdivisions;
+                    for (int i = 0; i <= PatchSubdivisions; i++)
                     {
-                        float u = (float)i / n;
+                        float u = (float)i / PatchSubdivisions;
                         int idx = j * stride + i;
                         positions[idx] = EvaluateCoonsSurface(pts, u, v);
                         texCoords[idx] = new SKPoint(u * texScale, v * texScale);
@@ -1595,7 +1602,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 var posArray = new SKPoint[triVertexCount];
                 var texArray = new SKPoint[triVertexCount];
-                BuildPatchTriangleArrays(positions, texCoords, n, posArray, texArray);
+                BuildPatchTriangleArrays(positions, texCoords, PatchSubdivisions, posArray, texArray);
                 DrawTexturedPatchVertices(shading, currentState, bitmap, posArray, texArray);
             }
             finally
@@ -1611,41 +1618,44 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private void DrawTensorPatchTextured(Shading shading, CurrentGraphicsState currentState,
             SKPoint[] tcp, double[][] cornerColors)
         {
-            using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
-            var p = BuildTensorControlGrid(tcp);
+            using SKBitmap bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
+            SKPoint[,] p = BuildTensorControlGrid(tcp);
 
-            int n = PatchSubdivisions;
-            int gridLen = (n + 1) * (n + 1);
-            int triVertexCount = n * n * 6;
+            const int gridLen = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
+            const int triVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
 
             var pool = ArrayPool<SKPoint>.Shared;
             SKPoint[] positions = pool.Rent(gridLen);
             SKPoint[] texCoords = pool.Rent(gridLen);
+            
             try
             {
-                int stride = n + 1;
-                float texScale = PatchTextureSize - 1;
+                const int stride = PatchSubdivisions + 1;
+                const float texScale = PatchTextureSize - 1;
 
                 // Flat 4×(n+1) Bernstein tables stack-allocated — no per-row jagged-array
                 // allocations the previous float[][] form required.
-                Span<float> bU = stackalloc float[4 * (n + 1)];
-                Span<float> bV = stackalloc float[4 * (n + 1)];
-                for (int i = 0; i <= n; i++)
+                const int bCount = 4 * (PatchSubdivisions + 1);
+                Span<float> bU = stackalloc float[bCount];
+                Span<float> bV = stackalloc float[bCount];
+                
+                for (int i = 0; i <= PatchSubdivisions; i++)
                 {
-                    BernsteinCubic((float)i / n, bU.Slice(i * 4, 4));
+                    BernsteinCubic((float)i / PatchSubdivisions, bU.Slice(i * 4, 4));
                 }
-                for (int j = 0; j <= n; j++)
+                
+                for (int j = 0; j <= PatchSubdivisions; j++)
                 {
-                    BernsteinCubic((float)j / n, bV.Slice(j * 4, 4));
+                    BernsteinCubic((float)j / PatchSubdivisions, bV.Slice(j * 4, 4));
                 }
 
-                for (int j = 0; j <= n; j++)
+                for (int j = 0; j <= PatchSubdivisions; j++)
                 {
-                    float v = (float)j / n;
+                    float v = (float)j / PatchSubdivisions;
                     ReadOnlySpan<float> bv = bV.Slice(j * 4, 4);
-                    for (int i = 0; i <= n; i++)
+                    for (int i = 0; i <= PatchSubdivisions; i++)
                     {
-                        float u = (float)i / n;
+                        float u = (float)i / PatchSubdivisions;
                         ReadOnlySpan<float> bu = bU.Slice(i * 4, 4);
                         int idx = j * stride + i;
                         positions[idx] = EvaluateTensorSurface(p, bu, bv);
@@ -1655,7 +1665,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 var posArray = new SKPoint[triVertexCount];
                 var texArray = new SKPoint[triVertexCount];
-                BuildPatchTriangleArrays(positions, texCoords, n, posArray, texArray);
+                BuildPatchTriangleArrays(positions, texCoords, PatchSubdivisions, posArray, texArray);
                 DrawTexturedPatchVertices(shading, currentState, bitmap, posArray, texArray);
             }
             finally
@@ -1705,12 +1715,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
             using var image = SKImage.FromBitmap(bitmap);
             var sampling = new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None);
             using var shader = image.ToShader(SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, sampling);
-            using var paint = new SKPaint
-            {
-                Shader = shader,
-                IsAntialias = shading.AntiAlias,
-                BlendMode = currentState.BlendMode.ToSKBlendMode(),
-            };
+            using var paint = new SKPaint();
+            paint.Shader = shader;
+            paint.IsAntialias = shading.AntiAlias;
+            paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
 
             _canvas.DrawVertices(SKVertexMode.Triangles, posArray, texArray, null,
                 SKBlendMode.SrcOver, null, paint);
@@ -1861,11 +1869,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 paint.Shader = shader;
                 paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
 
-//#if DEBUG
-//                _canvas.DrawPath(path, new SKPaint() { Color = SKColors.Blue.WithAlpha(150) });
-//                _canvas.DrawPath(path, new SKPaint() { Color = SKColors.Red.WithAlpha(150), IsStroke = true, StrokeWidth = 5 });
-//#endif
-                
+                //#if DEBUG
+                //                _canvas.DrawPath(path, new SKPaint() { Color = SKColors.Blue.WithAlpha(150) });
+                //                _canvas.DrawPath(path, new SKPaint() { Color = SKColors.Red.WithAlpha(150), IsStroke = true, StrokeWidth = 5 });
+                //#endif
+
                 _canvas.DrawPath(path, paint);
             }
 
