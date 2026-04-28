@@ -16,6 +16,8 @@ using System;
 using System.IO;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.Graphics.Colors;
+using UglyToad.PdfPig.Rendering.Skia.Helpers;
 using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia;
@@ -125,5 +127,48 @@ public static class PdfPigExtensions
                 new NumericToken(matrix.C), new NumericToken(matrix.D), new NumericToken(matrix[1, 2]),
                 new NumericToken(matrix.E), new NumericToken(matrix.F), new NumericToken(matrix[2, 2]),
             });
+    }
+
+    internal static TransformationMatrix GetTilingPatterInitialMatrix(this TilingPatternColor pattern)
+    {
+        // For uncoloured patterns, the sub-processor's initial CTM is a pure translation
+        // that aligns the pattern cell's lower-left BBox corner with picture origin (0, 0).
+        // pattern.Matrix is intentionally NOT applied here (PdfBox does the same): the
+        // pattern stream is rendered into a tile in pattern-local space, and pattern.Matrix
+        // — which encodes pattern-to-user-space and may include rotations or sign flips
+        // (e.g. /Matrix [-1 0 0 -1 0 0]) — would otherwise push the content outside the
+        // recording rect.
+        // Coloured patterns stay on the legacy path that passes pattern.Matrix, to preserve
+        // existing visual baselines.
+
+        return pattern.PaintType == PatternPaintType.Uncoloured
+            ? TransformationMatrix.GetTranslationMatrix(-pattern.BBox.BottomLeft.X, -pattern.BBox.BottomLeft.Y)
+            : pattern.Matrix;
+    }
+
+    internal static SKMatrix GetTilingPatterAdjMatrix(this TilingPatternColor pattern)
+    {
+        if (pattern.PaintType == PatternPaintType.Uncoloured)
+        {
+            // The shader's local matrix maps PICTURE coords → user-space PDF coords (Skia
+            // inverts it internally when sampling). The picture was drawn with
+            // initialMatrix = Translate(-BBox.LowerLeft) plus the canvas' Y-flip (around
+            // BBox.Height/2), so for picture (X, Y):
+            //     pattern_local.x = X + LL.X
+            //     pattern_local.y = UR.Y - Y                      (undo Y-flip + LL shift)
+            //     user_space     = pattern.Matrix * pattern_local  (apply 8.7.2 alteration)
+            // In matrix form: localMatrix = pattern.Matrix * Translate(LL.X, UR.Y) * Scale(1,-1).
+            // Wrap that with inv(CTM) * orig so cm modifications and the parent stream's
+            // initial transform stay consistent with the existing rendering pipeline.
+            return pattern.Matrix.ToSkMatrix()
+                .PreConcat(SKMatrix.CreateTranslation(
+                    (float)pattern.BBox.BottomLeft.X,
+                    (float)pattern.BBox.TopRight.Y))
+                .PreConcat(SKMatrix.CreateScale(1, -1));
+        }
+
+        // We cancel CTM, but not canvas' Y flip, as we still need it.
+        // We are drawing a SKPicture, we need to flip the Y axis of this picture.
+        return SKMatrix.CreateScale(1, -1, 0, (float)pattern.BBox.Height / 2f);
     }
 }

@@ -88,6 +88,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
             _height = (float)cropBox.Bounds.Height;
 
             _currentStreamOriginalTransforms.Push(initialMatrix.ToSkMatrix());
+
+            // Wrap the default IColorSpaceContext so we can capture operand colour components
+            // supplied alongside pattern names (PdfPig drops them otherwise). Required to render
+            // uncoloured tiling patterns.
+            var initialState = GetCurrentState();
+            initialState.ColorSpaceContext = new PatternAwareColorSpaceContext(initialState.ColorSpaceContext);
         }
 
         public override SKPicture Process(int pageNumberCurrent, IReadOnlyList<IGraphicsStateOperation> operations)
