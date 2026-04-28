@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.0;netstandard2.1;net462;net471;net6.0;net8.0;net9.0</TargetFrameworks>
 		<LangVersion>12</LangVersion>
-		<Version>0.1.14.2</Version>
+		<Version>0.1.15.1-alpha001</Version>
 		<Nullable>enable</Nullable>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
@@ -42,7 +42,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="PdfPig" Version="0.1.14" />
+		<PackageReference Include="PdfPig" Version="0.1.15-alpha-20260427-046a5" />
 		<PackageReference Include="PdfPig.Filters.Dct.JpegLibrary" Version="0.1.12.2" />
 		<PackageReference Include="PdfPig.Filters.Jbig2.PdfboxJbig2" Version="0.1.12.1" />
 		<PackageReference Include="PdfPig.Filters.Jpx.OpenJpeg" Version="0.1.12.1" />

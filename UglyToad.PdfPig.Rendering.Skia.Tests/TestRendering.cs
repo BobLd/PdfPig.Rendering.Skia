@@ -606,6 +606,17 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "P_6.png",
                 "P.pdf", 6, 2
             },
+
+            new object[]
+            {
+                "2_uncolor_tiling_1.png",
+                "2_uncolor_tiling.pdf", 1, 2
+            },
+            new object[]
+            {
+                "gs-bugzilla694385_1.png",
+                "gs-bugzilla694385.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]

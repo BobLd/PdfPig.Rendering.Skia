@@ -16,7 +16,9 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using SkiaSharp;
+using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
@@ -1808,24 +1810,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 }
             }
         }
-
+        
         private void RenderTilingPattern(SKPath path, TilingPatternColor pattern, bool isStroke)
         {
-            // TODO - to finish
-            // See 22060_A1_01_Plans-1.pdf
-            // And Apitron.PDF.Kit.Samples_patternFill.pdf
+            // See:
+            // - 22060_A1_01_Plans-1.pdf
+            // - Apitron.PDF.Kit.Samples_patternFill.pdf
 
-            // For Uncoloured;
-            // - gs-bugzilla694385 
-
-            if (pattern.PaintType == PatternPaintType.Uncoloured)
-            {
-                // TODO - not supported for the moment
-                return;
-            }
+            // For uncoloured tiling pattern, see:
+            // - 2_uncolor_tiling.pdf
+            // - gs-bugzilla694385.pdf
 
             var operations = PageContentParser.Parse(PageNumber, new MemoryInputBytes(pattern.Data), ParsingOptions.Logger);
-
             bool hasResources = pattern.PatternStream.StreamDictionary.TryGet(NameToken.Resources, PdfScanner, out DictionaryToken? resourcesDictionary);
 
             if (hasResources)
@@ -1833,54 +1829,91 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 ResourceStore.LoadResourceDictionary(resourcesDictionary!);
             }
 
-            // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/contentstream/PDFStreamEngine.java#L370
-
-            var processor = new SkiaStreamProcessor(PageNumber, ResourceStore, PdfScanner, PageContentParser,
-                FilterProvider, new Content.CropBox(pattern.BBox), UserSpaceUnit, Rotation,
-                pattern.Matrix, ParsingOptions, null, _fontCache);
-
-            /*
-            if (pattern.PaintType == PatternPaintType.Uncoloured)
+            try
             {
-                var cs = (this.GetCurrentState().ColorSpaceContext.CurrentNonStrokingColorSpace as PatternColorSpaceDetails).UnderlyingColourSpace;
-                processor.GetCurrentState().ColorSpaceContext.SetStrokingColorspace(cs);
-                processor.GetCurrentState().CurrentStrokingColor = pattern.CurrentColor;
-                processor.GetCurrentState().ColorSpaceContext.SetNonStrokingColorspace(cs);
-                processor.GetCurrentState().CurrentNonStrokingColor = pattern.CurrentColor;
+                TransformationMatrix initialMatrix = pattern.GetTilingPatterInitialMatrix();
+
+                var processor = new SkiaStreamProcessor(PageNumber, ResourceStore, PdfScanner, PageContentParser,
+                    FilterProvider, new CropBox(pattern.BBox), UserSpaceUnit, Rotation,
+                    initialMatrix, ParsingOptions, null, _fontCache);
+
+                if (pattern.PaintType == PatternPaintType.Uncoloured)
+                {
+                    // For uncoloured tiling patterns, the colour to paint with is supplied as
+                    // operands to the SCN/scn operator alongside the pattern name. Resolve those
+                    // operands against the underlying color space and seed the sub-processor's
+                    // current colours so the pattern's content stream paints in the right colour.
+                    IColor? color = GetUncolouredPatternColor(isStroke);
+                    if (color is not null)
+                    {
+                        var subState = processor.GetCurrentState();
+                        subState.CurrentStrokingColor = color;
+                        subState.CurrentNonStrokingColor = color;
+                    }
+                }
+
+                // Installs the graphics state that was in effect at the beginning of the pattern’s parent content stream,
+                // with the current transformation matrix altered by the pattern matrix as described in 8.7.2, "General properties of patterns"
+                SKRect rect = SKRect.Create(Math.Abs((float)pattern.XStep), Math.Abs((float)pattern.YStep));
+                SKMatrix transformMatrix = CurrentTransformationMatrix.ToSkMatrix().Invert()
+                    .PreConcat(_currentStreamOriginalTransforms.Peek())
+                    .PreConcat(pattern.GetTilingPatterAdjMatrix());
+
+                using (var picture = processor.Process(PageNumber, operations))
+                using (var shader = SKShader.CreatePicture(picture, SKShaderTileMode.Repeat, SKShaderTileMode.Repeat, SKFilterMode.Linear, transformMatrix, rect))
+                using (var paint = new SKPaint())
+                {
+                    paint.IsAntialias = _antiAliasing;
+                    paint.Shader = shader;
+                    paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
+                    _canvas.DrawPath(path, paint);
+                }
             }
-            */
-
-            // Installs the graphics state that was in effect at the beginning of the pattern’s parent content stream,
-            // with the current transformation matrix altered by the pattern matrix as described in 8.7.2, "General properties of patterns"
-
-            SKRect rect = SKRect.Create(Math.Abs((float)pattern.XStep), Math.Abs((float)pattern.YStep));
-
-            // We cancel CTM, but not canvas' Y flip, as we still need it.
-            // We are drawing a SKPicture, we need to flip the Y axis of this picture.
-            var transformMatrix = CurrentTransformationMatrix.ToSkMatrix().Invert()
-                .PreConcat(_currentStreamOriginalTransforms.Peek())
-                .PreConcat(SKMatrix.CreateScale(1, -1, 0, (float)pattern.BBox.Height / 2f));
-
-            using (var picture = processor.Process(PageNumber, operations))
-            using (var shader = SKShader.CreatePicture(picture, SKShaderTileMode.Repeat, SKShaderTileMode.Repeat, SKFilterMode.Linear, transformMatrix, rect))
-            using (var paint = new SKPaint())
+            finally
             {
-                paint.IsAntialias = _antiAliasing;
-                paint.Shader = shader;
-                paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
-
-                //#if DEBUG
-                //                _canvas.DrawPath(path, new SKPaint() { Color = SKColors.Blue.WithAlpha(150) });
-                //                _canvas.DrawPath(path, new SKPaint() { Color = SKColors.Red.WithAlpha(150), IsStroke = true, StrokeWidth = 5 });
-                //#endif
-
-                _canvas.DrawPath(path, paint);
+                if (hasResources)
+                {
+                    ResourceStore.UnloadResourceDictionary();
+                }
             }
+        }
 
-            if (hasResources)
+        private IColor? GetUncolouredPatternColor(bool isStroke)
+        {
+            var parentState = GetCurrentState();
+
+            if (parentState.ColorSpaceContext is not PatternAwareColorSpaceContext parentContext)
             {
-                ResourceStore.UnloadResourceDictionary();
+                return null;
             }
+
+            PatternColorSpaceDetails? patternCs;
+            IReadOnlyList<double>? operands;
+
+            if (isStroke)
+            {
+                patternCs = parentContext.CurrentStrokingColorSpace as PatternColorSpaceDetails;
+                operands = parentContext.LastStrokingPatternOperands;
+            }
+            else
+            {
+                patternCs = parentContext.CurrentNonStrokingColorSpace as PatternColorSpaceDetails;
+                operands = parentContext.LastNonStrokingPatternOperands;
+            }
+
+            ColorSpaceDetails? underlying = patternCs?.UnderlyingColourSpace;
+            if (underlying is null || underlying is UnsupportedColorSpaceDetails)
+            {
+                return null;
+            }
+
+            double[] components = operands?.ToArray() ?? Array.Empty<double>();
+            if (components.Length == 0)
+            {
+                return underlying.GetInitializeColor();
+            }
+
+            return underlying.GetColor(components);
         }
     }
 }

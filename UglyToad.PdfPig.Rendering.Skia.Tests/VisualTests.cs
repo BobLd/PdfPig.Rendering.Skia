@@ -21,7 +21,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 {
     public class VisualTests
     {
-        private const int _scale = 2;
+        private const float _scale = 2;
         private const string _outputPath = "Output";
 
         private static readonly HashSet<string> _documentsToIgnore = new HashSet<string>
