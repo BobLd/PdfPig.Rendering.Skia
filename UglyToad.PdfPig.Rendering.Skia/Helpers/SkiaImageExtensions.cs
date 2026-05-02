@@ -14,6 +14,7 @@
 
 using System;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
@@ -251,13 +252,69 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 {
                     Span<uint> dstU32 = MemoryMarshal.Cast<byte, uint>(rasterSpan);
                     int srcIdx = 0;
-                    for (int p = 0; p < pixelCount; p++)
+                    int p = 0;
+
+                    // SIMD body: convert Vector<float>.Count CMYK pixels per iteration.
+                    // Skipped on hardware without vector acceleration since System.Numerics
+                    // would emulate it via scalar code, which is slower than the dedicated
+                    // scalar path below. The CMYK→RGB polynomial dominates, so even partial
+                    // vectorisation (4-wide on SSE, 8-wide on AVX) is a meaningful speedup.
+                    if (Vector.IsHardwareAccelerated)
+                    {
+                        int vWidth = Vector<float>.Count;
+                        float[] cBuf = new float[vWidth];
+                        float[] mBuf = new float[vWidth];
+                        float[] yBuf = new float[vWidth];
+                        float[] kBuf = new float[vWidth];
+                        float[] rBuf = new float[vWidth];
+                        float[] gBuf = new float[vWidth];
+                        float[] bBuf = new float[vWidth];
+
+                        while (p + vWidth <= pixelCount)
+                        {
+                            // Deinterleave the CMYK CMYK CMYK… stream into planar buffers,
+                            // applying the (255 − x) inversion ApproximateCmykToRgb does
+                            // internally so the vector path receives ready-to-use values.
+                            for (int i = 0; i < vWidth; i++)
+                            {
+                                int s = srcIdx + i * 4;
+                                cBuf[i] = 255f - imageSpan[s];
+                                mBuf[i] = 255f - imageSpan[s + 1];
+                                yBuf[i] = 255f - imageSpan[s + 2];
+                                kBuf[i] = 255f - imageSpan[s + 3];
+                            }
+
+                            SkiaExtensions.ApproximateCmykToRgbVector(
+                                new Vector<float>(cBuf), new Vector<float>(mBuf),
+                                new Vector<float>(yBuf), new Vector<float>(kBuf),
+                                out Vector<float> rV, out Vector<float> gV, out Vector<float> bV);
+
+                            rV.CopyTo(rBuf);
+                            gV.CopyTo(gBuf);
+                            bV.CopyTo(bBuf);
+
+                            for (int i = 0; i < vWidth; i++)
+                            {
+                                byte r = (byte)rBuf[i];
+                                byte g = (byte)gBuf[i];
+                                byte b = (byte)bBuf[i];
+                                byte a = ResolveAlpha(alphaMode, p + i, r, g, b, maskSpan,
+                                    rMin, gMin, bMin, rMax, gMax, bMax);
+                                dstU32[p + i] = ((uint)a << 24) | ((uint)b << 16) | ((uint)g << 8) | r;
+                            }
+
+                            p += vWidth;
+                            srcIdx += vWidth * 4;
+                        }
+                    }
+
+                    // Scalar tail (also handles the entire image when no SIMD acceleration).
+                    for (; p < pixelCount; p++, srcIdx += 4)
                     {
                         SkiaExtensions.ApproximateCmykToRgb(
                             in imageSpan[srcIdx], in imageSpan[srcIdx + 1],
                             in imageSpan[srcIdx + 2], in imageSpan[srcIdx + 3],
                             out byte r, out byte g, out byte b);
-                        srcIdx += 4;
 
                         byte a = ResolveAlpha(alphaMode, p, r, g, b, maskSpan,
                             rMin, gMin, bMin, rMax, gMax, bMax);

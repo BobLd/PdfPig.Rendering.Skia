@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
@@ -326,6 +327,43 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
 
             // See also https://github.com/UglyToad/PdfPig/issues/1144
+        }
+
+        /// <summary>
+        /// Vectorised companion to <see cref="ApproximateCmykToRgb"/> that converts
+        /// <see cref="Vector{T}.Count"/> pixels at a time. The C/M/Y/K inputs are the
+        /// pre-computed inverse-on-0-255 values (i.e. <c>255f - inputByte</c>) — the caller
+        /// deinterleaves the source pixels and applies that subtraction. Outputs are clamped
+        /// to [0, 255] as floats; the caller is expected to truncate to byte.
+        /// </summary>
+        internal static void ApproximateCmykToRgbVector(
+            Vector<float> cInv, Vector<float> mInv, Vector<float> yInv, Vector<float> kInv,
+            out Vector<float> r, out Vector<float> g, out Vector<float> b)
+        {
+            // Mirrors the polynomial in ApproximateCmykToRgb. Vector<float>.Count is a JIT
+            // constant so the new Vector<float>(scalar) broadcasts compile to a single insn.
+            Vector<float> v80 = new Vector<float>(80f);
+            Vector<float> v66 = new Vector<float>(66f);
+            Vector<float> v86 = new Vector<float>(86f);
+            Vector<float> v255 = new Vector<float>(255f);
+            Vector<float> vInv255 = new Vector<float>(1f / 255f);
+            Vector<float> vZero = Vector<float>.Zero;
+
+            Vector<float> rf = v80 + 0.5882f * cInv - 0.3529f * mInv - 0.1373f * yInv
+                + 0.00185f * cInv * mInv + 0.00046f * yInv * cInv;
+            Vector<float> gf = v66 - 0.1961f * cInv + 0.2745f * mInv - 0.0627f * yInv
+                + 0.00215f * cInv * mInv + 0.00008f * yInv * cInv + 0.00062f * yInv * mInv;
+            Vector<float> bf = v86 - 0.3255f * cInv - 0.1569f * mInv + 0.1647f * yInv
+                + 0.00046f * cInv * mInv + 0.00123f * yInv * cInv + 0.00215f * yInv * mInv;
+
+            // Fold the K modulation as multiplication by (k * 1/255). The scalar version
+            // computes `rf * k / 255` — replacing the divide with a multiply by a constant
+            // can introduce 1-ULP differences vs. scalar, but always within byte-truncation
+            // tolerance.
+            Vector<float> kFactor = kInv * vInv255;
+            r = Vector.Min(Vector.Max(rf * kFactor, vZero), v255);
+            g = Vector.Min(Vector.Max(gf * kFactor, vZero), v255);
+            b = Vector.Min(Vector.Max(bf * kFactor, vZero), v255);
         }
 
         public static SKMatrix ToSkMatrix(this TransformationMatrix transformationMatrix)
