@@ -88,18 +88,21 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 bool isRgba = numberOfComponents > 1 || pdfImage.HasAlphaChannel();
                 var colorSpace = isRgba ? SKColorType.Rgba8888 : SKColorType.Gray8;
-                /*
-                if (pdfImage.IsImageMask && colorSpace == SKColorType.Gray8)
-                {
-                    colorSpace = SKColorType.Alpha8;
-                }
-                */
 
                 // We apparently need SKAlphaType.Unpremul to avoid artifacts with transparency.
                 // For example, the logo's background in "Motor Insurance claim form.pdf" might
                 // appear black instead of transparent at certain scales.
                 // See https://groups.google.com/g/skia-discuss/c/sV6e3dpf4CE for related question
-                var info = new SKImageInfo(width, height, colorSpace, SKAlphaType.Unpremul);
+                var alphaType = SKAlphaType.Unpremul;
+                
+                // Special case for mask
+                if (pdfImage.IsImageMask && colorSpace == SKColorType.Gray8)
+                {
+                    colorSpace = SKColorType.Alpha8;
+                    alphaType  = SKAlphaType.Premul;
+                }
+
+                var info = new SKImageInfo(width, height, colorSpace, alphaType);
 
                 int bytesPerPixel = isRgba ? 4 : 1; // 3 (RGB) + 1 (alpha)
 

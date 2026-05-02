@@ -55,8 +55,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     throw new NullReferenceException("Got a null image.");
                 }
 
-                bitmap.SetImmutable();
-
                 // Images are upside down in PDF
                 _canvas.Scale(1, -1, 0, 0.5f);
 
@@ -64,48 +62,33 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 if (!pdfImage.IsImageMask)
                 {
+                    bitmap.SetImmutable();
                     var imagePaint = _paintCache.GetPaint(pdfImage, currentState.BlendMode);
                     using SKImage image = SKImage.FromBitmap(bitmap);
                     _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, imagePaint);
                 }
                 else
                 {
-                    // Draw image mask
-                    SKColor colour = currentState.CurrentNonStrokingColor
-                        .ToSKColor(currentState.AlphaConstantNonStroking);
-                        
-                    byte r = colour.Red;
-                    byte g = colour.Green;
-                    byte b = colour.Blue;
-                    byte a = byte.MaxValue; // TODO - Use colour.Alpha?
+                    // Image mask: 1-bit stencil. The source bitmap is Gray8 in canonical PDF
+                    // convention (0 = paint, 255 = transparent), so invert into an Alpha8 image
+                    // (Alpha8 is set in GetSKBitmap) and let Skia composite the current
+                    // non-stroking colour through it
+                    System.Diagnostics.Debug.Assert(bitmap.ColorType == SKColorType.Alpha8);
+                    System.Diagnostics.Debug.Assert(bitmap.AlphaType == SKAlphaType.Premul);
 
-                    using SKBitmap maskedBitmap = new SKBitmap(bitmap.Width, bitmap.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
-                    Span<byte> rasterSpan = maskedBitmap.GetPixelSpan();
-                    Span<byte> span = bitmap.GetPixelSpan();
-
-                    for (int row = 0; row < bitmap.Height; ++row)
+                    Span<byte> src = bitmap.GetPixelSpan();
+                    for (int i = 0; i < src.Length; i++)
                     {
-                        for (int col = 0; col < bitmap.Width; ++col)
-                        {
-                            byte pixel = span[(row * bitmap.Width) + col];
-                            if (pixel != byte.MinValue)
-                                continue;
-
-                            var start = (row * (bitmap.Width * 4)) + (col * 4);
-                            rasterSpan[start] = r;
-                            rasterSpan[start + 1] = g;
-                            rasterSpan[start + 2] = b;
-                            rasterSpan[start + 3] = a;
-                        }
+                        src[i] = (byte)~src[i];
                     }
+                    bitmap.SetImmutable();
 
-                    maskedBitmap.SetImmutable();
-                    var maskPaint = _paintCache.GetPaint(pdfImage, currentState.BlendMode);
-                    using SKImage image = SKImage.FromBitmap(maskedBitmap);
+                    var maskPaint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
+                        currentState.AlphaConstantNonStroking, false, null, null, null, null,
+                        currentState.BlendMode);
+                    using SKImage image = SKImage.FromBitmap(bitmap);
                     _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, maskPaint);
                 }
-
-                return;
             }
             catch (Exception ex)
             {
