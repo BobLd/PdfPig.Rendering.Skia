@@ -45,10 +45,19 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
+            SKBitmap? bitmap = null;
+            SKBitmap? alphaMask = null;
+
             try
             {
                 using SKAutoCanvasRestore skAutoCanvasRestore = new SKAutoCanvasRestore(_canvas, true);
-                using var bitmap = pdfImage.GetSKBitmap(ParsingOptions.Logger);
+
+                if (!pdfImage.TryGenerate(out bitmap, out alphaMask, ParsingOptions.Logger))
+                {
+                    // Fall back to encoded / raw byte decoding (no separate mask in that path).
+                    bitmap = pdfImage.GetSKBitmap(ParsingOptions.Logger);
+                    alphaMask = null;
+                }
 
                 if (bitmap is null)
                 {
@@ -65,7 +74,24 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     bitmap.SetImmutable();
                     var imagePaint = _paintCache.GetPaint(pdfImage, currentState.BlendMode);
                     using SKImage image = SKImage.FromBitmap(bitmap);
-                    _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, imagePaint);
+
+                    if (alphaMask is not null)
+                    {
+                        // Gray + SMask: composite via DstIn inside an isolated layer so the mask
+                        // affects only this image, not whatever is already on the canvas. The
+                        // outer layer paint carries the parent state's blend mode and antialias;
+                        // the inner DrawImage uses default SrcOver into the empty layer.
+                        using SKImage maskImage = SKImage.FromBitmap(alphaMask);
+                        int saved = _canvas.SaveLayer(new SKRect(0, 0, 1, 1), imagePaint);
+                        _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, null);
+                        using SKPaint dstInPaint = new SKPaint { BlendMode = SKBlendMode.DstIn };
+                        _canvas.DrawImage(maskImage, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, dstInPaint);
+                        _canvas.RestoreToCount(saved);
+                    }
+                    else
+                    {
+                        _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, imagePaint);
+                    }
                 }
                 else
                 {
@@ -94,6 +120,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 // We have no way so far to know if skia will be able to draw the picture
                 ParsingOptions.Logger.Error($"Failed to render image: {ex}");
+            }
+            finally
+            {
+                bitmap?.Dispose();
+                alphaMask?.Dispose();
             }
 
 #if DEBUG

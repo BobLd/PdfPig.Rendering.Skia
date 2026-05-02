@@ -59,13 +59,29 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return pdfImage.MaskImage is not null || pdfImage.ImageDictionary.ContainsKey(NameToken.Mask);
         }
 
-        private static bool TryGenerate(this IPdfImage pdfImage, out SKBitmap? skBitmap, ILog? log)
+        internal static bool TryGenerate(this IPdfImage pdfImage, out SKBitmap? skBitmap, out SKBitmap? alphaMask, ILog? log)
         {
             skBitmap = null;
+            alphaMask = null;
 
             if (!IsValidColorSpace(pdfImage) || !pdfImage.TryGetBytesAsMemory(out var imageMemory))
             {
                 return false;
+            }
+
+            // Gray + SMask fast path: keep the colour image as Gray8 and return the mask
+            // separately as Alpha8 so the renderer can composite via Skia (DstIn) — saves the
+            // per-pixel alpha bake and a 4× memory expansion of the colour buffer. Limited to
+            // SMask masks where the gray values directly represent alpha (PDF §11.6.5.2).
+            // IsImageMask stencils and colour-key /Mask arrays still go through the baked path.
+            if (!pdfImage.IsImageMask
+                && pdfImage.ColorSpaceDetails!.BaseNumberOfColorComponents == 1
+                && pdfImage.MaskImage is not null
+                && !pdfImage.MaskImage.IsImageMask
+                && !pdfImage.ImageDictionary.ContainsKey(NameToken.Mask)
+                && TryGenerateGrayWithSeparateMask(pdfImage, imageMemory.Span, out skBitmap, out alphaMask, log))
+            {
+                return true;
             }
 
             var imageSpan = imageMemory.Span;
@@ -110,8 +126,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 if (pdfImage.MaskImage is not null)
                 {
-                    if (pdfImage.MaskImage.TryGenerate(out mask, log))
+                    if (pdfImage.MaskImage.TryGenerate(out mask, out SKBitmap? nestedAlphaMask, log))
                     {
+                        // The mask image's own SMask (if any) isn't honoured by the bake path —
+                        // discard it. Rare in practice (mask of mask) and the visual cost is
+                        // small compared to the cost of recursing further.
+                        nestedAlphaMask?.Dispose();
                         mask!.SetImmutable();
 
                         if (!info.Rect.Equals(mask.Info.Rect))
@@ -146,8 +166,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             // MOZILLA-LINK-4293-0.pdf
                             // MOZILLA-LINK-4314-0.pdf
                             // MOZILLA-LINK-3758-0.pdf
-
-                            // Wrong: MOZILLA-LINK-4379-0.pdf
                         }
                     }
                 }
@@ -324,6 +342,124 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear);
         }
 
+        private static bool TryGenerateGrayWithSeparateMask(IPdfImage pdfImage, Span<byte> rawSpan,
+            out SKBitmap? grayBitmap, out SKBitmap? alphaMask, ILog? log)
+        {
+            grayBitmap = null;
+            alphaMask = null;
+
+            int width = pdfImage.WidthInSamples;
+            int height = pdfImage.HeightInSamples;
+
+            rawSpan = ColorSpaceDetailsByteConverter.Convert(pdfImage.ColorSpaceDetails!, rawSpan,
+                pdfImage.BitsPerComponent, width, height);
+
+            if (!IsImageArrayCorrectlySized(pdfImage, rawSpan))
+            {
+                return false;
+            }
+
+            // Recursively build the SMask. For a 1-component SMask without its own subsidiary
+            // mask this returns Gray8; if the mask itself has nested alpha, fall back to the
+            // baked path rather than handle mask-of-mask here.
+            if (!pdfImage.MaskImage!.TryGenerate(out SKBitmap? maskBitmap, out SKBitmap? nestedAlpha, log)
+                || maskBitmap is null
+                || nestedAlpha is not null
+                || maskBitmap.ColorType != SKColorType.Gray8)
+            {
+                maskBitmap?.Dispose();
+                nestedAlpha?.Dispose();
+                return false;
+            }
+
+            SKBitmap? gray = null;
+            SKBitmap? alpha = null;
+
+            try
+            {
+                maskBitmap.SetImmutable();
+
+                // Resize the SMask to match the colour image dimensions if needed (keeps the
+                // 1:1 mapping with rawSpan, otherwise the Alpha8 / Gray8 bytes wouldn't line up).
+                if (maskBitmap.Width != width || maskBitmap.Height != height)
+                {
+                    var resizedInfo = new SKImageInfo(width, height, maskBitmap.Info.ColorType, maskBitmap.Info.AlphaType);
+                    SKBitmap resized = maskBitmap.Resize(resizedInfo, pdfImage.MaskImage.GetSamplingOption());
+                    if (resized is null)
+                    {
+                        return false;
+                    }
+                    maskBitmap.Dispose();
+                    maskBitmap = resized;
+                    maskBitmap.SetImmutable();
+                }
+
+                // Reinterpret the Gray8 mask as Alpha8 — same byte layout, different ColorType.
+                // Skia samples Alpha8 as alpha-only so DstIn at draw time treats the gray values
+                // as alpha directly, which matches PDF SMask semantics for 1-component masks.
+                var alphaInfo = new SKImageInfo(width, height, SKColorType.Alpha8, SKAlphaType.Premul);
+                alpha = new SKBitmap(alphaInfo);
+                maskBitmap.GetPixelSpan().CopyTo(alpha.GetPixelSpan());
+                alpha.SetImmutable();
+
+                // Build the Gray8 colour bitmap (mirrors the 1-component branch of TryGenerate's
+                // baked path, including NeedsReverseDecode).
+                var grayInfo = new SKImageInfo(width, height, SKColorType.Gray8, SKAlphaType.Opaque);
+                gray = new SKBitmap(grayInfo);
+                Span<byte> graySpan = gray.GetPixelSpan();
+                if (pdfImage.NeedsReverseDecode())
+                {
+                    for (int i = 0; i < rawSpan.Length; i++)
+                    {
+                        graySpan[i] = (byte)~rawSpan[i];
+                    }
+                }
+                else
+                {
+                    rawSpan.CopyTo(graySpan);
+                }
+                gray.SetImmutable();
+
+                grayBitmap = gray;
+                alphaMask = alpha;
+                gray = null;
+                alpha = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                log?.Error($"Failed to generate gray bitmap with separate mask: {ex.Message}");
+                return false;
+            }
+            finally
+            {
+                maskBitmap.Dispose();
+                gray?.Dispose();
+                alpha?.Dispose();
+            }
+        }
+
+        private static SKBitmap BakeGrayAndAlphaToRgba(SKBitmap gray, SKBitmap alpha)
+        {
+            var info = new SKImageInfo(gray.Width, gray.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+            var rgba = new SKBitmap(info);
+            Span<byte> dst = rgba.GetPixelSpan();
+            ReadOnlySpan<byte> grayPixels = gray.GetPixelSpan();
+            ReadOnlySpan<byte> alphaPixels = alpha.GetPixelSpan();
+            int n = grayPixels.Length;
+            int j = 0;
+            for (int i = 0; i < n; i++)
+            {
+                byte g = grayPixels[i];
+                dst[j++] = g;
+                dst[j++] = g;
+                dst[j++] = g;
+                dst[j++] = alphaPixels[i];
+            }
+            rgba.SetImmutable();
+            return rgba;
+        }
+
         /// <summary>
         /// Converts the specified <see cref="IPdfImage"/> to an <see cref="SKBitmap"/> instance.
         /// </summary>
@@ -340,9 +476,22 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         /// </remarks>
         public static SKBitmap? GetSKBitmap(this IPdfImage pdfImage, ILog? log = null)
         {
-            if (pdfImage.TryGenerate(out var bitmap, log))
+            if (pdfImage.TryGenerate(out var bitmap, out var alphaMask, log))
             {
-                return bitmap!;
+                if (alphaMask is null)
+                {
+                    return bitmap!;
+                }
+                // Public API contract is a single SKBitmap — bake gray + alpha into RGBA here.
+                try
+                {
+                    return BakeGrayAndAlphaToRgba(bitmap!, alphaMask);
+                }
+                finally
+                {
+                    bitmap!.Dispose();
+                    alphaMask.Dispose();
+                }
             }
 
             log?.Warn("Failed to generate bitmap from pdf image.");
