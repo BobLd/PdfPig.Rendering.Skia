@@ -29,6 +29,35 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
     /// </summary>
     public static class SkiaImageExtensions
     {
+        // Alpha-source selectors used by the per-pixel loops in TryGenerate. Hoisting the
+        // selection out of the loop body lets the JIT branch-predict cleanly and avoids the
+        // per-pixel delegate dispatch + closure capture the previous Func-based approach paid.
+        private const int AlphaOpaque = 0;
+        private const int AlphaMask = 1;
+        private const int AlphaMaskInv = 2;
+        private const int AlphaColourKey = 3;
+
+        private static byte ResolveAlpha(int alphaMode, int pixelIndex,
+            byte r, byte g, byte b, ReadOnlySpan<byte> maskSpan,
+            byte rMin, byte gMin, byte bMin, byte rMax, byte gMax, byte bMax)
+        {
+            switch (alphaMode)
+            {
+                case AlphaMask:
+                    return maskSpan[pixelIndex];
+                case AlphaMaskInv:
+                    return (byte)~maskSpan[pixelIndex];
+                case AlphaColourKey:
+                    if (rMin <= r && r <= rMax && gMin <= g && g <= gMax && bMin <= b && b <= bMax)
+                    {
+                        return byte.MinValue;
+                    }
+                    return byte.MaxValue;
+                default:
+                    return byte.MaxValue;
+            }
+        }
+
         private static bool IsValidColorSpace(IPdfImage pdfImage)
         {
             return pdfImage.ColorSpaceDetails is not null &&
@@ -120,9 +149,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 var info = new SKImageInfo(width, height, colorSpace, alphaType);
 
-                int bytesPerPixel = isRgba ? 4 : 1; // 3 (RGB) + 1 (alpha)
-
-                Func<int, int, byte, byte, byte, byte> getAlphaChannel = (_, _, _, _, _) => byte.MaxValue;
+                // Resolve the alpha source ONCE, outside any per-pixel loop. The value of
+                // `alphaMode` selects between four sources used by the inner loops:
+                //   AlphaOpaque    — no mask, alpha is always 0xFF
+                //   AlphaMask      — mask SKBitmap, alpha = maskSpan[pixelIndex] (PDF SMask)
+                //   AlphaMaskInv   — mask SKBitmap with inverted bytes (mask is itself an
+                //                    image-mask stencil — see MOZILLA-LINK-3264-0.pdf etc.)
+                //   AlphaColourKey — /Mask array range test on the RGB triple
+                ReadOnlySpan<byte> maskSpan = default;
+                byte rMin = 0, gMin = 0, bMin = 0, rMax = 0, gMax = 0, bMax = 0;
+                int alphaMode = AlphaOpaque;
 
                 if (pdfImage.MaskImage is not null)
                 {
@@ -136,35 +172,23 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                         if (!info.Rect.Equals(mask.Info.Rect))
                         {
-                            // Resize
-                            var maskInfo = new SKImageInfo(info.Width, info.Height, mask!.Info.ColorType, mask!.Info.AlphaType);
+                            var maskInfo = new SKImageInfo(info.Width, info.Height, mask.Info.ColorType, mask.Info.AlphaType);
                             SKBitmap resized = mask.Resize(maskInfo, pdfImage.MaskImage.GetSamplingOption());
                             resized.SetImmutable();
-
                             mask.Dispose();
                             mask = resized;
                         }
 
                         if (!mask.IsEmpty)
                         {
-                            // TODO - It is very unclear why we need this logic of reversing or not here for IsImageMask
-          
-                            if (pdfImage.MaskImage.IsImageMask)
-                            {
-                                // We reverse pixel color
-                                getAlphaChannel = (row, col, _, _, _) => (byte)~mask.GetPixelSpan()[(row * width) + col];
-                            }
-                            else
-                            {
-                                // This is a NameToken.Smask - we do not reverse pixel color
-                                getAlphaChannel = (row, col, _, _, _) => mask.GetPixelSpan()[(row * width) + col];
-                            }
+                            // Hoist the mask pixel buffer once — the previous closure refetched
+                            // it on every pixel via SKBitmap.GetPixelSpan() (a P/Invoke each call).
+                            maskSpan = mask.GetPixelSpan();
+                            alphaMode = pdfImage.MaskImage.IsImageMask ? AlphaMaskInv : AlphaMask;
 
-                            // Examples of docs that are decode inverse
-                            // MOZILLA-LINK-3264-0.pdf 
-                            // MOZILLA-LINK-4246-2.pdf
-                            // MOZILLA-LINK-4293-0.pdf
-                            // MOZILLA-LINK-4314-0.pdf
+                            // Examples of docs that are decode inverse:
+                            // MOZILLA-LINK-3264-0.pdf, MOZILLA-LINK-4246-2.pdf,
+                            // MOZILLA-LINK-4293-0.pdf, MOZILLA-LINK-4314-0.pdf,
                             // MOZILLA-LINK-3758-0.pdf
                         }
                     }
@@ -179,13 +203,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         pdfImage.BitsPerComponent,
                         bytes.Length / pdfImage.ColorSpaceDetails!.NumberOfColorComponents,
                         1);
-
-                    byte rMin = 0;
-                    byte gMin = 0;
-                    byte bMin = 0;
-                    byte rMax = 0;
-                    byte gMax = 0;
-                    byte bMax = 0;
 
                     if (numberOfComponents == 4)
                     {
@@ -217,38 +234,31 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         throw new NotImplementedException("Mask with numberOfComponents == 1.");
                     }
 
-                    getAlphaChannel = (_, _, r, g, b) =>
-                    {
-                        if (rMin <= r && r <= rMax &&
-                            gMin <= g && g <= gMax &&
-                            bMin <= b && b <= bMax)
-                        {
-                            return byte.MinValue;
-                        }
-
-                        return byte.MaxValue;
-                    };
+                    alphaMode = AlphaColourKey;
                 }
 
                 skBitmap = new SKBitmap(info);
                 Span<byte> rasterSpan = skBitmap.GetPixelSpan();
+                int pixelCount = width * height;
 
                 if (numberOfComponents == 4)
                 {
-                    int i = 0;
-                    for (int row = 0; row < height; ++row)
+                    int srcIdx = 0;
+                    int dstIdx = 0;
+                    for (int p = 0; p < pixelCount; p++)
                     {
-                        for (int col = 0; col < width; ++col)
-                        {
-                            SkiaExtensions.ApproximateCmykToRgb(in imageSpan[i++], in imageSpan[i++], in imageSpan[i++], in imageSpan[i++],
-                                out byte r, out byte g, out byte b);
+                        SkiaExtensions.ApproximateCmykToRgb(
+                            in imageSpan[srcIdx], in imageSpan[srcIdx + 1],
+                            in imageSpan[srcIdx + 2], in imageSpan[srcIdx + 3],
+                            out byte r, out byte g, out byte b);
+                        srcIdx += 4;
 
-                            var start = (row * (width * bytesPerPixel)) + (col * bytesPerPixel);
-                            rasterSpan[start] = r;
-                            rasterSpan[start + 1] = g;
-                            rasterSpan[start + 2] = b;
-                            rasterSpan[start + 3] = getAlphaChannel(row, col, r, g, b);
-                        }
+                        rasterSpan[dstIdx] = r;
+                        rasterSpan[dstIdx + 1] = g;
+                        rasterSpan[dstIdx + 2] = b;
+                        rasterSpan[dstIdx + 3] = ResolveAlpha(alphaMode, p, r, g, b, maskSpan,
+                            rMin, gMin, bMin, rMax, gMax, bMax);
+                        dstIdx += 4;
                     }
 
                     return true;
@@ -256,21 +266,21 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 if (numberOfComponents == 3)
                 {
-                    int i = 0;
-                    for (int row = 0; row < height; ++row)
+                    int srcIdx = 0;
+                    int dstIdx = 0;
+                    for (int p = 0; p < pixelCount; p++)
                     {
-                        for (int col = 0; col < width; ++col)
-                        {
-                            byte r = imageSpan[i++];
-                            byte g = imageSpan[i++];
-                            byte b = imageSpan[i++];
+                        byte r = imageSpan[srcIdx];
+                        byte g = imageSpan[srcIdx + 1];
+                        byte b = imageSpan[srcIdx + 2];
+                        srcIdx += 3;
 
-                            var start = (row * (width * bytesPerPixel)) + (col * bytesPerPixel);
-                            rasterSpan[start] = r;
-                            rasterSpan[start + 1] = g;
-                            rasterSpan[start + 2] = b;
-                            rasterSpan[start + 3] = getAlphaChannel(row, col, r, g, b);
-                        }
+                        rasterSpan[dstIdx] = r;
+                        rasterSpan[dstIdx + 1] = g;
+                        rasterSpan[dstIdx + 2] = b;
+                        rasterSpan[dstIdx + 3] = ResolveAlpha(alphaMode, p, r, g, b, maskSpan,
+                            rMin, gMin, bMin, rMax, gMax, bMax);
+                        dstIdx += 4;
                     }
 
                     return true;
@@ -280,38 +290,35 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 {
                     if (isRgba)
                     {
-                        // Handle gray scale image as RGBA because we have an alpha channel
-                        int i = 0;
-                        for (int row = 0; row < height; ++row)
+                        // Gray + per-pixel alpha (colour-key /Mask, or IsImageMask SMask — the
+                        // gray + SMask case takes the separate-mask fast path in TryGenerate).
+                        int dstIdx = 0;
+                        for (int p = 0; p < pixelCount; p++)
                         {
-                            for (int col = 0; col < width; ++col)
-                            {
-                                byte g = imageSpan[i++];
-
-                                var start = (row * (width * bytesPerPixel)) + (col * bytesPerPixel);
-                                rasterSpan[start] = g;
-                                rasterSpan[start + 1] = g;
-                                rasterSpan[start + 2] = g;
-                                rasterSpan[start + 3] = getAlphaChannel(row, col, g, g, g);
-                            }
+                            byte gv = imageSpan[p];
+                            rasterSpan[dstIdx] = gv;
+                            rasterSpan[dstIdx + 1] = gv;
+                            rasterSpan[dstIdx + 2] = gv;
+                            rasterSpan[dstIdx + 3] = ResolveAlpha(alphaMode, p, gv, gv, gv, maskSpan,
+                                rMin, gMin, bMin, rMax, gMax, bMax);
+                            dstIdx += 4;
                         }
 
                         return true;
                     }
 
+                    // Pure gray (no mask). Slice to pixelCount because imageSpan can carry
+                    // trailing EOL bytes accepted by IsImageArrayCorrectlySized.
                     if (pdfImage.NeedsReverseDecode())
                     {
-                        for (int i = 0; i < imageSpan.Length; ++i)
+                        for (int i = 0; i < pixelCount; i++)
                         {
                             rasterSpan[i] = (byte)~imageSpan[i];
                         }
-
-                        return true;
                     }
-
-                    for (int i = 0; i < imageSpan.Length; ++i)
+                    else
                     {
-                        rasterSpan[i] = imageSpan[i];
+                        imageSpan.Slice(0, pixelCount).CopyTo(rasterSpan);
                     }
 
                     return true;
