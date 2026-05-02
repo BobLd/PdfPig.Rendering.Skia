@@ -617,6 +617,47 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "gs-bugzilla694385_1.png",
                 "gs-bugzilla694385.pdf", 1, 2
             },
+
+            new object[]
+            {
+                "2_color_tiling_1.png",
+                "2_color_tiling.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2_color_type3_pattern_bbox_1.png",
+                "2_color_type3_pattern_bbox.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2_shading_type_6_001_1.png",
+                "2_shading_type_6_001.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2_shading_type1_1.png",
+                "2_shading_type1.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2_shading_type1_sc__1.png",
+                "2_shading_type1_sc_.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2_shading_type3_1.png",
+                "2_shading_type3.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2_shading_type4_h_1.png",
+                "2_shading_type4_h.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2_shading_type5_h_1.png",
+                "2_shading_type5_h.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]

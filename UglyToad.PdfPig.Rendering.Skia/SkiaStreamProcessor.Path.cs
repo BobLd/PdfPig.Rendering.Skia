@@ -149,11 +149,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 switch (pattern.PatternType)
                 {
                     case PatternType.Tiling:
-                        RenderTilingPatternCurrentPath(pattern as TilingPatternColor, true);
+                        RenderTilingPattern(_currentPath, pattern as TilingPatternColor, true);
                         break;
 
                     case PatternType.Shading:
-                        RenderShadingPatternCurrentPath(pattern as ShadingPatternColor, true);
+                        RenderShadingPattern(_currentPath, pattern as ShadingPatternColor, true);
                         break;
                 }
             }
@@ -205,11 +205,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 switch (pattern.PatternType)
                 {
                     case PatternType.Tiling:
-                        RenderTilingPatternCurrentPath(pattern as TilingPatternColor, false);
+                        RenderTilingPattern(_currentPath, pattern as TilingPatternColor, false);
                         break;
 
                     case PatternType.Shading:
-                        RenderShadingPatternCurrentPath(pattern as ShadingPatternColor, false);
+                        RenderShadingPattern(_currentPath, pattern as ShadingPatternColor, false);
                         break;
                 }
             }

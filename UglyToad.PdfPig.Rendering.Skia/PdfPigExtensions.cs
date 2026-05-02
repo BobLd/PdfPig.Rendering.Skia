@@ -16,6 +16,7 @@ using System;
 using System.IO;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.Functions;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 using UglyToad.PdfPig.Tokens;
@@ -170,5 +171,59 @@ public static class PdfPigExtensions
         // We cancel CTM, but not canvas' Y flip, as we still need it.
         // We are drawing a SKPicture, we need to flip the Y axis of this picture.
         return SKMatrix.CreateScale(1, -1, 0, (float)pattern.BBox.Height / 2f);
+    }
+
+    /// <summary>
+    /// Evaluates a shading's colour function(s) and remaps each output linearly from its
+    /// declared Range to [0,1]. Functions without a Range entry fall back to plain [0,1]
+    /// clamping, matching <see cref="Shading.Eval"/>'s behaviour. Handles both the
+    /// "single n-out function" and "n separate 1-out functions" forms allowed by
+    /// PDF 1.7 §8.7.4.5 for Type 1 / Type 4 / Type 6 / Type 7 shadings.
+    /// </summary>
+    internal static double[] EvalWithRangeRemap(this Shading shading, params double[] inputs)
+    {
+        // Bypass shading.Eval (which clamps to [0,1] without using Range) so we
+        // can linearly remap each component from its declared Range to [0,1].
+        // For compliant PDFs (Range=[0,1]) the remap is identity; for malformed
+        // ones (e.g. Range=[-1,1] paired with DeviceRGB) the remap recovers the
+        // intended gradient instead of clamping every negative output to black.
+
+        PdfFunction[]? funcs = shading.Functions;
+        if (funcs is null || funcs.Length == 0)
+        {
+            return inputs;
+        }
+
+        if (funcs.Length == 1)
+        {
+            double[] raw = funcs[0].Eval(inputs);
+            for (int k = 0; k < raw.Length; k++)
+            {
+                raw[k] = RemapWithRange(raw[k], funcs[0], k);
+            }
+            return raw;
+        }
+
+        double[] result = new double[funcs.Length];
+        for (int k = 0; k < funcs.Length; k++)
+        {
+            double v = funcs[k].Eval(inputs)[0];
+            result[k] = RemapWithRange(v, funcs[k], 0);
+        }
+        return result;
+    }
+
+    private static double RemapWithRange(double value, PdfFunction func, int outputIndex)
+    {
+        if (func.NumberOfOutputParameters > outputIndex)
+        {
+            PdfRange range = func.GetRangeForOutput(outputIndex);
+            double extent = range.Max - range.Min;
+            if (extent > 0)
+            {
+                value = (value - range.Min) / extent;
+            }
+        }
+        return value < 0 ? 0 : (value > 1 ? 1 : value);
     }
 }
