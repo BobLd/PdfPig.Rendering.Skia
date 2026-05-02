@@ -14,11 +14,13 @@
 
 using System;
 using System.IO;
+using System.Linq;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Functions;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
+using UglyToad.PdfPig.Tokenization.Scanner;
 using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia;
@@ -225,5 +227,15 @@ public static class PdfPigExtensions
             }
         }
         return value < 0 ? 0 : (value > 1 ? 1 : value);
+    }
+
+    internal static TransformationMatrix ReadFormMatrix(StreamToken formStream, IPdfTokenScanner scanner)
+    {
+        if (formStream.StreamDictionary.TryGet<ArrayToken>(NameToken.Matrix, scanner, out var token))
+        {
+            return TransformationMatrix.FromArray(
+                token.Data.OfType<NumericToken>().Select(x => x.Double).ToArray());
+        }
+        return TransformationMatrix.Identity;
     }
 }

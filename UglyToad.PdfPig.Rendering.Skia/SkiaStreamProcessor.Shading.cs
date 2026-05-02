@@ -755,9 +755,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         bOut = components.Length > 2 ? components[2] : rOut;
                     }
 
-                    raster[index]     = (byte)Math.Max(0, Math.Min(255, rOut * 255.0));
-                    raster[index + 1] = (byte)Math.Max(0, Math.Min(255, gOut * 255.0));
-                    raster[index + 2] = (byte)Math.Max(0, Math.Min(255, bOut * 255.0));
+                    raster[index]     = (rOut * 255.0).ToByte();
+                    raster[index + 1] = (gOut * 255.0).ToByte();
+                    raster[index + 2] = (bOut * 255.0).ToByte();
                     raster[index + 3] = 255;
                 }
             }
