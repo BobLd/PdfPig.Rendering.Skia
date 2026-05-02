@@ -14,6 +14,7 @@
 
 using System;
 using System.Linq;
+using System.Runtime.InteropServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
@@ -241,10 +242,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 Span<byte> rasterSpan = skBitmap.GetPixelSpan();
                 int pixelCount = width * height;
 
+                // The Rgba8888 paths below pack each pixel as a single uint. Skia stores
+                // Rgba8888 as bytes R, G, B, A in memory order, which matches the low-to-high
+                // byte layout of `(A<<24) | (B<<16) | (G<<8) | R` only on little-endian. All
+                // platforms .NET supports in practice (x86/x64/ARM64 on Windows/Linux/macOS)
+                // are little-endian; if you ever need big-endian, reinstate the byte writes.
                 if (numberOfComponents == 4)
                 {
+                    Span<uint> dstU32 = MemoryMarshal.Cast<byte, uint>(rasterSpan);
                     int srcIdx = 0;
-                    int dstIdx = 0;
                     for (int p = 0; p < pixelCount; p++)
                     {
                         SkiaExtensions.ApproximateCmykToRgb(
@@ -253,12 +259,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             out byte r, out byte g, out byte b);
                         srcIdx += 4;
 
-                        rasterSpan[dstIdx] = r;
-                        rasterSpan[dstIdx + 1] = g;
-                        rasterSpan[dstIdx + 2] = b;
-                        rasterSpan[dstIdx + 3] = ResolveAlpha(alphaMode, p, r, g, b, maskSpan,
+                        byte a = ResolveAlpha(alphaMode, p, r, g, b, maskSpan,
                             rMin, gMin, bMin, rMax, gMax, bMax);
-                        dstIdx += 4;
+                        dstU32[p] = ((uint)a << 24) | ((uint)b << 16) | ((uint)g << 8) | r;
                     }
 
                     return true;
@@ -266,8 +269,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 if (numberOfComponents == 3)
                 {
+                    Span<uint> dstU32 = MemoryMarshal.Cast<byte, uint>(rasterSpan);
                     int srcIdx = 0;
-                    int dstIdx = 0;
                     for (int p = 0; p < pixelCount; p++)
                     {
                         byte r = imageSpan[srcIdx];
@@ -275,12 +278,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         byte b = imageSpan[srcIdx + 2];
                         srcIdx += 3;
 
-                        rasterSpan[dstIdx] = r;
-                        rasterSpan[dstIdx + 1] = g;
-                        rasterSpan[dstIdx + 2] = b;
-                        rasterSpan[dstIdx + 3] = ResolveAlpha(alphaMode, p, r, g, b, maskSpan,
+                        byte a = ResolveAlpha(alphaMode, p, r, g, b, maskSpan,
                             rMin, gMin, bMin, rMax, gMax, bMax);
-                        dstIdx += 4;
+                        dstU32[p] = ((uint)a << 24) | ((uint)b << 16) | ((uint)g << 8) | r;
                     }
 
                     return true;
@@ -292,16 +292,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     {
                         // Gray + per-pixel alpha (colour-key /Mask, or IsImageMask SMask — the
                         // gray + SMask case takes the separate-mask fast path in TryGenerate).
-                        int dstIdx = 0;
+                        // `gv * 0x010101u` broadcasts the gray byte across the R, G, B lanes
+                        // of the packed uint; alpha goes in the high byte.
+                        Span<uint> dstU32 = MemoryMarshal.Cast<byte, uint>(rasterSpan);
                         for (int p = 0; p < pixelCount; p++)
                         {
                             byte gv = imageSpan[p];
-                            rasterSpan[dstIdx] = gv;
-                            rasterSpan[dstIdx + 1] = gv;
-                            rasterSpan[dstIdx + 2] = gv;
-                            rasterSpan[dstIdx + 3] = ResolveAlpha(alphaMode, p, gv, gv, gv, maskSpan,
+                            byte a = ResolveAlpha(alphaMode, p, gv, gv, gv, maskSpan,
                                 rMin, gMin, bMin, rMax, gMax, bMax);
-                            dstIdx += 4;
+                            dstU32[p] = ((uint)a << 24) | (uint)gv * 0x010101u;
                         }
 
                         return true;
@@ -309,16 +308,26 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                     // Pure gray (no mask). Slice to pixelCount because imageSpan can carry
                     // trailing EOL bytes accepted by IsImageArrayCorrectlySized.
+                    ReadOnlySpan<byte> srcGray = imageSpan.Slice(0, pixelCount);
+                    Span<byte> dstGray = rasterSpan.Slice(0, pixelCount);
                     if (pdfImage.NeedsReverseDecode())
                     {
-                        for (int i = 0; i < pixelCount; i++)
+                        // Bitwise-NOT 8 bytes per iteration via ulong cast; tail loop handles
+                        // the trailing 0–7 bytes when pixelCount isn't a multiple of 8.
+                        ReadOnlySpan<ulong> srcU64 = MemoryMarshal.Cast<byte, ulong>(srcGray);
+                        Span<ulong> dstU64 = MemoryMarshal.Cast<byte, ulong>(dstGray);
+                        for (int i = 0; i < dstU64.Length; i++)
                         {
-                            rasterSpan[i] = (byte)~imageSpan[i];
+                            dstU64[i] = ~srcU64[i];
+                        }
+                        for (int i = dstU64.Length * 8; i < pixelCount; i++)
+                        {
+                            dstGray[i] = (byte)~srcGray[i];
                         }
                     }
                     else
                     {
-                        imageSpan.Slice(0, pixelCount).CopyTo(rasterSpan);
+                        srcGray.CopyTo(dstGray);
                     }
 
                     return true;
