@@ -15,7 +15,6 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
@@ -34,27 +33,22 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             Shading shading = ResourceStore.GetShading(shadingNameToken);
 
-            float maxX = _canvas.DeviceClipBounds.Right;
-            float maxY = _canvas.DeviceClipBounds.Top;
-            float minX = _canvas.DeviceClipBounds.Left;
-            float minY = _canvas.DeviceClipBounds.Bottom;
-
             switch (shading.ShadingType)
             {
                 case ShadingType.Axial:
-                    RenderAxialShading(shading as AxialShading, in SKMatrix.Identity, minX, minY, maxX, maxY);
+                    RenderAxialShading(shading as AxialShading, in SKMatrix.Identity);
                     break;
 
                 case ShadingType.Radial:
-                    RenderRadialShading(shading as RadialShading, in SKMatrix.Identity, minX, minY, maxX, maxY);
+                    RenderRadialShading(shading as RadialShading, in SKMatrix.Identity);
                     break;
 
                 case ShadingType.FunctionBased:
-                    RenderFunctionBasedShading(shading as FunctionBasedShading, in SKMatrix.Identity, minX, minY, maxX, maxY);
+                    RenderFunctionBasedShading(shading as FunctionBasedShading, in SKMatrix.Identity);
                     break;
 
                 case ShadingType.FreeFormGouraud:
-                    RenderFreeFormGouraudShading(shading as FreeFormGouraudShading, in SKMatrix.Identity, minX, minY, maxX, maxY);
+                    RenderFreeFormGouraudShading(shading as FreeFormGouraudShading, in SKMatrix.Identity);
                     break;
 
                 case ShadingType.LatticeFormGouraud:
@@ -86,13 +80,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
-        private void RenderRadialShading(RadialShading shading, in SKMatrix patternTransformMatrix, float minX,
-            float minY, float maxX, float maxY,
+        /// <summary>
+        /// Maps a vector from shading/pattern space into device pixels and returns its length.
+        /// The full chain (canvas CTM × pattern transform) is composed so the result reflects
+        /// the gradient's actual on-screen extent rather than the unit space the coords live in.
+        /// Used to size the gradient colour-stop table for axial / radial shadings.
+        /// </summary>
+        private float MapToDevicePixels(in SKMatrix patternTransformMatrix, float dx, float dy)
+        {
+            SKMatrix toDevice = _canvas.TotalMatrix.PreConcat(patternTransformMatrix);
+            float mappedDx = toDevice.ScaleX * dx + toDevice.SkewX * dy;
+            float mappedDy = toDevice.SkewY * dx + toDevice.ScaleY * dy;
+            return (float)Math.Sqrt(mappedDx * mappedDx + mappedDy * mappedDy);
+        }
+
+        private void RenderRadialShading(RadialShading shading, in SKMatrix patternTransformMatrix,
             bool isStroke = false, SKPath? path = null)
         {
             var currentState = GetCurrentState();
 
-            // Not correct
             var coords = shading.Coords;
 
             float r0 = (float)coords[2];
@@ -106,7 +112,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
 
             var domain = shading.Domain;
-
+            
             float x0 = (float)coords[0];
             float y0 = (float)coords[1];
             float x1 = (float)coords[3];
@@ -115,9 +121,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             float t0 = (float)domain[0];
             float t1 = (float)domain[1];
 
-            // worst case for the number of steps is opposite diagonal corners, so use that
-            float dist = (float)Math.Sqrt(Math.Pow(maxX - minX, 2) + Math.Pow(maxY - minY, 2));
-            int factor = Math.Max(10, (int)Math.Ceiling(dist / 10.0f)); // too much?
+            float radialExtent =
+                MapToDevicePixels(patternTransformMatrix, x1 - x0, y1 - y0)
+                + MapToDevicePixels(patternTransformMatrix, r0, 0)
+                + MapToDevicePixels(patternTransformMatrix, r1, 0);
+            int factor = Math.Max(10, (int)Math.Ceiling(radialExtent));
             var colors = new SKColor[factor + 1];
             float[] colorPos = new float[factor + 1];
 
@@ -137,52 +145,101 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 colorPos[t] = (float)frac;
             }
 
+            // PDF 1.7 §8.7.4.3: BBox is a temporary clipping boundary applied on top of the
+            // current clipping path. For a Type 2 (shading) pattern it is given in pattern
+            // space, so we push it through patternTransformMatrix to bring it into the canvas
+            // input coordinate space (the same space the path is drawn in). For the direct
+            // `sh` operator the matrix is identity and the BBox is already in user space.
+            bool bboxClipPushed = false;
             if (shading.BBox.HasValue)
             {
-                // TODO
+                using var bboxPath = new SKPath();
+                bboxPath.AddRect(shading.BBox.Value.ToSKRect());
+                bboxPath.Transform(patternTransformMatrix);
+                _canvas.Save();
+                _canvas.ClipPath(bboxPath, SKClipOperation.Intersect, true);
+                bboxClipPushed = true;
             }
 
-            if (shading.Background is not null)
+            try
             {
-                // TODO
+                // PDF 1.7 §8.7.4.5.4: when Background is present, paint that colour over the
+                // shading-object's painted area before drawing the gradient. Without this the
+                // page shows through the bounded gradient (when Extend is false) instead of the
+                // declared Background colour. Skipped when both Extend flags are true because the
+                // gradient covers everything and the background would never be visible.
+                bool[] extend = shading.Extend;
+                if (shading.Background is not null && !(extend[0] && extend[1]))
+                {
+                    using var bgPaint = new SKPaint();
+                    bgPaint.IsAntialias = shading.AntiAlias;
+                    bgPaint.Color = shading.ColorSpace.GetColor(shading.Background)
+                        .ToSKColor(currentState.AlphaConstantNonStroking);
+                    bgPaint.BlendMode = currentState.BlendMode.ToSKBlendMode();
+
+                    if (path is null)
+                    {
+                        _canvas.DrawPaint(bgPaint);
+                    }
+                    else
+                    {
+                        _canvas.DrawPath(path, bgPaint);
+                    }
+                }
+
+                // PDF Extend controls whether the gradient continues past the start/end circles.
+                // Skia's tile mode on a two-point conical gradient is the closest equivalent:
+                //   Both true   → Clamp  (t=0/t=1 colours bleed to infinity)
+                //   Both false  → Decal  (areas outside the gradient are transparent)
+                // Mixed extends have no exact tile-mode counterpart; Decal keeps at least the
+                // non-extending side correct, and the extending side is rare enough in practice
+                // that we accept the imperfection rather than rasterising by hand.
+                SKShaderTileMode tileMode = (extend[0] && extend[1])
+                    ? SKShaderTileMode.Clamp
+                    : SKShaderTileMode.Decal;
+
+                using (var shader = SKShader.CreateTwoPointConicalGradient(new SKPoint(x0, y0), r0, new SKPoint(x1, y1),
+                           r1, colors, colorPos, tileMode, patternTransformMatrix))
+                using (var paint = new SKPaint())
+                {
+                    paint.IsAntialias = shading.AntiAlias;
+                    paint.Shader = shader;
+                    paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
+
+                    SKPathEffect? dash = null;
+                    if (isStroke)
+                    {
+                        // TODO - To finish
+                        paint.Style = SKPaintStyle.Stroke;
+                        paint.StrokeWidth = (float)currentState.LineWidth;
+                        paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
+                        paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
+                        dash = currentState.LineDashPattern.ToSKPathEffect();
+                        paint.PathEffect = dash;
+                    }
+
+                    if (path is null)
+                    {
+                        _canvas.DrawPaint(paint);
+                    }
+                    else
+                    {
+                        _canvas.DrawPath(path, paint);
+                    }
+
+                    dash?.Dispose();
+                }
             }
-
-            using (var shader = SKShader.CreateTwoPointConicalGradient(new SKPoint(x0, y0), r0, new SKPoint(x1, y1), r1,
-                       colors, colorPos, SKShaderTileMode.Clamp, patternTransformMatrix))
-            using (var paint = new SKPaint())
+            finally
             {
-                paint.IsAntialias = shading.AntiAlias;
-                paint.Shader = shader;
-                paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
-
-                // check if bbox not null
-
-                SKPathEffect? dash = null;
-                if (isStroke)
+                if (bboxClipPushed)
                 {
-                    // TODO - To finish
-                    paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = (float)currentState.LineWidth;
-                    paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
-                    paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    dash = currentState.LineDashPattern.ToSKPathEffect();
-                    paint.PathEffect = dash;
+                    _canvas.Restore();
                 }
-
-                if (path is null)
-                {
-                    _canvas.DrawPaint(paint);
-                }
-                else
-                {
-                    _canvas.DrawPath(path, paint);
-                }
-
-                dash?.Dispose();
             }
         }
 
-        private void RenderAxialShading(AxialShading shading, in SKMatrix patternTransformMatrix, float minX, float minY, float maxX, float maxY,
+        private void RenderAxialShading(AxialShading shading, in SKMatrix patternTransformMatrix,
             bool isStroke = false, SKPath? path = null)
         {
             var currentState = GetCurrentState();
@@ -208,9 +265,16 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 // TODO
             }
 
-            // worst case for the number of steps is opposite diagonal corners, so use that
-            float dist = (float)Math.Sqrt(Math.Pow(maxX - minX, 2) + Math.Pow(maxY - minY, 2));
-            int factor = Math.Max(10, (int)Math.Ceiling(dist / 10.0f)); // too much? - Min of 10
+            // Number of stops to sample from the colour function. The gradient line goes from
+            // (x0, y0) to (x1, y1) in shading space — map that vector into device pixels and
+            // aim for one stop per device pixel. Lower densities work for smooth functions
+            // but smear any hard step-discontinuity (e.g. a Type 3 stitching function at one
+            // of its Bounds) across many pixels: the gap between adjacent stops becomes the
+            // width of the transition. One-per-pixel keeps the gap below the antialiasing
+            // edge so steps render as cleanly as a clipped fill. Floored at 10 for degenerate
+            // (zero-length) axes.
+            float axisLength = MapToDevicePixels(patternTransformMatrix, x1 - x0, y1 - y0);
+            int factor = Math.Max(10, (int)Math.Ceiling(axisLength));
             var colors = new SKColor[factor + 1];
             float[] colorPos = new float[factor + 1];
 
@@ -279,8 +343,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// Based on https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/graphics/shading/GouraudShadingContext.java
         /// and https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/graphics/shading/TriangleBasedShadingContext.java
         /// </summary>
-        private void RenderFreeFormGouraudShading(FreeFormGouraudShading shading, in SKMatrix patternTransformMatrix,
-            float minX, float minY, float maxX, float maxY, bool isStroke = false, SKPath? path = null)
+        private void RenderFreeFormGouraudShading(FreeFormGouraudShading shading, in SKMatrix patternTransformMatrix, 
+            bool isStroke = false, SKPath? path = null)
         {
             if (shading.Data.IsEmpty)
             {
@@ -600,12 +664,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <summary>
         /// see PDFBOX-1869-4.pdf
         /// </summary>
-        private void RenderFunctionBasedShading(FunctionBasedShading shading, in SKMatrix patternTransformMatrix,
-            float minX, float minY, float maxX, float maxY, bool isStroke = false, SKPath? path = null)
+        private void RenderFunctionBasedShading(FunctionBasedShading shading, in SKMatrix patternTransformMatrix, 
+            bool isStroke = false, SKPath? path = null)
         {
-            /*
-             * TODO - Not finished, need more document samples
-             */
+            // Based on https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/graphics/shading/Type1ShadingContext.java
+            // Strategy: pre-rasterise the colour function into a bitmap that covers the
+            // Domain rectangle, then let Skia map it onto the page through the shading.Matrix
+            // (and the pattern transform) with bilinear filtering. The previous form sized
+            // the bitmap to (int)(x1-x0) × (int)(y1-y0), which collapsed to 2×2 for the typical
+            // [-1,1]×[-1,1] domain — far too few samples for a non-trivial Type 4 function.
 
             var domain = shading.Domain;
 
@@ -614,80 +681,138 @@ namespace UglyToad.PdfPig.Rendering.Skia
             double y0 = domain[2];
             double y1 = domain[3];
 
-            // Based on https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/graphics/shading/Type1ShadingContext.java
+            double xExtent = x1 - x0;
+            double yExtent = y1 - y0;
 
-            int w = (int)(x1 - x0);
-            int h = (int)(y1 - y0);
-
-            using (SKBitmap shaderBitmap = new SKBitmap(w, h, SKColorType.Rgba8888, SKAlphaType.Premul))
+            if (xExtent <= 0 || yExtent <= 0)
             {
-                var raster = shaderBitmap.GetPixelSpan();
+                return;
+            }
 
-                double[] values = new double[2]; // TODO - stackalloc
+            // Size the rasterised bitmap to roughly match the device-space footprint of the
+            // rendered Domain rectangle. A fixed texture aliased rapidly oscillating Type 4
+            // functions when the device footprint exceeded it, and over-allocated when the
+            // shading was tiny. We compose the full chain (canvas CTM × pattern × shading.Matrix)
+            // so the size reflects the final on-screen pixel count, then clamp to a reasonable
+            // band so memory and rasterisation cost stay bounded for unusual transforms.
+            var domainRect = new SKRect((float)x0, (float)y0, (float)x1, (float)y1);
+            var deviceMatrix = _canvas.TotalMatrix
+                .PreConcat(patternTransformMatrix)
+                .PreConcat(shading.Matrix.ToSkMatrix());
+            var deviceRect = deviceMatrix.MapRect(domainRect);
+            int w = Math.Max(64, Math.Min(2048, (int)Math.Ceiling(Math.Abs(deviceRect.Width))));
+            int h = Math.Max(64, Math.Min(2048, (int)Math.Ceiling(Math.Abs(deviceRect.Height))));
 
-                for (int j = 0; j < h; j++)
+            using SKBitmap shaderBitmap = new SKBitmap(w, h, SKColorType.Rgba8888, SKAlphaType.Premul);
+            var raster = shaderBitmap.GetPixelSpan();
+
+            double[] values = new double[2];
+            ColorSpaceDetails? shadingColorSpace = shading.ColorSpace;
+            
+            for (int j = 0; j < h; j++)
+            {
+                // Sample at the texel centre to avoid biasing the gradient toward one corner.
+                double yi = y0 + (j + 0.5) * yExtent / h;
+                for (int i = 0; i < w; i++)
                 {
-                    for (int i = 0; i < w; i++)
+                    double xi = x0 + (i + 0.5) * xExtent / w;
+                    values[0] = xi;
+                    values[1] = yi;
+
+                    int index = (j * w + i) * 4;
+
+                    double[] components;
+                    try
                     {
-                        int index = (j * w + i) * 4;
-                        bool useBackground = false;
-                        values[0] = x0 + i;
-                        values[1] = y0 + j;
-                        //rat.transform(values, 0, values, 0, 1);
-                        if (values[0] < domain[0] || values[0] > domain[1] ||
-                            values[1] < domain[2] || values[1] > domain[3])
-                        {
-                            if (shading.Background is null)
-                            {
-                                continue;
-                            }
-                            useBackground = true;
-                        }
+                        components = shading.EvalWithRangeRemap(values);
+                    }
+                    catch (Exception e)
+                    {
+                        System.Diagnostics.Debug.WriteLine("error while processing a function {0}", e);
+                        continue;
+                    }
 
-                        // evaluate function
-                        double[] tmpValues; // "values" can't be reused due to different length
-                        if (useBackground && shading.Background is not null)
+                    double rOut, gOut, bOut;
+                    if (shadingColorSpace is not null)
+                    {
+                        try
                         {
-                            tmpValues = shading.Background;
+                            (rOut, gOut, bOut) = shadingColorSpace.GetColor(components).ToRGBValues();
                         }
-                        else
+                        catch (Exception e)
                         {
-                            try
-                            {
-                                tmpValues = shading.Eval(values);
-                            }
-                            catch (IOException e)
-                            {
-                                System.Diagnostics.Debug.WriteLine("error while processing a function {0}", e);
-                                continue;
-                            }
+                            // PDF could be malformed: function output count may not match the
+                            // colour space's component count (e.g. one 1-out function for a
+                            // 3-component DeviceRGB space). Skip the pixel rather than crash.
+                            System.Diagnostics.Debug.WriteLine("function/color-space component mismatch {0}", e);
+                            continue;
                         }
+                    }
+                    else
+                    {
+                        rOut = components.Length > 0 ? components[0] : 0;
+                        gOut = components.Length > 1 ? components[1] : rOut;
+                        bOut = components.Length > 2 ? components[2] : rOut;
+                    }
 
-                        // convert color values from shading color space to RGB
-                        ColorSpaceDetails? shadingColorSpace = shading.ColorSpace;
-                        if (shadingColorSpace is not null)
-                        {
-                            try
-                            {
-                                (double r, double g, double b) = shadingColorSpace.GetColor(tmpValues).ToRGBValues(); // To improve
-                                tmpValues = [r, g, b];
-                            }
-                            catch (IOException e)
-                            {
-                                System.Diagnostics.Debug.WriteLine("error processing color space {0}", e);
-                                continue;
-                            }
-                        }
-                        raster[index] = (byte)(tmpValues[0] * 255);
-                        raster[index + 1] = (byte)(tmpValues[1] * 255);
-                        raster[index + 2] = (byte)(tmpValues[2] * 255);
-                        raster[index + 3] = 255;
+                    raster[index]     = (byte)Math.Max(0, Math.Min(255, rOut * 255.0));
+                    raster[index + 1] = (byte)Math.Max(0, Math.Min(255, gOut * 255.0));
+                    raster[index + 2] = (byte)Math.Max(0, Math.Min(255, bOut * 255.0));
+                    raster[index + 3] = 255;
+                }
+            }
+
+            // Compose the localMatrix that Skia uses to sample the bitmap:
+            //   bitmap pixel (i,j)
+            //     ──[bitmap→domain]──▶ (x0+i·xExtent/w,  y0+j·yExtent/h)
+            //     ──[shading.Matrix]──▶ shading target coords
+            //     ──[patternTransform]─▶ canvas-input coords (where the path lives)
+            // PreConcat builds the matrix product so the rightmost transform runs first.
+            var bitmapToDomain = SKMatrix
+                .CreateScale((float)(xExtent / w), (float)(yExtent / h))
+                .PostConcat(SKMatrix.CreateTranslation((float)x0, (float)y0));
+
+            var finalShadingMatrix = patternTransformMatrix
+                .PreConcat(shading.Matrix.ToSkMatrix())
+                .PreConcat(bitmapToDomain);
+
+            var currentState = GetCurrentState();
+
+            // PDF 1.7 §8.7.4.3: the shading's BBox is a temporary clip in the shading's target
+            // coordinate space. patternTransformMatrix already maps that space into canvas
+            // input coords (identity for the direct `sh` operator).
+            bool bboxClipPushed = false;
+            if (shading.BBox.HasValue)
+            {
+                using var bboxPath = new SKPath();
+                bboxPath.AddRect(shading.BBox.Value.ToSKRect());
+                bboxPath.Transform(patternTransformMatrix);
+                _canvas.Save();
+                _canvas.ClipPath(bboxPath, SKClipOperation.Intersect, true);
+                bboxClipPushed = true;
+            }
+
+            try
+            {
+                // PDF 1.7 §8.7.4.5.4: paint the Background colour over the area first so that
+                // pixels outside the rasterised Domain rectangle (Decal-clipped to transparent)
+                // fall through to the declared Background instead of the page beneath.
+                if (shading.Background is not null && shadingColorSpace is not null)
+                {
+                    using var bgPaint = new SKPaint();
+                    bgPaint.IsAntialias = shading.AntiAlias;
+                    bgPaint.Color = shadingColorSpace.GetColor(shading.Background)
+                        .ToSKColor(currentState.AlphaConstantNonStroking);
+                    bgPaint.BlendMode = currentState.BlendMode.ToSKBlendMode();
+                    if (path is null)
+                    {
+                        _canvas.DrawPaint(bgPaint);
+                    }
+                    else
+                    {
+                        _canvas.DrawPath(path, bgPaint);
                     }
                 }
-
-                var finalShadingMatrix = patternTransformMatrix.PreConcat(shading.Matrix.ToSkMatrix());
-
-                var currentState = GetCurrentState();
 
                 using (var shader = SKShader.CreateBitmap(shaderBitmap, SKShaderTileMode.Decal, SKShaderTileMode.Decal, finalShadingMatrix))
                 using (var paint = new SKPaint())
@@ -720,11 +845,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     dash?.Dispose();
                 }
             }
-        }
-
-        private void RenderShadingPatternCurrentPath(ShadingPatternColor pattern, bool isStroke)
-        {
-            RenderShadingPattern(_currentPath, pattern, isStroke);
+            finally
+            {
+                if (bboxClipPushed)
+                {
+                    _canvas.Restore();
+                }
+            }
         }
 
         private void RenderShadingPattern(SKPath path, ShadingPatternColor pattern, bool isStroke)
@@ -734,11 +861,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 // TODO
             }
 
-            float maxX = path.Bounds.Right;
-            float maxY = path.Bounds.Top;
-            float minX = path.Bounds.Left;
-            float minY = path.Bounds.Bottom;
-
             // We cancel CTM, but not canvas' Y flip, as we still need it.
             var patternTransform = CurrentTransformationMatrix.ToSkMatrix().Invert()
                 .PreConcat(_currentStreamOriginalTransforms.Peek())
@@ -747,19 +869,19 @@ namespace UglyToad.PdfPig.Rendering.Skia
             switch (pattern.Shading.ShadingType)
             {
                 case ShadingType.Axial:
-                    RenderAxialShading(pattern.Shading as AxialShading, in patternTransform, minX, minY, maxX, maxY, isStroke, path);
+                    RenderAxialShading(pattern.Shading as AxialShading, in patternTransform, isStroke, path);
                     break;
 
                 case ShadingType.Radial:
-                    RenderRadialShading(pattern.Shading as RadialShading, in patternTransform, minX, minY, maxX, maxY, isStroke, path);
+                    RenderRadialShading(pattern.Shading as RadialShading, in patternTransform, isStroke, path);
                     break;
 
                 case ShadingType.FunctionBased:
-                    RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, in patternTransform, minX, minY, maxX, maxY, isStroke, path);
+                    RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, in patternTransform, isStroke, path);
                     break;
 
                 case ShadingType.FreeFormGouraud:
-                    RenderFreeFormGouraudShading(pattern.Shading as FreeFormGouraudShading, in patternTransform, minX, minY, maxX, maxY, isStroke, path);
+                    RenderFreeFormGouraudShading(pattern.Shading as FreeFormGouraudShading, in patternTransform, isStroke, path);
                     break;
 
                 case ShadingType.LatticeFormGouraud:
@@ -774,11 +896,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     RenderTensorProductPatchShading(pattern.Shading as TensorProductPatchMeshesShading, in patternTransform, path);
                     break;
             }
-        }
-
-        private void RenderTilingPatternCurrentPath(TilingPatternColor pattern, bool isStroke)
-        {
-            RenderTilingPattern(_currentPath, pattern, isStroke);
         }
 
         /// <summary>

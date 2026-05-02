@@ -32,6 +32,30 @@
 	  <None Update="Documents\0000190_cropped.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
+	  <None Update="Documents\2_color_tiling.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\2_color_type3_pattern_bbox.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\2_shading_type1.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\2_shading_type1_sc_.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\2_shading_type3.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\2_shading_type4_h.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\2_shading_type5_h.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Documents\2_shading_type_6_001.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	  <None Update="Documents\2_uncolor_tiling.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
@@ -391,6 +415,30 @@
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\22060_A1_01_Plans-1_1.png">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\2_color_tiling_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\2_color_type3_pattern_bbox_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\2_shading_type1_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\2_shading_type1_sc__1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\2_shading_type3_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\2_shading_type4_h_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\2_shading_type5_h_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="ExpectedImages\pdfpig_skia\2_shading_type_6_001_1.png">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	  <None Update="ExpectedImages\pdfpig_skia\2_uncolor_tiling_1.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
