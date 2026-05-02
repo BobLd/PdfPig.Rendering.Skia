@@ -658,6 +658,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "2_shading_type5_h_1.png",
                 "2_shading_type5_h.pdf", 1, 2
             },
+            new object[]
+            {
+                "Pig Production Handbook_1.png",
+                "Pig Production Handbook.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]

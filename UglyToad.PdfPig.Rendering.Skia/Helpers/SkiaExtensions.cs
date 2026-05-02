@@ -253,10 +253,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 }
 
                 // Should never happen, but see GHOSTSCRIPT-686749-1.pdf
-                return new SKColor(
-                    ConvertToByte(r),
-                    ConvertToByte(g),
-                    ConvertToByte(b),
+                return new SKColor(r.ToByte(),
+                    g.ToByte(),
+                    b.ToByte(),
                     Convert.ToByte(alpha * 255));
             }
 
@@ -270,18 +269,18 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 cmyk.Y >= 0 && cmyk.Y <= 1 && cmyk.K >= 0 && cmyk.K <= 1)
             {
                 // This is the expected case
-                c = ConvertToByte(cmyk.C * 255);
-                m = ConvertToByte(cmyk.M * 255);
-                y = ConvertToByte(cmyk.Y * 255);
-                k  = ConvertToByte(cmyk.K * 255);
+                c = (cmyk.C * 255).ToByte();
+                m = (cmyk.M * 255).ToByte();
+                y = (cmyk.Y * 255).ToByte();
+                k  = (cmyk.K * 255).ToByte();
             }
             else
             {
                 // Should never happen, but happens with RGB color space in GHOSTSCRIPT-686749-1.pdf
-                c = ConvertToByte(cmyk.C);
-                m = ConvertToByte(cmyk.M);
-                y = ConvertToByte(cmyk.Y);
-                k = ConvertToByte(cmyk.K);
+                c = cmyk.C.ToByte();
+                m = cmyk.M.ToByte();
+                y = cmyk.Y.ToByte();
+                k = cmyk.K.ToByte();
             }
 
             ApproximateCmykToRgb(c, m, y, k, out byte r, out byte g, out byte b);
@@ -289,7 +288,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static byte ConvertToByte(double v)
+        public static byte ToByte(this double v)
         {
             return v switch
             {
