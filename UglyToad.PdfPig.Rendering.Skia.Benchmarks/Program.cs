@@ -32,6 +32,12 @@ internal class Program
 public class RenderPages
 {
     [Benchmark]
+    public IReadOnlyList<SKPicture> MOZILLA_LINK_3264_0()
+    {
+        return RenderAllPages("MOZILLA-LINK-3264-0.pdf");
+    }
+
+    [Benchmark]
     public IReadOnlyList<SKPicture> GHOSTSCRIPT_693120_0()
     {
         return RenderAllPages("GHOSTSCRIPT-693120-0.pdf");
@@ -54,7 +60,6 @@ public class RenderPages
     {
         return RenderAllPages("GHOSTSCRIPT-693154-0.pdf");
     }
-
 
     private static IReadOnlyList<SKPicture> RenderAllPages(string path)
     {

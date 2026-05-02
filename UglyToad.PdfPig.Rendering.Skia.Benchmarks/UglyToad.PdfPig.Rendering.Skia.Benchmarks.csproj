@@ -36,6 +36,9 @@
 	  <None Update="GHOSTSCRIPT-693295-0.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
+	  <None Update="MOZILLA-LINK-3264-0.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	</ItemGroup>
 
 </Project>

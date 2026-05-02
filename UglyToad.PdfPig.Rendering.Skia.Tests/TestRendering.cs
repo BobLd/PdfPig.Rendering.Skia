@@ -663,6 +663,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "Pig Production Handbook_1.png",
                 "Pig Production Handbook.pdf", 1, 2
             },
+            new object[]
+            {
+                "MOZILLA-LINK-4379-0_1.png",
+                "MOZILLA-LINK-4379-0.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
