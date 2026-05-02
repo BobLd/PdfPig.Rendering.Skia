@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<PublishAot>true</PublishAot>
+		<InvariantGlobalization>true</InvariantGlobalization>
+
+		<PdfPigSkiaVersion Condition="'$(PdfPigSkiaVersion)' == ''">Local</PdfPigSkiaVersion>
+	</PropertyGroup>
+
+	<ItemGroup Condition="'$(PdfPigSkiaVersion)' == 'Local'">
+		<ProjectReference Include="..\UglyToad.PdfPig.Rendering.Skia\UglyToad.PdfPig.Rendering.Skia.csproj" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(PdfPigSkiaVersion)' == 'Latest'">
+	  <PackageReference Include="PdfPig.Rendering.Skia" Version="0.1.15.1-alpha002" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Update="DeviceN_CS_test.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="GHOSTSCRIPT-693120-0.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="GHOSTSCRIPT-693154-0.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="GHOSTSCRIPT-693295-0.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
+</Project>
