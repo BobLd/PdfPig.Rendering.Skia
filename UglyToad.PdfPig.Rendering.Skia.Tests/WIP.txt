@@ -1,0 +1,26 @@
+﻿Test document: GWG161_Transp_Basic_BM_DeviceCMYK_Knockout_X4.pdf
+
+● Summary
+
+  Root cause: The renderer didn't honor the K (knockout) flag on transparency groups (PDF 1.7 §11.4.5). Each compositing element inside a knockout group must be
+  composited against the group's initial backdrop, not against the running result of previous elements.
+
+  Implementation (in SkiaStreamProcessor.cs):
+  1. Parallel pixel surface — Process() now creates an SKSurface alongside the main SKPictureRecorder and broadcasts every drawing operation to both via SKNWayCanvas.
+   This gives on-the-fly pixel access for backdrop snapshots.
+  2. Outer knockout entry — When ProcessFormXObject sees a non-isolated knockout group (/K true, /I false), it snapshots the pixel surface to capture the group's
+  initial backdrop and pushes the knockout context.
+  3. Nested compositing elements — Each transparency-group form invoked inside a knockout context queues a backdrop-initialised SaveLayer (via SKCanvasSaveLayerRec
+  with Backdrop = SKImageFilter.CreateImage(...) wrapped in a y-flip matrix filter to compensate for the canvas's PDF-Y orientation). Bounds are set to the form's
+  BBox so areas outside the form's footprint preserve previous outer-layer content on Restore.
+
+  Result: The 16 colored rectangles now render with the correct base colors (Darken=teal, Multiply=teal, Lighten=red, Hard Light=blue, Hue/Saturation/Color=gray,
+  etc.) — previously they were obscured by a uniform magenta X. The X overlay is now substantially less prominent and reflects the per-square test blend mode rather
+  than just X1's source color (Hue/Saturation/Color squares show the X almost merged into the gray).
+
+  Remaining gap: Full X invisibility (matching the expected image exactly) would require Skia to apply blend modes in the document's CMYK blending color space
+  (TBCS=DeviceCMYK), which Skia doesn't do natively — it operates in RGB after CMYK→RGB conversion. The test's source colors (1,1,1,1) for Multiply, Darken, etc. are
+  designed to be neutral when those formulas are applied directly to subtractive CMYK components, but become (0,0,0) in additive RGB and are no longer neutral. This
+  is a deeper PDF-compliance limitation orthogonal to the knockout fix.
+
+  All 237 existing tests still pass.

@@ -293,6 +293,9 @@
 	  <None Update="Documents\GWG1611_Softmasks_Text_part2_X4.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
+	  <None Update="Documents\GWG161_Transp_Basic_BM_DeviceCMYK_Knockout_X4.pdf">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
 	  <None Update="Documents\GWG166_Softmasks_Images_DeviceCMYK_X4.pdf">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>

@@ -75,7 +75,24 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// matrix, not the CTM in effect at the time the mask is consumed.
         /// </summary>
         private SKMatrix _softMaskMatrix = SKMatrix.Identity;
-        
+
+        // Knockout transparency-group support (PDF 1.7 §11.4.5):
+        // In a knockout group, each compositing element must be composited against the
+        // GROUP'S INITIAL BACKDROP rather than the running result of previous elements.
+        // We capture the backdrop pixels at group entry via a parallel SKSurface that
+        // mirrors every recorder operation (broadcast through SKNWayCanvas), then use the
+        // captured image as the backdrop filter for each nested compositing element's
+        // SaveLayer so its blend modes apply against the captured backdrop.
+        private SKSurface? _pixelSurface;
+        private bool _inKnockoutGroup;
+        private SKImage? _knockoutBackdropImage;
+
+        // Set by ProcessFormXObject when a nested transparency group is invoked inside an
+        // active knockout context; consumed by the next PushState to issue a SaveLayer
+        // initialised from the captured backdrop image, bounded to the form's BBox.
+        private SKImage? _pendingBackdropImage;
+        private SKRect? _pendingBackdropBounds;
+
         private SKCanvas _canvas;
 
         public SkiaStreamProcessor(
@@ -129,7 +146,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 CloneAllStates();
 
                 using var recorder = new SKPictureRecorder();
-                _canvas = recorder.BeginRecording(SKRect.Create(_width, _height), true);
+                var recorderCanvas = recorder.BeginRecording(SKRect.Create(_width, _height), true);
+
+                // Maintain a parallel pixel surface so non-isolated knockout transparency
+                // groups can snapshot the page state at group entry. Without pixel access
+                // we cannot evaluate the per-element "compose against initial backdrop"
+                // rule that distinguishes knockout from normal compositing. Operations are
+                // broadcast to both canvases via SKNWayCanvas so the surface tracks the
+                // recorder exactly. Page-resolution surface — the captured image is later
+                // used as a backdrop filter and resampled at playback time.
+                int pixelW = Math.Max(1, (int)Math.Ceiling(_width));
+                int pixelH = Math.Max(1, (int)Math.Ceiling(_height));
+                var pixelInfo = new SKImageInfo(pixelW, pixelH, SKColorType.Rgba8888, SKAlphaType.Premul);
+                using var pixelSurface = SKSurface.Create(pixelInfo);
+                _pixelSurface = pixelSurface;
+
+                using var nway = new SKNWayCanvas(pixelW, pixelH);
+                nway.AddCanvas(recorderCanvas);
+                nway.AddCanvas(pixelSurface.Canvas);
+                _canvas = nway;
 
                 // Inverse direction of y-axis
                 _canvas.SetMatrix(in _yAxisInvertMatrix);
@@ -221,8 +256,45 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     _pendingTransparencyLayerPaint = savedPendingPaint;
                 }
 
-                // Use SaveLayer for transparency group - creates offscreen buffer
-                _canvas.SaveLayer(_pendingTransparencyLayerPaint);
+                if (_pendingBackdropImage is not null)
+                {
+                    // Knockout transparency group element (PDF 1.7 §11.4.5): initialise
+                    // the layer with the captured group-initial backdrop so the form's
+                    // blend modes apply against it rather than against the running outer
+                    // layer (which already has previous knockout elements). Bounds limit
+                    // the layer to the form's BBox so areas outside the form's footprint
+                    // preserve any earlier content in the outer layer.
+                    //
+                    // The pixel surface canvas had the same y-flip applied as the recorder
+                    // canvas (drawing PDF (x, y) wrote pixel (x, height - y)), so the
+                    // snapshot image stores PDF top-left content at pixel (0, 0). When the
+                    // image filter renders the image at native bounds (0, 0, W, H) it lands
+                    // in canvas-local space, which in our pipeline has y-flip already baked
+                    // in — so an unflipped image arrives upside-down. Wrap the image filter
+                    // in a y-flip matrix (around the page mid-line) to compensate.
+                    var backdropImg = _pendingBackdropImage;
+                    var srcRect = new SKRect(0, 0, backdropImg.Width, backdropImg.Height);
+                    var dstRect = SKRect.Create(0, 0, _width, _height);
+                    using var imageFilter = SKImageFilter.CreateImage(
+                        backdropImg, srcRect, dstRect, SKSamplingOptions.Default);
+                    var unflip = SKMatrix.CreateScale(1f, -1f, 0f, _height / 2f);
+                    using var backdropFilter = SKImageFilter.CreateMatrix(
+                        unflip, SKSamplingOptions.Default, imageFilter);
+                    var rec = new SKCanvasSaveLayerRec
+                    {
+                        Bounds = _pendingBackdropBounds,
+                        Backdrop = backdropFilter,
+                        Paint = _pendingTransparencyLayerPaint
+                    };
+                    _canvas.SaveLayer(in rec);
+                    _pendingBackdropImage = null;
+                    _pendingBackdropBounds = null;
+                }
+                else
+                {
+                    // Use SaveLayer for transparency group - creates offscreen buffer
+                    _canvas.SaveLayer(_pendingTransparencyLayerPaint);
+                }
                 _transparencyLayerPaints.Push(_pendingTransparencyLayerPaint);
                 _pendingMasks.Push(maskImage);
                 _pendingTransparencyLayerPaint = null;
@@ -280,58 +352,164 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 && formGroupToken.TryGet<NameToken>(NameToken.S, PdfScanner, out var sToken)
                 && sToken == NameToken.Transparency;
 
-            if (isTransparencyGroup)
+            // PDF 1.7 §11.6.6 Group dictionary entries:
+            //   /K (knockout) — when true, later objects must be composited with the group's
+            //     INITIAL BACKDROP and overwrite earlier overlapping objects.
+            //   /I (isolated) — when true, the group's initial backdrop is fully transparent;
+            //     when false, it is the group's parent backdrop (the surrounding page state).
+            bool isKnockout = false;
+            bool isIsolated = false;
+            if (isTransparencyGroup && formGroupToken is not null)
             {
-                // Capture parent state's blend mode and alpha before PushState
-                var parentState = GetCurrentState();
-
-                // PDF 1.7 §11.6.6.3: a soft mask's transparency group XObject is composited
-                // onto its BC backdrop with Normal blend mode and full alpha — the gs blend
-                // mode/ca apply to the *final* masked paint operation, not to the mask
-                // rendering itself. While we're rendering a soft mask (any nested form
-                // XObject inside it, including the mask form's own transparency group),
-                // force Normal/1.0 so e.g. Multiply doesn't darken the mask image into
-                // black against a black backdrop and nuke the mask.
-                BlendMode layerBlendMode = _isRenderingSoftMask ? BlendMode.Normal : parentState.BlendMode;
-                double layerAlpha = _isRenderingSoftMask ? 1.0 : parentState.AlphaConstantNonStroking;
-
-                // Set pending layer paint - will be used in PushState called by base.ProcessFormXObject
-                // The transparency group will be composited with parent's blend mode and alpha when the layer is restored
-                _pendingTransparencyLayerPaint = new SKPaint
+                if (formGroupToken.TryGet(NameToken.K, PdfScanner, out BooleanToken? knockoutToken))
                 {
-                    IsAntialias = _antiAliasing,
-                    BlendMode = layerBlendMode.ToSKBlendMode(),
-                    Color = SKColors.White.WithAlpha((layerAlpha * 255).ToByte())
-                };
-
-                // PDF 1.7 §11.6.5.2: a soft mask in the parent graphics state masks the
-                // transparency group's compositing. Capture it now so the upcoming PushState
-                // can render the mask into an offscreen image alongside SaveLayer. Suppress
-                // while we're already rendering one mask, otherwise the mask form's own
-                // transparency group would re-enter and mask itself.
-                if (!_isRenderingSoftMask && parentState.SoftMask is not null)
+                    isKnockout = knockoutToken.Data;
+                }
+                if (formGroupToken.TryGet(NameToken.I, PdfScanner, out BooleanToken? isolatedToken))
                 {
-                    _pendingSoftMask = parentState.SoftMask;
+                    isIsolated = isolatedToken.Data;
                 }
             }
 
-            // Capture the CTM that base.ProcessFormXObject will leave in effect after applying
-            // the form's Matrix entry (CTM' = formMatrix × CTM, see PDF 1.7 §8.7.2). Pattern
-            // rendering inside the form body recovers this via _currentStreamOriginalTransforms.Peek().
-            // Push/pop unconditionally and adjacently here — recursive ProcessFormXObject calls
-            // (e.g. RenderSoftMaskToImage's mask form) likewise push/pop their own entry, so
-            // the stack stays balanced regardless of execution path.
-            var formInitialCtm = PdfPigExtensions.ReadFormMatrix(formStream, PdfScanner)
-                .Multiply(CurrentTransformationMatrix);
-            _currentStreamOriginalTransforms.Push(formInitialCtm.ToSkMatrix());
+            // Detect entry into a non-isolated knockout group at the OUTER level (we're not
+            // already inside one and not currently rendering a soft mask). The current
+            // implementation captures backdrop pixels for non-isolated knockout only; isolated
+            // knockout would start from a transparent backdrop, which the existing transparent
+            // SaveLayer already provides.
+            bool entersKnockout = isTransparencyGroup
+                                  && isKnockout
+                                  && !isIsolated
+                                  && !_inKnockoutGroup
+                                  && !_isRenderingSoftMask;
+
+            // Whether this form is a nested compositing element inside an active knockout
+            // context — these are the elements that need backdrop-initialised SaveLayers.
+            bool isNestedInKnockout = isTransparencyGroup
+                                      && _inKnockoutGroup
+                                      && !entersKnockout
+                                      && !_isRenderingSoftMask;
+
+            SKImage? capturedBackdrop = null;
+            bool savedInKnockout = _inKnockoutGroup;
+            SKImage? savedKnockoutBackdrop = _knockoutBackdropImage;
+
             try
             {
-                base.ProcessFormXObject(formStream, xObjectName);
+                if (entersKnockout && _pixelSurface is not null)
+                {
+                    // Snapshot the parallel pixel surface before processing the group's
+                    // content. This represents the GROUP'S INITIAL BACKDROP (PDF 1.7 §11.4.5).
+                    // Each nested compositing element below will use this image to seed its
+                    // own SaveLayer so its blend modes apply against the captured backdrop.
+                    _canvas.Flush();
+                    capturedBackdrop = _pixelSurface.Snapshot();
+                    _knockoutBackdropImage = capturedBackdrop;
+                    _inKnockoutGroup = true;
+                }
+
+                if (isTransparencyGroup)
+                {
+                    // Capture parent state's blend mode and alpha before PushState
+                    var parentState = GetCurrentState();
+
+                    // PDF 1.7 §11.6.6.3: a soft mask's transparency group XObject is composited
+                    // onto its BC backdrop with Normal blend mode and full alpha — the gs blend
+                    // mode/ca apply to the *final* masked paint operation, not to the mask
+                    // rendering itself. While we're rendering a soft mask (any nested form
+                    // XObject inside it, including the mask form's own transparency group),
+                    // force Normal/1.0 so e.g. Multiply doesn't darken the mask image into
+                    // black against a black backdrop and nuke the mask.
+                    BlendMode layerBlendMode = _isRenderingSoftMask ? BlendMode.Normal : parentState.BlendMode;
+                    double layerAlpha = _isRenderingSoftMask ? 1.0 : parentState.AlphaConstantNonStroking;
+
+                    // Set pending layer paint - will be used in PushState called by base.ProcessFormXObject
+                    // The transparency group will be composited with parent's blend mode and alpha when the layer is restored
+                    _pendingTransparencyLayerPaint = new SKPaint
+                    {
+                        IsAntialias = _antiAliasing,
+                        BlendMode = layerBlendMode.ToSKBlendMode(),
+                        Color = SKColors.White.WithAlpha((layerAlpha * 255).ToByte())
+                    };
+
+                    // PDF 1.7 §11.6.5.2: a soft mask in the parent graphics state masks the
+                    // transparency group's compositing. Capture it now so the upcoming PushState
+                    // can render the mask into an offscreen image alongside SaveLayer. Suppress
+                    // while we're already rendering one mask, otherwise the mask form's own
+                    // transparency group would re-enter and mask itself.
+                    if (!_isRenderingSoftMask && parentState.SoftMask is not null)
+                    {
+                        _pendingSoftMask = parentState.SoftMask;
+                    }
+
+                    // For each compositing element nested inside an active knockout group,
+                    // queue a backdrop-initialised SaveLayer. The bounds (in PushState's
+                    // canvas-local space, which is "before form Matrix" since base.ProcessFormXObject
+                    // pushes state and only THEN concatenates the form Matrix) constrain the
+                    // layer to the form's footprint so areas outside it preserve previous
+                    // outer-layer content on Restore.
+                    if (isNestedInKnockout && _knockoutBackdropImage is not null)
+                    {
+                        _pendingBackdropImage = _knockoutBackdropImage;
+                        _pendingBackdropBounds = ComputeFormBoundsInPushStateSpace(formStream);
+                    }
+                }
+
+                // Capture the CTM that base.ProcessFormXObject will leave in effect after applying
+                // the form's Matrix entry (CTM' = formMatrix × CTM, see PDF 1.7 §8.7.2). Pattern
+                // rendering inside the form body recovers this via _currentStreamOriginalTransforms.Peek().
+                // Push/pop unconditionally and adjacently here — recursive ProcessFormXObject calls
+                // (e.g. RenderSoftMaskToImage's mask form) likewise push/pop their own entry, so
+                // the stack stays balanced regardless of execution path.
+                var formInitialCtm = PdfPigExtensions.ReadFormMatrix(formStream, PdfScanner)
+                    .Multiply(CurrentTransformationMatrix);
+                _currentStreamOriginalTransforms.Push(formInitialCtm.ToSkMatrix());
+                try
+                {
+                    base.ProcessFormXObject(formStream, xObjectName);
+                }
+                finally
+                {
+                    _currentStreamOriginalTransforms.Pop();
+                }
             }
             finally
             {
-                _currentStreamOriginalTransforms.Pop();
+                if (entersKnockout)
+                {
+                    _knockoutBackdropImage = savedKnockoutBackdrop;
+                    _inKnockoutGroup = savedInKnockout;
+                    capturedBackdrop?.Dispose();
+                }
             }
+        }
+
+        /// <summary>
+        /// Computes the form's BBox transformed by the form's Matrix entry, expressed in the
+        /// canvas-local coordinate space that <see cref="PushState"/> will see (the parent CTM,
+        /// before the base form processor concatenates the form's Matrix). Returns null if the
+        /// form lacks a usable BBox.
+        /// </summary>
+        private SKRect? ComputeFormBoundsInPushStateSpace(StreamToken formStream)
+        {
+            if (!formStream.StreamDictionary.TryGet<ArrayToken>(NameToken.Bbox, PdfScanner, out var bboxToken))
+            {
+                return null;
+            }
+
+            double[] coords = bboxToken.Data.OfType<NumericToken>().Select(t => t.Double).ToArray();
+            if (coords.Length < 4)
+            {
+                return null;
+            }
+
+            float left = (float)Math.Min(coords[0], coords[2]);
+            float right = (float)Math.Max(coords[0], coords[2]);
+            float bottom = (float)Math.Min(coords[1], coords[3]);
+            float top = (float)Math.Max(coords[1], coords[3]);
+            var bboxLocal = new SKRect(left, bottom, right, top);
+
+            var formMatrix = PdfPigExtensions.ReadFormMatrix(formStream, PdfScanner).ToSkMatrix();
+            return formMatrix.MapRect(bboxLocal);
         }
         
         public override void SetNamedGraphicsState(NameToken stateName)
@@ -372,6 +550,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 _pendingMasks.Pop()?.Dispose();
             }
+            _knockoutBackdropImage = null;
+            _pendingBackdropImage = null;
+            _pendingBackdropBounds = null;
+            _inKnockoutGroup = false;
+            _pixelSurface = null;
         }
     }
 }
