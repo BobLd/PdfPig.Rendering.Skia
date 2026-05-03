@@ -18,6 +18,7 @@ using System.Linq;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Functions;
+using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 using UglyToad.PdfPig.Tokenization.Scanner;
@@ -237,5 +238,41 @@ public static class PdfPigExtensions
                 token.Data.OfType<NumericToken>().Select(x => x.Double).ToArray());
         }
         return TransformationMatrix.Identity;
+    }
+
+    /// <summary>
+    /// Resolves the back-drop colour used to seed the soft mask offscreen surface for
+    /// /Luminosity masks. The PDF spec specifies the BC array in the group's colour space;
+    /// we approximate by component count: 1 = DeviceGray, 3 = DeviceRGB, 4 = DeviceCMYK
+    /// (converted to RGB so the subsequent <see cref="SKColorFilter.CreateLumaColor"/>
+    /// derives the correct luminance). /Alpha masks ignore colour so we keep transparent
+    /// (alpha 0) as the seed.
+    /// </summary>
+    internal static SKColor GetSoftMaskBackdrop(this SoftMask softMask)
+    {
+        if (softMask.Subtype != SoftMaskType.Luminosity)
+        {
+            return SKColors.Transparent;
+        }
+
+        double[]? bc = softMask.BC;
+        if (bc is null || bc.Length == 0)
+        {
+            // Spec default: the colour space's initial value, representing black.
+            return SKColors.Black;
+        }
+
+        if (bc.Length == 1)
+        {
+            return new GrayColor(bc[0]).ToSKColor();
+        }
+
+        if (bc.Length >= 4)
+        {
+            double c = bc[0], m = bc[1], y = bc[2], k = bc[3];
+            return new CMYKColor(c, m, y, k).ToSKColor();
+        }
+
+        return new RGBColor(bc[0], bc[1], bc[2]).ToSKColor();
     }
 }

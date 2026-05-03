@@ -16,6 +16,7 @@ using System;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Graphics;
+using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 using UglyToad.PdfPig.XObjects;
 
@@ -63,9 +64,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 if (!pdfImage.IsImageMask)
                 {
                     bitmap.SetImmutable();
-                    var imagePaint = _paintCache.GetPaint(pdfImage, currentState.BlendMode);
                     using SKImage image = SKImage.FromBitmap(bitmap);
-                    _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, imagePaint);
+                    if (TryGetActiveSoftMask(out var softMask))
+                    {
+                        var innerPaint = _paintCache.GetPaint(pdfImage, BlendMode.Normal);
+                        DrawWithSoftMask(softMask!, currentState.BlendMode,
+                            () => _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, innerPaint));
+                    }
+                    else
+                    {
+                        var imagePaint = _paintCache.GetPaint(pdfImage, currentState.BlendMode);
+                        _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, imagePaint);
+                    }
                 }
                 else
                 {
@@ -83,11 +93,21 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
                     bitmap.SetImmutable();
 
-                    var maskPaint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
-                        currentState.AlphaConstantNonStroking, false, null, null, null, null,
-                        currentState.BlendMode);
                     using SKImage image = SKImage.FromBitmap(bitmap);
-                    _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, maskPaint);
+                    if (TryGetActiveSoftMask(out var softMask))
+                    {
+                        var innerMaskPaint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
+                            currentState.AlphaConstantNonStroking, false, null, null, null, null, BlendMode.Normal);
+                        DrawWithSoftMask(softMask!, currentState.BlendMode,
+                            () => _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, innerMaskPaint));
+                    }
+                    else
+                    {
+                        var maskPaint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
+                            currentState.AlphaConstantNonStroking, false, null, null, null, null,
+                            currentState.BlendMode);
+                        _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, maskPaint);
+                    }
                 }
             }
             catch (Exception ex)

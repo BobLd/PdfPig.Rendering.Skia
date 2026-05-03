@@ -668,6 +668,32 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "MOZILLA-LINK-4379-0_1.png",
                 "MOZILLA-LINK-4379-0.pdf", 1, 2
             },
+
+            new object[]
+            {
+                "GWG1610_Softmasks_Text_part1_X4_1.png",
+                "GWG1610_Softmasks_Text_part1_X4.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GWG1611_Softmasks_Text_part2_X4_1.png",
+                "GWG1611_Softmasks_Text_part2_X4.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GWG166_Softmasks_Images_DeviceCMYK_X4_1.png",
+                "GWG166_Softmasks_Images_DeviceCMYK_X4.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GWG168_Softmasks_Vector_part1_X4_1.png",
+                "GWG168_Softmasks_Vector_part1_X4.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GWG169_Softmasks_Vector_part2_X4_1.png",
+                "GWG169_Softmasks_Vector_part2_X4.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]

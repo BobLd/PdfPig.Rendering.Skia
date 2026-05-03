@@ -18,6 +18,7 @@ using SkiaSharp.HarfBuzz;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
+using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.PdfFonts;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 
@@ -120,6 +121,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                                 break;
                         }
                     }
+                    else if (TryGetActiveSoftMask(out var softMask))
+                    {
+                        var innerPaint = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
+                            null, null, null, null, BlendMode.Normal);
+                        var glyphPath = transformedPath;
+                        DrawWithSoftMask(softMask!, currentState.BlendMode, () => _canvas.DrawPath(glyphPath, innerPaint));
+                    }
                     else
                     {
                         var fillPaint = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
@@ -137,10 +145,21 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         strokingColor = RGBColor.Black;
                     }
 
-                    var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
-                        (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
-                        currentState.LineDashPattern, currentState.BlendMode);
-                    _canvas.DrawPath(transformedPath, strokePaint);
+                    if (TryGetActiveSoftMask(out var softMask))
+                    {
+                        var innerStrokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
+                            (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
+                            currentState.LineDashPattern, BlendMode.Normal);
+                        var glyphStrokePath = transformedPath;
+                        DrawWithSoftMask(softMask!, currentState.BlendMode, () => _canvas.DrawPath(glyphStrokePath, innerStrokePaint));
+                    }
+                    else
+                    {
+                        var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
+                            (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
+                            currentState.LineDashPattern, currentState.BlendMode);
+                        _canvas.DrawPath(transformedPath, strokePaint);
+                    }
                 }
             }
         }
@@ -201,6 +220,16 @@ namespace UglyToad.PdfPig.Rendering.Skia
                             textRenderingMode, in TransformationMatrix.Identity, in TransformationMatrix.Identity);
                     }
                 }
+                else if (TryGetActiveSoftMask(out var softMask))
+                {
+                    var innerPaint = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
+                        null, null, null, null, BlendMode.Normal);
+                    DrawWithSoftMask(softMask!, currentState.BlendMode, () =>
+                    {
+                        using var skFont = drawTypeface.Typeface.ToFont(1f);
+                        _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, innerPaint);
+                    });
+                }
                 else
                 {
                     var fillPaint = _paintCache.GetPaint(nonStrokingColor, currentState.AlphaConstantNonStroking, false,
@@ -222,13 +251,27 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     strokingColor = RGBColor.Black;
                 }
 
-                var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
-                    (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
-                    currentState.LineDashPattern, currentState.BlendMode);
-
-                using (var skFont = drawTypeface.Typeface.ToFont(1f))
+                if (TryGetActiveSoftMask(out var softMask))
                 {
-                    _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, strokePaint);
+                    var innerStrokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
+                        (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
+                        currentState.LineDashPattern, BlendMode.Normal);
+                    DrawWithSoftMask(softMask!, currentState.BlendMode, () =>
+                    {
+                        using var skFont = drawTypeface.Typeface.ToFont(1f);
+                        _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, innerStrokePaint);
+                    });
+                }
+                else
+                {
+                    var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
+                        (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
+                        currentState.LineDashPattern, currentState.BlendMode);
+
+                    using (var skFont = drawTypeface.Typeface.ToFont(1f))
+                    {
+                        _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, strokePaint);
+                    }
                 }
             }
         }
