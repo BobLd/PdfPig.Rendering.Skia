@@ -231,7 +231,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return fillingRule == FillingRule.NonZeroWinding ? SKPathFillType.Winding : SKPathFillType.EvenOdd;
         }
 
-        public static SKColor ToSKColor(this IColor? pdfColor, double alpha)
+        public static SKColor ToSKColor(this IColor? pdfColor, double alpha = 1)
         {
             if (pdfColor is not null)
             {
@@ -246,23 +246,23 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 {
                     // This is the expected case
                     return new SKColor(
-                        Convert.ToByte(r * 255),
-                        Convert.ToByte(g * 255),
-                        Convert.ToByte(b * 255),
-                        Convert.ToByte(alpha * 255));
+                        (r * 255).ToByte(),
+                        (g * 255).ToByte(),
+                        (b * 255).ToByte(),
+                        (alpha * 255).ToByte());
                 }
 
                 // Should never happen, but see GHOSTSCRIPT-686749-1.pdf
                 return new SKColor(r.ToByte(),
                     g.ToByte(),
                     b.ToByte(),
-                    Convert.ToByte(alpha * 255));
+                    (alpha * 255).ToByte());
             }
 
-            return SKColors.Black.WithAlpha(Convert.ToByte(alpha * 255));
+            return SKColors.Black.WithAlpha((alpha * 255).ToByte());
         }
 
-        public static SKColor ToSKColor(this CMYKColor cmyk, double alpha)
+        public static SKColor ToSKColor(this CMYKColor cmyk, double alpha = 1)
         {
             byte c, m, y, k;
             if (cmyk.C >= 0 && cmyk.C <= 1 && cmyk.M >= 0 && cmyk.M <= 1 &&
@@ -284,7 +284,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
 
             ApproximateCmykToRgb(c, m, y, k, out byte r, out byte g, out byte b);
-            return new SKColor(r, g, b, Convert.ToByte(alpha * 255));
+            return new SKColor(r, g, b, (alpha * 255).ToByte());
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -294,7 +294,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             {
                 >= byte.MaxValue => byte.MaxValue,
                 <= byte.MinValue => byte.MinValue,
-                _ => (byte)v
+                _ => Convert.ToByte(v)
             };
         }
 
@@ -318,11 +318,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             g = Clamp(gf * k / 255);
             b = Clamp(bf * k / 255);
 
-            static byte Clamp(float value)
+            static byte Clamp(float v)
             {
-                if (value < 0) return 0;
-                if (value > 255) return 255;
-                return (byte)value;
+                return v switch
+                {
+                    >= byte.MaxValue => byte.MaxValue,
+                    <= byte.MinValue => byte.MinValue,
+                    _ => Convert.ToByte(v)
+                };
             }
 
             // See also https://github.com/UglyToad/PdfPig/issues/1144

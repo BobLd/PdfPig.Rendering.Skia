@@ -22,6 +22,7 @@ using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Filters;
 using UglyToad.PdfPig.Geometry;
 using UglyToad.PdfPig.Graphics;
+using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.Graphics.Operations;
 using UglyToad.PdfPig.Parser;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
@@ -284,13 +285,23 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 // Capture parent state's blend mode and alpha before PushState
                 var parentState = GetCurrentState();
 
+                // PDF 1.7 §11.6.6.3: a soft mask's transparency group XObject is composited
+                // onto its BC backdrop with Normal blend mode and full alpha — the gs blend
+                // mode/ca apply to the *final* masked paint operation, not to the mask
+                // rendering itself. While we're rendering a soft mask (any nested form
+                // XObject inside it, including the mask form's own transparency group),
+                // force Normal/1.0 so e.g. Multiply doesn't darken the mask image into
+                // black against a black backdrop and nuke the mask.
+                BlendMode layerBlendMode = _isRenderingSoftMask ? BlendMode.Normal : parentState.BlendMode;
+                double layerAlpha = _isRenderingSoftMask ? 1.0 : parentState.AlphaConstantNonStroking;
+
                 // Set pending layer paint - will be used in PushState called by base.ProcessFormXObject
                 // The transparency group will be composited with parent's blend mode and alpha when the layer is restored
                 _pendingTransparencyLayerPaint = new SKPaint
                 {
                     IsAntialias = _antiAliasing,
-                    BlendMode = parentState.BlendMode.ToSKBlendMode(),
-                    Color = SKColors.White.WithAlpha((parentState.AlphaConstantNonStroking * 255).ToByte())
+                    BlendMode = layerBlendMode.ToSKBlendMode(),
+                    Color = SKColors.White.WithAlpha((layerAlpha * 255).ToByte())
                 };
 
                 // PDF 1.7 §11.6.5.2: a soft mask in the parent graphics state masks the
@@ -323,103 +334,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
         
-        /// <summary>
-        /// Renders a soft mask's transparency group into an offscreen <see cref="SKImage"/>
-        /// covering the full page bounds, ready to be applied via DstIn at PopState time.
-        /// <para>
-        /// The mask is rasterised at 2× page resolution to keep luminosity edges sharp once
-        /// the host SKPicture is later played back to a higher-DPI surface. The rendering CTM
-        /// matches the main canvas (Y-flip + soft mask's captured initial CTM) so that the
-        /// mask's shape lands at the same device pixels as the layer it will mask.
-        /// </para>
-        /// <para>
-        /// For /Luminosity masks the canvas is pre-cleared with the mask's BC (back-drop)
-        /// colour, typically black, so the soft mask's transparency group is composited
-        /// against the spec-mandated opaque backdrop. The DstIn paint then uses
-        /// <see cref="SKColorFilter.CreateLumaColor"/> to convert the resulting RGB to alpha.
-        /// </para>
-        /// </summary>
-        private SKImage? RenderSoftMaskToImage(SoftMask softMask)
-        {
-            const int superSample = 2;
-            int pixelWidth = Math.Max(1, (int)Math.Ceiling(_width * superSample));
-            int pixelHeight = Math.Max(1, (int)Math.Ceiling(_height * superSample));
-
-            var info = new SKImageInfo(pixelWidth, pixelHeight, SKColorType.Rgba8888, SKAlphaType.Premul);
-            using var surface = SKSurface.Create(info);
-            if (surface is null)
-            {
-                return null;
-            }
-
-            var maskCanvas = surface.Canvas;
-
-            // Backdrop — for /Luminosity masks the source group is composited over an opaque
-            // backdrop (BC entry, defaulting to black in the group's colour space). For /Alpha
-            // masks the colour is irrelevant since only the alpha channel is consumed.
-            SKColor backdrop = ResolveSoftMaskBackdrop(softMask);
-            maskCanvas.Clear(backdrop);
-
-            // Match the main canvas: 2× supersample, then PDF Y-flip, then the CTM captured at
-            // the moment /gs activated this soft mask. The mask form's content stream then
-            // runs as if it were drawing on the main canvas at the time of activation.
-            maskCanvas.Scale(superSample, superSample);
-            maskCanvas.Concat(in _yAxisInvertMatrix);
-            maskCanvas.Concat(in _softMaskMatrix);
-            _softMaskMatrix = SKMatrix.Identity; // Reset matrix
-
-            var savedCanvas = _canvas;
-            _canvas = maskCanvas;
-            bool savedFlag = _isRenderingSoftMask;
-            _isRenderingSoftMask = true;
-
-            try
-            {
-                // Drive the form processor through the mask's transparency group exactly as
-                // any other form XObject. The flag above prevents re-entry into the SMask path
-                // for the (always transparency-group) mask form itself.
-                ProcessFormXObject(softMask.TransparencyGroup, null!);
-            }
-            finally
-            {
-                _canvas = savedCanvas;
-                _isRenderingSoftMask = savedFlag;
-            }
-
-            return surface.Snapshot();
-        }
-
-        /// <summary>
-        /// Resolves the back-drop colour used to seed the soft mask offscreen surface for
-        /// /Luminosity masks. The PDF spec specifies the BC array in the group's colour space;
-        /// we approximate by treating 1-component as gray and 3+ components as RGB. /Alpha
-        /// masks ignore colour so we keep transparent (alpha 0) as the seed.
-        /// </summary>
-        private static SKColor ResolveSoftMaskBackdrop(SoftMask softMask)
-        {
-            if (softMask.Subtype != SoftMaskType.Luminosity)
-            {
-                return SKColors.Transparent;
-            }
-
-            double[]? bc = softMask.BC;
-            if (bc is null || bc.Length == 0)
-            {
-                // Spec default: the colour space's initial value, representing black.
-                return SKColors.Black;
-            }
-
-            if (bc.Length == 1)
-            {
-                byte g = (bc[0] * 255).ToByte();
-                return new SKColor(g, g, g, 255);
-            }
-
-            return new SKColor((bc[0] * 255).ToByte(),
-                (bc[1] * 255).ToByte(),
-                (bc[2] * 255).ToByte(), 255);
-        }
-
         public override void SetNamedGraphicsState(NameToken stateName)
         {
             base.SetNamedGraphicsState(stateName);

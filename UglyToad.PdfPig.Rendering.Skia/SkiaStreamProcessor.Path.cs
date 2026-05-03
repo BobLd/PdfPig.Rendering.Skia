@@ -17,6 +17,7 @@ using SkiaSharp;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
+using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 
 namespace UglyToad.PdfPig.Rendering.Skia
@@ -159,10 +160,24 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
             else
             {
-                var paint = _paintCache.GetPaint(currentState.CurrentStrokingColor, currentState.AlphaConstantStroking, true,
-                    (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
-                    currentState.LineDashPattern, currentState.BlendMode);
-                _canvas.DrawPath(_currentPath, paint);
+                if (TryGetActiveSoftMask(out var softMask))
+                {
+                    // Per-paint soft mask: draw with Normal blend so the gs blend mode is
+                    // applied at composite-back time inside DrawWithSoftMask, not during
+                    // the inner draw onto the (transparent) layer.
+                    var innerPaint = _paintCache.GetPaint(currentState.CurrentStrokingColor, currentState.AlphaConstantStroking, true,
+                        (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
+                        currentState.LineDashPattern, BlendMode.Normal);
+                    var path = _currentPath;
+                    DrawWithSoftMask(softMask!, currentState.BlendMode, () => _canvas.DrawPath(path, innerPaint));
+                }
+                else
+                {
+                    var paint = _paintCache.GetPaint(currentState.CurrentStrokingColor, currentState.AlphaConstantStroking, true,
+                        (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
+                        currentState.LineDashPattern, currentState.BlendMode);
+                    _canvas.DrawPath(_currentPath, paint);
+                }
             }
         }
 
@@ -215,22 +230,19 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
             else
             {
-                var paint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
-                    currentState.AlphaConstantNonStroking, false, null, null, null, null, currentState.BlendMode);
-                _canvas.DrawPath(_currentPath, paint);
-
-                /* No cache method
-                using (SKPaint paint = new SKPaint()
+                if (TryGetActiveSoftMask(out var softMask))
                 {
-                    IsAntialias = _antiAliasing,
-                    Color = currentState.GetCurrentNonStrokingColorSKColor(),
-                    Style = SKPaintStyle.Fill
-                })
-                {
-                    //paint.BlendMode = currentGraphicsState.BlendMode.ToSKBlendMode();
-                    _canvas!.DrawPath(CurrentPath, paint);
+                    var innerPaint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
+                        currentState.AlphaConstantNonStroking, false, null, null, null, null, BlendMode.Normal);
+                    var path = _currentPath;
+                    DrawWithSoftMask(softMask!, currentState.BlendMode, () => _canvas.DrawPath(path, innerPaint));
                 }
-                */
+                else
+                {
+                    var paint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
+                        currentState.AlphaConstantNonStroking, false, null, null, null, null, currentState.BlendMode);
+                    _canvas.DrawPath(_currentPath, paint);
+                }
             }
         }
 
