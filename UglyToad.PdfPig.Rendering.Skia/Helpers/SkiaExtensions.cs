@@ -117,46 +117,53 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             };
         }
 
-        public static SKPathEffect? ToSKPathEffect(this LineDashPattern lineDashPattern, float scale = 1.0f)
+        public static SKPathEffect? ToSKPathEffect(this LineDashPattern lineDashPattern)
         {
             if (lineDashPattern.Phase == 0 && !(lineDashPattern.Array?.Count > 0))
             {
                 return null;
             }
 
-            float phase = lineDashPattern.Phase / scale; // Divide
-
-            switch (lineDashPattern.Array.Count)
+            int size = lineDashPattern.Array.Count;
+            switch (size)
             {
                 case 1:
                     {
-                        var v = (float)lineDashPattern.Array[0] * scale; // Multiply
-                        if (v == 0)
+                        var v = (float)lineDashPattern.Array[0];
+                        if (Math.Abs(v) < float.Epsilon)
                         {
                             v = OneOver72; // TODO - Add tests
                         }
-                        return SKPathEffect.CreateDash([v, v], phase);
+                        return SKPathEffect.CreateDash([v, v], lineDashPattern.Phase);
                     }
                 case > 0:
                     {
-                        float[] pattern = new float[lineDashPattern.Array.Count];
-                        for (int i = 0; i < lineDashPattern.Array.Count; i++)
+                        // Skia: The intervals must have an even number of entries.
+                        // See 'PostScript Language Reference - third edition.pdf'
+                        // p175 for odd number of entries
+                        if (size % 2 != 0)
+                        {
+                            size--; // Ignore last entry
+                        }
+  
+                        float[] pattern = new float[size];
+                        for (int i = 0; i < size; ++i)
                         {
                             var v = (float)lineDashPattern.Array[i];
-                            if (v == 0)
+                            if (Math.Abs(v) < float.Epsilon)
                             {
                                 pattern[i] = OneOver72; // See APISmap1.pdf
                             }
                             else
                             {
-                                pattern[i] = v * scale; // Multiply
+                                pattern[i] = v;
                             }
                         }
 
-                        return SKPathEffect.CreateDash(pattern, phase);
+                        return SKPathEffect.CreateDash(pattern, lineDashPattern.Phase);
                     }
                 default:
-                    return SKPathEffect.CreateDash([0, 0], phase);
+                    return SKPathEffect.CreateDash([0, 0], lineDashPattern.Phase);
             }
         }
 
