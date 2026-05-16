@@ -694,6 +694,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "GWG169_Softmasks_Vector_part2_X4_1.png",
                 "GWG169_Softmasks_Vector_part2_X4.pdf", 1, 2
             },
+            new object[]
+            {
+                "GHOSTSCRIPT-686965-0_1.png",
+                "GHOSTSCRIPT-686965-0.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
