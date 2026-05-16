@@ -127,6 +127,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             try
             {
+                if (TryGetTruncationSize(pdfImage, imageSpan.Length, out int expectedSize))
+                {
+                    imageSpan = imageSpan.Slice(0, expectedSize);
+                }
+
                 int width = pdfImage.WidthInSamples;
                 int height = pdfImage.HeightInSamples;
 
@@ -331,6 +336,42 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
 
             return new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear);
+        }
+
+        private static bool TryGetTruncationSize(IPdfImage pdfImage, int decodedLength, out int expectedSize)
+        {
+            expectedSize = 0;
+
+            if (pdfImage.BitsPerComponent != 8 || pdfImage.ColorSpaceDetails is null)
+            {
+                return false;
+            }
+            
+            int actualComponents = pdfImage.ColorSpaceDetails.NumberOfColorComponents;
+            var streamDictionary = pdfImage.ImageDictionary;
+            
+            // Only activate when /DecodeParms /Colors disagrees with the colour space.
+            if (!streamDictionary.TryGet(NameToken.DecodeParms, out DictionaryToken? decodeParams) || decodeParams is null)
+            {
+                return false;
+            }
+
+            if (!decodeParams.TryGet(NameToken.Colors, out NumericToken? colorsToken) || colorsToken is null
+                || colorsToken.Int == actualComponents)
+            {
+                return false;
+            }
+
+            expectedSize = pdfImage.WidthInSamples * pdfImage.HeightInSamples * actualComponents;
+
+            // Truncate only if the decoder over-produced (the buggy producer pads to a
+            // multi-component "row" boundary). Never grow data we don't have.
+            if (decodedLength <= expectedSize)
+            {
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>
