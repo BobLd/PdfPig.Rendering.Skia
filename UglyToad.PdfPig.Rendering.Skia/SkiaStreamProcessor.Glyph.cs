@@ -40,9 +40,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             var textRenderingMode = currentState.FontState.TextRenderingMode;
 
-            if (!textRenderingMode.IsFill() && !textRenderingMode.IsStroke())
+            if (textRenderingMode == TextRenderingMode.Neither)
             {
-                // No stroke and no fill -> nothing to do
+                return;
+            }
+
+            if (font is IType3Font type3Font)
+            {
+                ShowType3Glyph(type3Font, code, in renderingMatrix, in textMatrix);
                 return;
             }
 
@@ -88,6 +93,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             using (var transformedPath = new SKPath())
             {
                 path.Transform(transformMatrix, transformedPath);
+
+                if (textRenderingMode.IsClip())
+                {
+                    AppendGlyphToTextClipPath(transformedPath);
+                }
 
                 if (_canvas.QuickReject(transformedPath))
                 {
@@ -180,17 +190,29 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 return;
             }
-            
-            var style = textRenderingMode.ToSKPaintStyle();
-            if (!style.HasValue)
-            {
-                return;
-            }
 
             using var s = new SKAutoCanvasRestore(_canvas, true);
             _canvas.Concat(textMatrix.ToSkMatrix());
             _canvas.Concat(renderingMatrix.ToSkMatrix());
             _canvas.Scale(1, -1, 0, 0);
+
+            // PDF 1.7 §9.3.6: in rendering modes 4–7 the glyph outline contributes to the text
+            // clipping path applied on ET. Capture it from the shaped Skia glyphs at the active
+            // canvas matrix so cm/q/Q changes later in the same text object don't shift it.
+            if (textRenderingMode.IsClip())
+            {
+                using var glyphPath = GetPath(drawTypeface, unicode);
+                if (!glyphPath.IsEmpty)
+                {
+                    AppendGlyphToTextClipPath(glyphPath);
+                }
+            }
+
+            if (!textRenderingMode.IsFill() && !textRenderingMode.IsStroke())
+            {
+                // Mode 7 (NeitherClip) reaches here — clip-mode glyphs were recorded above.
+                return;
+            }
 
             var glyphBounds = new PdfRectangle(0, 0, characterBoundingBox.Width, UserSpaceUnit.PointMultiples);
 
@@ -276,12 +298,89 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
+        /// <summary>
+        /// Append the given glyph outline (still in the local "pre-canvas-CTM" space — i.e. PDF
+        /// user-space relative to the matrix in effect when the glyph was emitted) to the text
+        /// clipping path. The accumulator stores paths in device pixel space so that subsequent
+        /// <c>cm</c>/<c>q</c>/<c>Q</c> within the same text object don't move the glyph relative
+        /// to where it was actually drawn.
+        /// </summary>
+        private void AppendGlyphToTextClipPath(SKPath glyphPathInUserSpace)
+        {
+            _textClipPath ??= new SKPath();
+
+            var currentCanvasMatrix = _canvas.TotalMatrix;
+            _textClipPath.AddPath(glyphPathInUserSpace, in currentCanvasMatrix, SKPathAddMode.Append);
+        }
+
+        private void ShowType3Glyph(IType3Font font, int code,
+            in TransformationMatrix renderingMatrix,
+            in TransformationMatrix textMatrix)
+        {
+            if (!font.TryGetCharProc(code, out var charProcStream))
+            {
+                return;
+            }
+
+            // Decode and parse the CharProc content stream lazily — Type 3 fonts can include any
+            // graphics operators (paths, fills, images, ExtGState, even other XObjects), so we
+            // dispatch into the same operation pipeline used for the page content stream.
+            var contentBytes = charProcStream.Decode(FilterProvider, PdfScanner);
+            var operations = PageContentParser.Parse(PageNumber,
+                new MemoryInputBytes(contentBytes), ParsingOptions.Logger);
+
+            // Push the Type 3 font's /Resources so CharProc operations can resolve named fonts,
+            // XObjects, ExtGState, color spaces, etc. (PDF 1.7 §9.6.4: Required entry in PDF 1.2+.)
+            bool pushedResources = false;
+            if (font.Type3Resources is { } type3Resources)
+            {
+                ResourceStore.LoadResourceDictionary(type3Resources);
+                pushedResources = true;
+            }
+
+            // TextMatrices live outside the graphics state stack (PushState does not save them),
+            // so the outer ShowText loop relies on them surviving across glyph renders. Snapshot
+            // and restore around the CharProc, which itself may issue its own BT/Tm operators.
+            var savedTextMatrix = TextMatrices.TextMatrix;
+            var savedTextLineMatrix = TextMatrices.TextLineMatrix;
+
+            PushState();
+            try
+            {
+                // Replace the CTM with the text rendering matrix and apply the font matrix on top.
+                // PDF 1.7 §9.6.4:
+                //   newCTM = fontMatrix × Trm = fontMatrix × renderingMatrix × textMatrix × oldCTM
+                // ModifyCurrentTransformationMatrix(M) premultiplies — CTM ← M × CTM — so we apply
+                // the operands in right-to-left spec order: textMatrix, renderingMatrix, fontMatrix.
+                ModifyCurrentTransformationMatrix(textMatrix);
+                ModifyCurrentTransformationMatrix(renderingMatrix);
+                ModifyCurrentTransformationMatrix(font.GetFontMatrix());
+
+                // The CharProc executes in a fresh text object context — reset both text matrices
+                // so BT/Tm inside the CharProc start from identity.
+                TextMatrices.TextMatrix = TransformationMatrix.Identity;
+                TextMatrices.TextLineMatrix = TransformationMatrix.Identity;
+
+                ProcessOperations(operations);
+            }
+            finally
+            {
+                PopState();
+                TextMatrices.TextMatrix = savedTextMatrix;
+                TextMatrices.TextLineMatrix = savedTextLineMatrix;
+                if (pushedResources)
+                {
+                    ResourceStore.UnloadResourceDictionary();
+                }
+            }
+        }
+
         private static SKPath GetPath(SkiaFontCacheItem fontItem, string unicode)
         {
             using (var skFont = fontItem.Typeface.ToFont(1f))
             {
                 var shaped = fontItem.Shaper.Shape(unicode, skFont);
-                
+
                 var combinedPath = new SKPath();
                 for (int i = 0; i < shaped.Codepoints.Length; ++i)
                 {
@@ -299,7 +398,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return combinedPath;
             }
         }
-        
+
         private static float ComputeSkewX(PdfRectangle rectangle)
         {
             var rotationRadians = rectangle.Rotation * Math.PI / 180.0;

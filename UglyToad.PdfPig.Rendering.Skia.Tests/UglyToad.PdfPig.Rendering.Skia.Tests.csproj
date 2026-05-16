@@ -146,6 +146,9 @@
 		<None Update="Documents\GHOSTSCRIPT-692564-0.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+		<None Update="Documents\GHOSTSCRIPT-692637-0-270.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 		<None Update="Documents\GHOSTSCRIPT-692637-0-273.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
@@ -289,6 +292,9 @@
 		</None>
 		<None Update="Documents\gs-bugzilla694385.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="Documents\GWG090_Font-Support_x3.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 		<None Update="Documents\GWG1610_Softmasks_Text_part1_X4.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -563,6 +569,12 @@
 		<None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692564-0_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
+		<None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692637-0-270_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692637-0-273_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
 		<None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-692958-0.zip-2_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
@@ -637,6 +649,9 @@
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\gs-bugzilla694385_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\GWG090_Font-Support_x3_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\GWG1610_Softmasks_Text_part1_X4_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>

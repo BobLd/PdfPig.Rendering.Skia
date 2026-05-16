@@ -145,7 +145,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         {
                             size--; // Ignore last entry
                         }
-  
+
                         float[] pattern = new float[size];
                         for (int i = 0; i < size; ++i)
                         {
@@ -164,48 +164,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     }
                 default:
                     return SKPathEffect.CreateDash([0, 0], lineDashPattern.Phase);
-            }
-        }
-
-        public static bool IsStroke(this TextRenderingMode textRenderingMode)
-        {
-            switch (textRenderingMode)
-            {
-                case TextRenderingMode.Stroke:
-                case TextRenderingMode.StrokeClip:
-                case TextRenderingMode.FillThenStroke:
-                case TextRenderingMode.FillThenStrokeClip:
-                    return true;
-
-                case TextRenderingMode.Fill:
-                case TextRenderingMode.FillClip:
-                case TextRenderingMode.NeitherClip:
-                case TextRenderingMode.Neither:
-                    return false;
-
-                default:
-                    return false;
-            }
-        }
-
-        public static bool IsFill(this TextRenderingMode textRenderingMode)
-        {
-            switch (textRenderingMode)
-            {
-                case TextRenderingMode.Fill:
-                case TextRenderingMode.FillClip:
-                case TextRenderingMode.FillThenStroke:
-                case TextRenderingMode.FillThenStrokeClip:
-                    return true;
-
-                case TextRenderingMode.Stroke:
-                case TextRenderingMode.StrokeClip:
-                case TextRenderingMode.NeitherClip:
-                case TextRenderingMode.Neither:
-                    return false;
-
-                default:
-                    return false;
             }
         }
 
@@ -279,7 +237,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 c = (cmyk.C * 255).ToByte();
                 m = (cmyk.M * 255).ToByte();
                 y = (cmyk.Y * 255).ToByte();
-                k  = (cmyk.K * 255).ToByte();
+                k = (cmyk.K * 255).ToByte();
             }
             else
             {

@@ -699,6 +699,21 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "GHOSTSCRIPT-686965-0_1.png",
                 "GHOSTSCRIPT-686965-0.pdf", 1, 2
             },
+            new object[]
+            {
+                "GWG090_Font-Support_x3_1.png",
+                "GWG090_Font-Support_x3.pdf", 1, 5
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-692637-0-273_1.png",
+                "GHOSTSCRIPT-692637-0-273.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-692637-0-270_1.png",
+                "GHOSTSCRIPT-692637-0-270.pdf", 1, 2
+            }
         };
 
         [Theory(Skip = "for debugging purpose.")]
