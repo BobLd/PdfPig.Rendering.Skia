@@ -41,9 +41,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             var textRenderingMode = currentState.FontState.TextRenderingMode;
 
-            if (!textRenderingMode.IsFill() && !textRenderingMode.IsStroke())
+            if (textRenderingMode == TextRenderingMode.Neither)
             {
-                // No stroke and no fill -> nothing to do
+                // Invisible: no fill, no stroke, no clip — nothing to record or paint.
                 return;
             }
 
@@ -51,6 +51,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // by drawing a vector outline. Resolve the CharProc and dispatch into a dedicated path
             // that pushes the font's Resources, replaces the CTM with the text rendering matrix
             // (per PDF 1.7 §9.6.4), and processes the CharProc operations against the current canvas.
+            // We don't accumulate Type 3 glyphs into the text clip path: PDF 1.7 §9.6.4 explicitly
+            // disallows Type 3 charProcs from contributing to clipping in rendering modes 4–7, and
+            // pdfbox follows the same rule (PageDrawer.showType3Glyph).
             if (font is IType3Font type3Font)
             {
                 ShowType3Glyph(type3Font, code, in renderingMatrix, in textMatrix);
@@ -99,6 +102,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
             using (var transformedPath = new SKPath())
             {
                 path.Transform(transformMatrix, transformedPath);
+
+                // PDF 1.7 §9.3.6: rendering modes 4–7 contribute the glyph outline to the text
+                // clipping path that ET applies to the canvas clip. Record before QuickReject so
+                // an offscreen glyph still participates (its bounds may still intersect the clip
+                // after later cm/q operations within the same text object).
+                if (textRenderingMode.IsClip())
+                {
+                    AppendGlyphToTextClipPath(transformedPath);
+                }
 
                 if (_canvas.QuickReject(transformedPath))
                 {
@@ -193,15 +205,30 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
             
             var style = textRenderingMode.ToSKPaintStyle();
-            if (!style.HasValue)
-            {
-                return;
-            }
 
             using var s = new SKAutoCanvasRestore(_canvas, true);
             _canvas.Concat(textMatrix.ToSkMatrix());
             _canvas.Concat(renderingMatrix.ToSkMatrix());
             _canvas.Scale(1, -1, 0, 0);
+
+            // PDF 1.7 §9.3.6: in rendering modes 4–7 the glyph outline contributes to the text
+            // clipping path applied on ET. Capture it from the shaped Skia glyphs at the active
+            // canvas matrix so cm/q/Q changes later in the same text object don't shift it.
+            if (textRenderingMode.IsClip())
+            {
+                using var glyphPath = GetPath(drawTypeface, unicode);
+                if (glyphPath is not null && !glyphPath.IsEmpty)
+                {
+                    AppendGlyphToTextClipPath(glyphPath);
+                }
+            }
+
+            if (!style.HasValue)
+            {
+                // Rendering modes 3 (Neither) and 7 (NeitherClip) — no painting. We've already
+                // recorded clip-mode glyphs above; modes that produce no fill or stroke can stop.
+                return;
+            }
 
             var glyphBounds = new PdfRectangle(0, 0, characterBoundingBox.Width, UserSpaceUnit.PointMultiples);
 
@@ -285,6 +312,23 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Append the given glyph outline (still in the local "pre-canvas-CTM" space — i.e. PDF
+        /// user-space relative to the matrix in effect when the glyph was emitted) to the text
+        /// clipping path. The accumulator stores paths in device pixel space so that subsequent
+        /// <c>cm</c>/<c>q</c>/<c>Q</c> within the same text object don't move the glyph relative
+        /// to where it was actually drawn.
+        /// </summary>
+        private void AppendGlyphToTextClipPath(SKPath glyphPathInUserSpace)
+        {
+            _textClipPath ??= new SKPath();
+
+            var currentCanvasMatrix = _canvas.TotalMatrix;
+            using var devicePath = new SKPath();
+            glyphPathInUserSpace.Transform(currentCanvasMatrix, devicePath);
+            _textClipPath.AddPath(devicePath, SKPathAddMode.Append);
         }
 
         private void ShowType3Glyph(IType3Font font, int code,

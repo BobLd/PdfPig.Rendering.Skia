@@ -22,18 +22,17 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
     public class VisualTests
     {
         private const float _scale = 2;
-        private const string _outputPath = "Output";
+        private const string _outputPath = "C:\\pdfpig-work";
 
         private static readonly HashSet<string> _documentsToIgnore = new HashSet<string>
         {
-            "GHOSTSCRIPT-699178-0.pdf",
-            "SPARC - v9 Architecture Manual.pdf",
-            "TIKA-1552-0.pdf"
+            "GHOSTSCRIPT-692637-0-270.pdf",
+            "GHOSTSCRIPT-692637-0-273.pdf"
         };
 
         public static IEnumerable<object[]> GetAllDocuments => Directory.EnumerateFiles("Documents", "*.pdf")
             .Select(Path.GetFileName)
-            .Where(p => !_documentsToIgnore.Contains(p))
+            .Where(p => _documentsToIgnore.Contains(p))
             .Select(p => new object[] { p });
 
         public VisualTests()

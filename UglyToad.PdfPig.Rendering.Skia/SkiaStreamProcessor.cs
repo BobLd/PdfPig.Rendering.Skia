@@ -75,7 +75,16 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// matrix, not the CTM in effect at the time the mask is consumed.
         /// </summary>
         private SKMatrix _softMaskMatrix = SKMatrix.Identity;
-        
+
+        /// <summary>
+        /// Glyph outlines accumulated for text rendering modes 4–7 within the current text object
+        /// (PDF 1.7 §9.3.6). Stored in device pixel space (i.e. with the CTM in effect at the time
+        /// of each glyph already applied) so the combined path can be re-intersected with the clip
+        /// at <c>ET</c> regardless of whether <c>cm</c>/<c>q</c>/<c>Q</c> moved the CTM in-between.
+        /// <c>null</c> when no text object is open.
+        /// </summary>
+        private SKPath? _textClipPath;
+
         private SKCanvas _canvas;
 
         public SkiaStreamProcessor(
@@ -272,6 +281,37 @@ namespace UglyToad.PdfPig.Rendering.Skia
             _canvas.Concat(value.ToSkMatrix());
         }
 
+        public override void BeginText()
+        {
+            base.BeginText();
+            // PDF spec: text rendering modes 4–7 build up a clipping path glyph-by-glyph that is
+            // only applied to the canvas clip on the matching ET (§9.3.6). Start a fresh accumulator
+            // for this text object. Nested BTs are disallowed by the spec, so we don't stack them.
+            _textClipPath?.Dispose();
+            _textClipPath = null;
+        }
+
+        public override void EndText()
+        {
+            // Apply the accumulated text clipping path (if any) to the current canvas clip before
+            // resetting the text matrices. The path was recorded in device pixel space, so we
+            // temporarily neutralise the CTM around the ClipPath call to avoid double-transforming.
+            if (_textClipPath is { } textClip)
+            {
+                _textClipPath = null;
+                if (!textClip.IsEmpty)
+                {
+                    var savedMatrix = _canvas.TotalMatrix;
+                    _canvas.SetMatrix(SKMatrix.Identity);
+                    _canvas.ClipPath(textClip, SKClipOperation.Intersect, antialias: _antiAliasing);
+                    _canvas.SetMatrix(in savedMatrix);
+                }
+                textClip.Dispose();
+            }
+
+            base.EndText();
+        }
+
         // Note that recursive calls are possible here for nested form XObjects
         protected override void ProcessFormXObject(StreamToken formStream, NameToken xObjectName)
         {
@@ -372,6 +412,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 _pendingMasks.Pop()?.Dispose();
             }
+            _textClipPath?.Dispose();
+            _textClipPath = null;
         }
     }
 }
