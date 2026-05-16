@@ -1,4 +1,4 @@
-﻿// Copyright 2024 BobLd
+﻿// Copyright BobLd
 //
 // Licensed under the Apache License, Version 2.0 (the "License").
 // you may not use this file except in compliance with the License.
@@ -13,12 +13,14 @@
 // limitations under the License.
 
 using System;
+using System.Collections.Generic;
 using SkiaSharp;
 using SkiaSharp.HarfBuzz;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Graphics.Core;
+using UglyToad.PdfPig.Graphics.Operations;
 using UglyToad.PdfPig.PdfFonts;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 
@@ -40,9 +42,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             var textRenderingMode = currentState.FontState.TextRenderingMode;
 
-            if (!textRenderingMode.IsFill() && !textRenderingMode.IsStroke())
+            if (textRenderingMode == TextRenderingMode.Neither)
             {
-                // No stroke and no fill -> nothing to do
+                return;
+            }
+
+            if (font is IType3Font type3Font)
+            {
+                ShowType3Glyph(type3Font, code, in renderingMatrix, in textMatrix);
                 return;
             }
 
@@ -88,6 +95,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             using (var transformedPath = new SKPath())
             {
                 path.Transform(transformMatrix, transformedPath);
+
+                if (textRenderingMode.IsClip())
+                {
+                    AppendGlyphToTextClipPath(transformedPath);
+                }
 
                 if (_canvas.QuickReject(transformedPath))
                 {
@@ -180,17 +192,29 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 return;
             }
-            
-            var style = textRenderingMode.ToSKPaintStyle();
-            if (!style.HasValue)
-            {
-                return;
-            }
 
             using var s = new SKAutoCanvasRestore(_canvas, true);
             _canvas.Concat(textMatrix.ToSkMatrix());
             _canvas.Concat(renderingMatrix.ToSkMatrix());
             _canvas.Scale(1, -1, 0, 0);
+
+            // PDF 1.7 §9.3.6: in rendering modes 4–7 the glyph outline contributes to the text
+            // clipping path applied on ET. Capture it from the shaped Skia glyphs at the active
+            // canvas matrix so cm/q/Q changes later in the same text object don't shift it.
+            if (textRenderingMode.IsClip())
+            {
+                using var glyphPath = GetPath(drawTypeface, unicode);
+                if (!glyphPath.IsEmpty)
+                {
+                    AppendGlyphToTextClipPath(glyphPath);
+                }
+            }
+
+            if (!textRenderingMode.IsFill() && !textRenderingMode.IsStroke())
+            {
+                // Mode 7 (NeitherClip) reaches here — clip-mode glyphs were recorded above.
+                return;
+            }
 
             var glyphBounds = new PdfRectangle(0, 0, characterBoundingBox.Width, UserSpaceUnit.PointMultiples);
 
@@ -276,12 +300,154 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
+        /// <summary>
+        /// Append the given glyph outline (still in the local "pre-canvas-CTM" space — i.e. PDF
+        /// user-space relative to the matrix in effect when the glyph was emitted) to the text
+        /// clipping path. The accumulator stores paths in device pixel space so that subsequent
+        /// <c>cm</c>/<c>q</c>/<c>Q</c> within the same text object don't move the glyph relative
+        /// to where it was actually drawn.
+        /// </summary>
+        private void AppendGlyphToTextClipPath(SKPath glyphPathInUserSpace)
+        {
+            _textClipPath ??= new SKPath();
+
+            var currentCanvasMatrix = _canvas.TotalMatrix;
+            _textClipPath.AddPath(glyphPathInUserSpace, in currentCanvasMatrix, SKPathAddMode.Append);
+        }
+
+        private void ShowType3Glyph(IType3Font font, int code,
+            in TransformationMatrix renderingMatrix,
+            in TransformationMatrix textMatrix)
+        {
+            var ctx = new Type3BuildContext(
+                FilterProvider,
+                PdfScanner,
+                PageContentParser,
+                PageNumber,
+                ParsingOptions.Logger,
+                BuildType3Picture);
+
+            var cached = _fontCache.GetOrBuildType3Glyph(font, code, ctx);
+            if (cached is Type3MissingGlyph)
+            {
+                return;
+            }
+
+            PushState();
+            try
+            {
+                ModifyCurrentTransformationMatrix(textMatrix);
+                ModifyCurrentTransformationMatrix(renderingMatrix);
+                ModifyCurrentTransformationMatrix(font.GetFontMatrix());
+
+                switch (cached)
+                {
+                    case Type3VectorGlyph vector:
+                        var currentState = GetCurrentState();
+                        ShowVectorFontGlyph(vector.Path,
+                            currentState.CurrentStrokingColor,
+                            currentState.CurrentNonStrokingColor,
+                            currentState.FontState.TextRenderingMode,
+                            in TransformationMatrix.Identity, in TransformationMatrix.Identity);
+                        return;
+
+                    case Type3PictureGlyph picture:
+                        _canvas.DrawPicture(picture.Picture);
+                        return;
+                }
+            }
+            finally
+            {
+                PopState();
+            }
+        }
+
+        /// <summary>
+        /// Record a Type 3 CharProc's operations into a self-contained <see cref="SKPicture"/>.
+        /// The recording runs the live operator pipeline (so <c>Do</c>, <c>gs</c>, inline images
+        /// etc. all work) against a temporary recorder canvas. The page canvas is swapped out for
+        /// the duration of the recording and restored unconditionally in the <c>finally</c>.
+        /// </summary>
+        /// <remarks>
+        /// The recording is in raw glyph space (no fontMatrix applied). Callers apply
+        /// <c>textMatrix × renderingMatrix × fontMatrix</c> at draw time, matching the matrix
+        /// composition the un-cached path used.
+        /// </remarks>
+        private SKPicture BuildType3Picture(IReadOnlyList<IGraphicsStateOperation> operations, IType3Font font, int code)
+        {
+            // SKPictureRecorder culling bounds — a hint only, not a hard clip. Try the per-code
+            // glyph bbox first (raw glyph space, pre-fontMatrix). Type3 fonts may not have widths
+            // for every encountered code (Differences encodings), in which case GetBoundingBox
+            // throws — fall back to a generous default since the bound is only an optimization.
+            SKRect bounds = SKRect.Create(-1000, -1000, 2000, 2000);
+            try
+            {
+                var fontBbox = font.GetBoundingBox(code).GlyphBounds;
+                
+                var candidate = new SKRect(
+                    (float)Math.Min(fontBbox.BottomLeft.X, fontBbox.TopRight.X),
+                    (float)Math.Min(fontBbox.BottomLeft.Y, fontBbox.TopRight.Y),
+                    (float)Math.Max(fontBbox.BottomLeft.X, fontBbox.TopRight.X),
+                    (float)Math.Max(fontBbox.BottomLeft.Y, fontBbox.TopRight.Y));
+                
+                if (!candidate.IsEmpty)
+                {
+                    bounds = candidate;
+                }
+            }
+            catch
+            {
+                // Keep the generous fallback bounds.
+            }
+
+            var pageCanvas = _canvas;
+            using var recorder = new SKPictureRecorder();
+            _canvas = recorder.BeginRecording(bounds);
+
+            bool pushedResources = false;
+            var savedTextMatrix = TextMatrices.TextMatrix;
+            var savedTextLineMatrix = TextMatrices.TextLineMatrix;
+
+            try
+            {
+                if (font.Type3Resources is { } type3Resources)
+                {
+                    ResourceStore.LoadResourceDictionary(type3Resources);
+                    pushedResources = true;
+                }
+
+                PushState();
+                try
+                {
+                    TextMatrices.TextMatrix = TransformationMatrix.Identity;
+                    TextMatrices.TextLineMatrix = TransformationMatrix.Identity;
+                    ProcessOperations(operations);
+                }
+                finally
+                {
+                    PopState();
+                }
+            }
+            finally
+            {
+                TextMatrices.TextMatrix = savedTextMatrix;
+                TextMatrices.TextLineMatrix = savedTextLineMatrix;
+                if (pushedResources)
+                {
+                    ResourceStore.UnloadResourceDictionary();
+                }
+                _canvas = pageCanvas;
+            }
+
+            return recorder.EndRecording();
+        }
+
         private static SKPath GetPath(SkiaFontCacheItem fontItem, string unicode)
         {
             using (var skFont = fontItem.Typeface.ToFont(1f))
             {
                 var shaped = fontItem.Shaper.Shape(unicode, skFont);
-                
+
                 var combinedPath = new SKPath();
                 for (int i = 0; i < shaped.Codepoints.Length; ++i)
                 {
@@ -300,24 +466,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
         
-        private static float ComputeSkewX(PdfRectangle rectangle)
-        {
-            var rotationRadians = rectangle.Rotation * Math.PI / 180.0;
-            var diffY = rectangle.TopLeft.Y - rectangle.BottomLeft.Y;
-            var diffX = rectangle.TopLeft.X - rectangle.BottomLeft.X;
-
-            var rotationBottomTopRadians = (float)Math.Atan2(diffY, diffX);
-
-            // Test documents:
-            // - SPARC - v9 Architecture Manual.pdf, page 1
-            // - 68-1990-01_A.pdf, page 15
-            // - GHOSTSCRIPT-686821-0.pdf
-
-            double radians = (Math.PI / 2.0 + rotationRadians - rotationBottomTopRadians) % Math.PI;
-
-            return (float)Math.Round(radians, 5);
-        }
-
         private static bool CanRender(string unicode)
         {
             ReadOnlySpan<char> chars = unicode.AsSpan();

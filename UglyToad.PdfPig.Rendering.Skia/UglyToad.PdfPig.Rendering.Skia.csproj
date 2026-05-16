@@ -42,7 +42,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="PdfPig" Version="0.1.15-alpha-20260427-046a5" />
+		<PackageReference Include="PdfPig" Version="0.1.15-alpha-20260516-228ad" />
 		<PackageReference Include="PdfPig.Filters.Dct.JpegLibrary" Version="0.1.12.2" />
 		<PackageReference Include="PdfPig.Filters.Jbig2.PdfboxJbig2" Version="0.1.12.1" />
 		<PackageReference Include="PdfPig.Filters.Jpx.OpenJpeg" Version="0.1.12.1" />
