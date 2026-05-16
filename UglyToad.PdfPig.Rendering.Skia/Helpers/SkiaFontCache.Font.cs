@@ -1,4 +1,4 @@
-﻿// Copyright 2024 BobLd
+﻿// Copyright BobLd
 //
 // Licensed under the Apache License, Version 2.0 (the "License").
 // you may not use this file except in compliance with the License.
@@ -229,6 +229,23 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 }
 
                 _cache.Clear();
+
+                foreach (IType3Font key in _type3Cache.Keys)
+                {
+                    if (!_type3Cache.TryRemove(key, out var perFont))
+                    {
+                        continue;
+                    }
+
+                    foreach (var value in perFont.Values)
+                    {
+                        value?.Value?.Dispose();
+                    }
+
+                    perFont.Clear();
+                }
+
+                _type3Cache.Clear();
 
                 foreach (string key in _typefaces.Keys)
                 {

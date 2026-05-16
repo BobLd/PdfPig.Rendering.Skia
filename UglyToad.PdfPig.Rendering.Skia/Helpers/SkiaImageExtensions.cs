@@ -90,10 +90,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                                   && pdfImage.ColorSpaceDetails!.BaseType != ColorSpace.Pattern;
         }
 
-        private static bool IsImageArrayCorrectlySized(IPdfImage pdfImage, ReadOnlySpan<byte> bytesPure)
+        private static bool IsImageArrayCorrectlySized(IPdfImage pdfImage, ReadOnlySpan<byte> bytesPure, out int requiredSize)
         {
             var actualSize = bytesPure.Length;
-            var requiredSize = (pdfImage.WidthInSamples * pdfImage.HeightInSamples * pdfImage.ColorSpaceDetails!.BaseNumberOfColorComponents);
+            requiredSize = (pdfImage.WidthInSamples * pdfImage.HeightInSamples * pdfImage.ColorSpaceDetails!.BaseNumberOfColorComponents);
 
             return bytesPure.Length == requiredSize ||
                                    // Spec, p. 37: "...error if the stream contains too much data, with the exception that
@@ -140,9 +140,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 var numberOfComponents = pdfImage.ColorSpaceDetails!.BaseNumberOfColorComponents;
 
-                if (!IsImageArrayCorrectlySized(pdfImage, imageSpan))
+                if (!IsImageArrayCorrectlySized(pdfImage, imageSpan, out int requiredSize))
                 {
-                    return false;
+                    if (requiredSize >= imageSpan.Length)
+                    {
+                        return false;
+                    }
+
+                    // We assume we can ignore the last bytes
+                    imageSpan = imageSpan.Slice(0, requiredSize);
                 }
 
                 bool isRgba = numberOfComponents > 1 || pdfImage.HasAlphaChannel();
