@@ -1,4 +1,4 @@
-﻿// Copyright 2024 BobLd
+﻿// Copyright BobLd
 //
 // Licensed under the Apache License, Version 2.0 (the "License").
 // you may not use this file except in compliance with the License.
@@ -13,12 +13,14 @@
 // limitations under the License.
 
 using System;
+using System.Collections.Generic;
 using SkiaSharp;
 using SkiaSharp.HarfBuzz;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Graphics.Core;
+using UglyToad.PdfPig.Graphics.Operations;
 using UglyToad.PdfPig.PdfFonts;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 
@@ -317,62 +319,146 @@ namespace UglyToad.PdfPig.Rendering.Skia
             in TransformationMatrix renderingMatrix,
             in TransformationMatrix textMatrix)
         {
-            if (!font.TryGetCharProc(code, out var charProcStream))
+            var ctx = new Type3BuildContext(
+                FilterProvider,
+                PdfScanner,
+                PageContentParser,
+                PageNumber,
+                ParsingOptions.Logger,
+                BuildType3Picture);
+
+            var cached = _fontCache.GetOrBuildType3Glyph(font, code, ctx);
+
+            switch (cached)
             {
-                return;
+                case Type3VectorGlyph vector:
+                {
+                    // The cached path is in raw glyph space (pre-fontMatrix). Match the un-cached
+                    // path's matrix arithmetic exactly by applying textMatrix × renderingMatrix ×
+                    // fontMatrix via CTM concatenation (PDF spec right-to-left order), and then
+                    // pass Identity matrices to ShowVectorFontGlyph so the path is drawn at the
+                    // current CTM without an extra path-side SKMatrix transform.
+                    PushState();
+                    try
+                    {
+                        ModifyCurrentTransformationMatrix(textMatrix);
+                        ModifyCurrentTransformationMatrix(renderingMatrix);
+                        ModifyCurrentTransformationMatrix(font.GetFontMatrix());
+                        var currentState = GetCurrentState();
+                        ShowVectorFontGlyph(vector.Path,
+                            currentState.CurrentStrokingColor,
+                            currentState.CurrentNonStrokingColor,
+                            currentState.FontState.TextRenderingMode,
+                            in TransformationMatrix.Identity, in TransformationMatrix.Identity);
+                    }
+                    finally
+                    {
+                        PopState();
+                    }
+                    return;
+                }
+
+                case Type3PictureGlyph picture:
+                {
+                    // Same matrix composition the un-cached path used: replace the CTM with
+                    //   fontMatrix × renderingMatrix × textMatrix × oldCTM
+                    // via right-to-left premultiplied ModifyCurrentTransformationMatrix calls.
+                    PushState();
+                    try
+                    {
+                        ModifyCurrentTransformationMatrix(textMatrix);
+                        ModifyCurrentTransformationMatrix(renderingMatrix);
+                        ModifyCurrentTransformationMatrix(font.GetFontMatrix());
+                        _canvas.DrawPicture(picture.Picture);
+                    }
+                    finally
+                    {
+                        PopState();
+                    }
+                    return;
+                }
+
+                case Type3MissingGlyph:
+                    return;
+            }
+        }
+
+        /// <summary>
+        /// Record a Type 3 CharProc's operations into a self-contained <see cref="SKPicture"/>.
+        /// The recording runs the live operator pipeline (so <c>Do</c>, <c>gs</c>, inline images
+        /// etc. all work) against a temporary recorder canvas. The page canvas is swapped out for
+        /// the duration of the recording and restored unconditionally in the <c>finally</c>.
+        /// </summary>
+        /// <remarks>
+        /// The recording is in raw glyph space (no fontMatrix applied). Callers apply
+        /// <c>textMatrix × renderingMatrix × fontMatrix</c> at draw time, matching the matrix
+        /// composition the un-cached path used.
+        /// </remarks>
+        private SKPicture BuildType3Picture(IReadOnlyList<IGraphicsStateOperation> operations, IType3Font font, int code)
+        {
+            // SKPictureRecorder culling bounds — a hint only, not a hard clip. Try the per-code
+            // glyph bbox first (raw glyph space, pre-fontMatrix). Type3 fonts may not have widths
+            // for every encountered code (Differences encodings), in which case GetBoundingBox
+            // throws — fall back to a generous default since the bound is only an optimization.
+            SKRect bounds = SKRect.Create(-1000, -1000, 2000, 2000);
+            try
+            {
+                var fontBbox = font.GetBoundingBox(code).GlyphBounds;
+                var candidate = new SKRect(
+                    (float)Math.Min(fontBbox.BottomLeft.X, fontBbox.TopRight.X),
+                    (float)Math.Min(fontBbox.BottomLeft.Y, fontBbox.TopRight.Y),
+                    (float)Math.Max(fontBbox.BottomLeft.X, fontBbox.TopRight.X),
+                    (float)Math.Max(fontBbox.BottomLeft.Y, fontBbox.TopRight.Y));
+                if (!candidate.IsEmpty)
+                {
+                    bounds = candidate;
+                }
+            }
+            catch
+            {
+                // Keep the generous fallback bounds.
             }
 
-            // Decode and parse the CharProc content stream lazily — Type 3 fonts can include any
-            // graphics operators (paths, fills, images, ExtGState, even other XObjects), so we
-            // dispatch into the same operation pipeline used for the page content stream.
-            var contentBytes = charProcStream.Decode(FilterProvider, PdfScanner);
-            var operations = PageContentParser.Parse(PageNumber,
-                new MemoryInputBytes(contentBytes), ParsingOptions.Logger);
+            var pageCanvas = _canvas;
+            using var recorder = new SKPictureRecorder();
+            _canvas = recorder.BeginRecording(bounds);
 
-            // Push the Type 3 font's /Resources so CharProc operations can resolve named fonts,
-            // XObjects, ExtGState, color spaces, etc. (PDF 1.7 §9.6.4: Required entry in PDF 1.2+.)
             bool pushedResources = false;
-            if (font.Type3Resources is { } type3Resources)
-            {
-                ResourceStore.LoadResourceDictionary(type3Resources);
-                pushedResources = true;
-            }
-
-            // TextMatrices live outside the graphics state stack (PushState does not save them),
-            // so the outer ShowText loop relies on them surviving across glyph renders. Snapshot
-            // and restore around the CharProc, which itself may issue its own BT/Tm operators.
             var savedTextMatrix = TextMatrices.TextMatrix;
             var savedTextLineMatrix = TextMatrices.TextLineMatrix;
 
-            PushState();
             try
             {
-                // Replace the CTM with the text rendering matrix and apply the font matrix on top.
-                // PDF 1.7 §9.6.4:
-                //   newCTM = fontMatrix × Trm = fontMatrix × renderingMatrix × textMatrix × oldCTM
-                // ModifyCurrentTransformationMatrix(M) premultiplies — CTM ← M × CTM — so we apply
-                // the operands in right-to-left spec order: textMatrix, renderingMatrix, fontMatrix.
-                ModifyCurrentTransformationMatrix(textMatrix);
-                ModifyCurrentTransformationMatrix(renderingMatrix);
-                ModifyCurrentTransformationMatrix(font.GetFontMatrix());
+                if (font.Type3Resources is { } type3Resources)
+                {
+                    ResourceStore.LoadResourceDictionary(type3Resources);
+                    pushedResources = true;
+                }
 
-                // The CharProc executes in a fresh text object context — reset both text matrices
-                // so BT/Tm inside the CharProc start from identity.
-                TextMatrices.TextMatrix = TransformationMatrix.Identity;
-                TextMatrices.TextLineMatrix = TransformationMatrix.Identity;
-
-                ProcessOperations(operations);
+                PushState();
+                try
+                {
+                    TextMatrices.TextMatrix = TransformationMatrix.Identity;
+                    TextMatrices.TextLineMatrix = TransformationMatrix.Identity;
+                    ProcessOperations(operations);
+                }
+                finally
+                {
+                    PopState();
+                }
             }
             finally
             {
-                PopState();
                 TextMatrices.TextMatrix = savedTextMatrix;
                 TextMatrices.TextLineMatrix = savedTextLineMatrix;
                 if (pushedResources)
                 {
                     ResourceStore.UnloadResourceDictionary();
                 }
+                _canvas = pageCanvas;
             }
+
+            return recorder.EndRecording();
         }
 
         private static SKPath GetPath(SkiaFontCacheItem fontItem, string unicode)
