@@ -112,7 +112,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
 
             var domain = shading.Domain;
-            
+
             float x0 = (float)coords[0];
             float y0 = (float)coords[1];
             float x1 = (float)coords[3];
@@ -343,7 +343,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// Based on https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/graphics/shading/GouraudShadingContext.java
         /// and https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/graphics/shading/TriangleBasedShadingContext.java
         /// </summary>
-        private void RenderFreeFormGouraudShading(FreeFormGouraudShading shading, in SKMatrix patternTransformMatrix, 
+        private void RenderFreeFormGouraudShading(FreeFormGouraudShading shading, in SKMatrix patternTransformMatrix,
             bool isStroke = false, SKPath? path = null)
         {
             if (shading.Data.IsEmpty)
@@ -664,7 +664,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <summary>
         /// see PDFBOX-1869-4.pdf
         /// </summary>
-        private void RenderFunctionBasedShading(FunctionBasedShading shading, in SKMatrix patternTransformMatrix, 
+        private void RenderFunctionBasedShading(FunctionBasedShading shading, in SKMatrix patternTransformMatrix,
             bool isStroke = false, SKPath? path = null)
         {
             // Based on https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/graphics/shading/Type1ShadingContext.java
@@ -708,7 +708,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             double[] values = new double[2];
             ColorSpaceDetails? shadingColorSpace = shading.ColorSpace;
-            
+
             for (int j = 0; j < h; j++)
             {
                 // Sample at the texel centre to avoid biasing the gradient toward one corner.
@@ -1706,7 +1706,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 const int stride = PatchSubdivisions + 1;
                 const float texScale = PatchTextureSize - 1;
-                
+
                 for (int j = 0; j <= PatchSubdivisions; j++)
                 {
                     float v = (float)j / PatchSubdivisions;
@@ -1746,7 +1746,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var pool = ArrayPool<SKPoint>.Shared;
             SKPoint[] positions = pool.Rent(gridLen);
             SKPoint[] texCoords = pool.Rent(gridLen);
-            
+
             try
             {
                 const int stride = PatchSubdivisions + 1;
@@ -1757,12 +1757,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 const int bCount = 4 * (PatchSubdivisions + 1);
                 Span<float> bU = stackalloc float[bCount];
                 Span<float> bV = stackalloc float[bCount];
-                
+
                 for (int i = 0; i <= PatchSubdivisions; i++)
                 {
                     BernsteinCubic((float)i / PatchSubdivisions, bU.Slice(i * 4, 4));
                 }
-                
+
                 for (int j = 0; j <= PatchSubdivisions; j++)
                 {
                     BernsteinCubic((float)j / PatchSubdivisions, bV.Slice(j * 4, 4));
@@ -1927,7 +1927,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 }
             }
         }
-        
+
         private void RenderTilingPattern(SKPath path, TilingPatternColor pattern, bool isStroke)
         {
             // See:
@@ -1952,7 +1952,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 var processor = new SkiaStreamProcessor(PageNumber, ResourceStore, PdfScanner, PageContentParser,
                     FilterProvider, new CropBox(pattern.BBox), UserSpaceUnit, Rotation,
-                    initialMatrix, ParsingOptions, null, _fontCache);
+                    initialMatrix, ParsingOptions, null, _fontCache, _token);
 
                 if (pattern.PaintType == PatternPaintType.Uncoloured)
                 {

@@ -15,6 +15,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using SkiaSharp;
 using UglyToad.PdfPig.Annotations;
 using UglyToad.PdfPig.Content;
@@ -35,6 +36,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
     {
         private const float _minimumLineWidth = 0.25f;
         private const bool _antiAliasing = true;
+
+        private readonly CancellationToken _token;
 
         private readonly bool _renderAnnotations;
         private readonly float _height;
@@ -99,7 +102,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
             TransformationMatrix initialMatrix,
             ParsingOptions parsingOptions,
             AnnotationProvider? annotationProvider,
-            SkiaFontCache fontCache)
+            SkiaFontCache fontCache,
+            CancellationToken token)
             : base(pageNumber,
                 resourceStore,
                 pdfScanner,
@@ -115,6 +119,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             _annotations = new Lazy<Annotation[]>(() => annotationProvider?.GetAnnotations().ToArray() ?? []);
 
             _fontCache = fontCache;
+            _token = token;
 
             _width = (float)cropBox.Bounds.Width;
             _height = (float)cropBox.Bounds.Height;
@@ -162,6 +167,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
             finally
             {
                 Cleanup();
+            }
+        }
+
+        protected override void ProcessOperations(IReadOnlyList<IGraphicsStateOperation> operations)
+        {
+            if (!_token.CanBeCanceled)
+            {
+                base.ProcessOperations(operations);
+                return;
+            }
+
+            for (var i = 0; i < operations.Count; ++i)
+            {
+                if (i % 100 == 0)
+                {
+                    _token.ThrowIfCancellationRequested();
+                }
+                
+                operations[i].Run(this);
             }
         }
 

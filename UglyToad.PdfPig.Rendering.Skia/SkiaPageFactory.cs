@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using SkiaSharp;
 using UglyToad.PdfPig.Annotations;
 using UglyToad.PdfPig.Content;
@@ -35,6 +36,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
     public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
     {
         private readonly SkiaFontCache _fontCache;
+
+        private static readonly AsyncLocal<CancellationToken> _currentToken = new();
+
+        internal static CancellationToken CurrentToken
+        {
+            get => _currentToken.Value;
+            set => _currentToken.Value = value;
+        }
 
         /// <summary>
         /// <see cref="SkiaPageFactory"/> constructor.
@@ -67,7 +76,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             var context = new SkiaStreamProcessor(pageNumber, ResourceStore, PdfScanner, PageContentParser,
                 FilterProvider, effectiveCropBox, userSpaceUnit, rotation, initialMatrix, ParsingOptions,
-                annotationProvider, _fontCache);
+                annotationProvider, _fontCache, CurrentToken);
 
             return context.Process(pageNumber, operations);
         }
