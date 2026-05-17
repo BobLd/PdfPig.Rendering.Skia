@@ -797,6 +797,9 @@
 		<None Update="SpecificTestDocuments\Go.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+		<None Update="SpecificTestDocuments\map.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 		<None Update="SpecificTestDocuments\new.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
