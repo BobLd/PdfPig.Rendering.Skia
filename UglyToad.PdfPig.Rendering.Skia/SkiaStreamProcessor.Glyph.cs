@@ -21,6 +21,7 @@ using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.Graphics.Operations;
+using UglyToad.PdfPig.Graphics.Operations.TextState;
 using UglyToad.PdfPig.PdfFonts;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 
@@ -375,39 +376,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </remarks>
         private SKPicture BuildType3Picture(IReadOnlyList<IGraphicsStateOperation> operations, IType3Font font, int code)
         {
-            // SKPictureRecorder culling bounds. The picture records CharProc ops in raw glyph
-            // space (pre-fontMatrix), so the cull rect must be expressed in that same space.
-            // Type3Font.GetBoundingBox returns GlyphBounds *after* applying fontMatrix (text
-            // space), so we invert fontMatrix to map it back. Getting this wrong is not just a
-            // hint-level mistake: when the parent page picture is RTree-recorded, the bbox it
-            // stores for this DrawPicture op is cullRect × CTM (CTM already includes fontMatrix),
-            // so a text-space cullRect ends up with fontMatrix applied twice and shrinks the op
-            // bbox by ~1/scale². Tiles whose clip doesn't contain that shrunken anchor will skip
-            // the glyph entirely even though it visually overlaps them — the artifact reported
-            // in https://github.com/BobLd/Caly (Type 3 glyphs vanishing across tile boundaries).
-            // Type3 fonts may not have widths for every encountered code (Differences encodings);
-            // in that case GetBoundingBox throws and we fall back to a generous default.
-            SKRect bounds = SKRect.Create(-1000, -1000, 2000, 2000);
-            try
-            {
-                var glyphBbox = font.GetFontMatrix().Inverse()
-                    .Transform(font.GetBoundingBox(code).GlyphBounds);
-
-                var candidate = new SKRect(
-                    (float)Math.Min(glyphBbox.BottomLeft.X, glyphBbox.TopRight.X),
-                    (float)Math.Min(glyphBbox.BottomLeft.Y, glyphBbox.TopRight.Y),
-                    (float)Math.Max(glyphBbox.BottomLeft.X, glyphBbox.TopRight.X),
-                    (float)Math.Max(glyphBbox.BottomLeft.Y, glyphBbox.TopRight.Y));
-
-                if (!candidate.IsEmpty)
-                {
-                    bounds = candidate;
-                }
-            }
-            catch
-            {
-                // Keep the generous fallback bounds.
-            }
+            SKRect bounds = GetType3GlyphBoundingBox(operations, font, code);
 
             var pageCanvas = _canvas;
             using var recorder = new SKPictureRecorder();
@@ -451,6 +420,95 @@ namespace UglyToad.PdfPig.Rendering.Skia
             return recorder.EndRecording();
         }
 
+        private static SKRect GetType3GlyphBoundingBox(IReadOnlyList<IGraphicsStateOperation> operations,
+            IType3Font font, int code)
+        {
+            for (int i = 0; i < operations.Count; ++i)
+            {
+                if (operations[i] is Type3SetGlyphWidthAndBoundingBox d1)
+                {
+                    float left = (float)Math.Min(d1.LowerLeftX, d1.UpperRightX);
+                    float right = (float)Math.Max(d1.LowerLeftX, d1.UpperRightX);
+                    float bottom = (float)Math.Min(d1.LowerLeftY, d1.UpperRightY);
+                    float top = (float)Math.Max(d1.LowerLeftY, d1.UpperRightY);
+                    var d1Rect = new SKRect(left, bottom, right, top);
+                    if (!d1Rect.IsEmpty)
+                    {
+                        return d1Rect;
+                    }
+                }
+            }
+
+            try
+            {
+                // TODO - Need to add tests. When the bbox is wrong,
+                // Type 3 glyphs vanish across clip boundaries.
+                var glyphBbox = font.GetFontMatrix()
+                    .Inverse()
+                    .Transform(font.GetBoundingBox(code).GlyphBounds);
+
+                var candidate = new SKRect(
+                    (float)Math.Min(glyphBbox.BottomLeft.X, glyphBbox.TopRight.X),
+                    (float)Math.Min(glyphBbox.BottomLeft.Y, glyphBbox.TopRight.Y),
+                    (float)Math.Max(glyphBbox.BottomLeft.X, glyphBbox.TopRight.X),
+                    (float)Math.Max(glyphBbox.BottomLeft.Y, glyphBbox.TopRight.Y));
+
+                if (!candidate.IsEmpty)
+                {
+                    return candidate;
+                }
+            }
+            catch
+            {
+                // No op
+            }
+
+            return SKRect.Create(-1000, -1000, 2000, 2000);
+
+            /* Possible alternative to the above try/catch
+            try
+            {
+                var fontBox = font.FontBoundingBox;
+                float fbLeft = (float)Math.Min(fontBox.Left, fontBox.Right);
+                float fbRight = (float)Math.Max(fontBox.Left, fontBox.Right);
+                float fbBottom = (float)Math.Min(fontBox.Bottom, fontBox.Top);
+                float fbTop = (float)Math.Max(fontBox.Bottom, fontBox.Top);
+
+                try
+                {
+                    // d0 CharProcs only declare an advance width; widen the FontBBox horizontally
+                    // if the advance exceeds it so paint up to the advance edge is still covered.
+                    float advance = (float)font.GetBoundingBox(code).Width;
+                    if (advance > 0)
+                    {
+                        float advanceInGlyphSpace = (float)font.GetFontMatrix().Inverse().TransformX(advance);
+                        if (advanceInGlyphSpace > fbRight)
+                        {
+                            fbRight = advanceInGlyphSpace;
+                        }
+                        if (0 < fbLeft)
+                        {
+                            fbLeft = 0;
+                        }
+                    }
+                }
+                catch
+                {
+                    // No width for this code (Differences encoding gap). FontBBox alone is fine.
+                }
+
+                var fbRect = new SKRect(fbLeft, fbBottom, fbRight, fbTop);
+                if (!fbRect.IsEmpty)
+                {
+                    return fbRect;
+                }
+            }
+            catch
+            {
+                // Fall through to the generous default.
+            }
+            */
+        }
         private static SKPath GetPath(SkiaFontCacheItem fontItem, string unicode)
         {
             using (var skFont = fontItem.Typeface.ToFont(1f))
