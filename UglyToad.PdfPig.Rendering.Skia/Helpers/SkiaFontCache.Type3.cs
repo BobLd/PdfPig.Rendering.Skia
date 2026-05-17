@@ -62,7 +62,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             var contentBytes = charProcStream.Decode(ctx.FilterProvider, ctx.PdfScanner);
             var operations = ctx.PageContentParser.Parse(ctx.PageNumber,
-                new MemoryInputBytes(contentBytes), ctx.Logger);
+                new MemoryInputBytes(contentBytes), ctx.Logger!);
 
             if (CanCacheAsVector(operations))
             {

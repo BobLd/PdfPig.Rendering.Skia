@@ -14,9 +14,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using SkiaSharp;
 using SkiaSharp.HarfBuzz;
 using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.Geometry;
 using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Graphics.Core;
@@ -329,57 +331,37 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             var cached = _fontCache.GetOrBuildType3Glyph(font, code, ctx);
 
-            switch (cached)
+            if (cached is Type3MissingGlyph)
             {
-                case Type3VectorGlyph vector:
+                return;
+            }
+
+            PushState();
+            try
+            {
+                ModifyCurrentTransformationMatrix(textMatrix);
+                ModifyCurrentTransformationMatrix(renderingMatrix);
+                ModifyCurrentTransformationMatrix(font.GetFontMatrix());
+
+                switch (cached)
                 {
-                    // The cached path is in raw glyph space (pre-fontMatrix). Match the un-cached
-                    // path's matrix arithmetic exactly by applying textMatrix × renderingMatrix ×
-                    // fontMatrix via CTM concatenation (PDF spec right-to-left order), and then
-                    // pass Identity matrices to ShowVectorFontGlyph so the path is drawn at the
-                    // current CTM without an extra path-side SKMatrix transform.
-                    PushState();
-                    try
-                    {
-                        ModifyCurrentTransformationMatrix(textMatrix);
-                        ModifyCurrentTransformationMatrix(renderingMatrix);
-                        ModifyCurrentTransformationMatrix(font.GetFontMatrix());
+                    case Type3VectorGlyph vector:
                         var currentState = GetCurrentState();
                         ShowVectorFontGlyph(vector.Path,
                             currentState.CurrentStrokingColor,
                             currentState.CurrentNonStrokingColor,
                             currentState.FontState.TextRenderingMode,
                             in TransformationMatrix.Identity, in TransformationMatrix.Identity);
-                    }
-                    finally
-                    {
-                        PopState();
-                    }
-                    return;
-                }
+                        return;
 
-                case Type3PictureGlyph picture:
-                {
-                    // Same matrix composition the un-cached path used: replace the CTM with
-                    //   fontMatrix × renderingMatrix × textMatrix × oldCTM
-                    // via right-to-left premultiplied ModifyCurrentTransformationMatrix calls.
-                    PushState();
-                    try
-                    {
-                        ModifyCurrentTransformationMatrix(textMatrix);
-                        ModifyCurrentTransformationMatrix(renderingMatrix);
-                        ModifyCurrentTransformationMatrix(font.GetFontMatrix());
+                    case Type3PictureGlyph picture:
                         _canvas.DrawPicture(picture.Picture);
-                    }
-                    finally
-                    {
-                        PopState();
-                    }
-                    return;
+                        return;
                 }
-
-                case Type3MissingGlyph:
-                    return;
+            }
+            finally
+            {
+                PopState();
             }
         }
 
@@ -404,11 +386,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
             try
             {
                 var fontBbox = font.GetBoundingBox(code).GlyphBounds;
+                
                 var candidate = new SKRect(
                     (float)Math.Min(fontBbox.BottomLeft.X, fontBbox.TopRight.X),
                     (float)Math.Min(fontBbox.BottomLeft.Y, fontBbox.TopRight.Y),
                     (float)Math.Max(fontBbox.BottomLeft.X, fontBbox.TopRight.X),
                     (float)Math.Max(fontBbox.BottomLeft.Y, fontBbox.TopRight.Y));
+                
                 if (!candidate.IsEmpty)
                 {
                     bounds = candidate;
@@ -484,25 +468,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return combinedPath;
             }
         }
-
-        private static float ComputeSkewX(PdfRectangle rectangle)
-        {
-            var rotationRadians = rectangle.Rotation * Math.PI / 180.0;
-            var diffY = rectangle.TopLeft.Y - rectangle.BottomLeft.Y;
-            var diffX = rectangle.TopLeft.X - rectangle.BottomLeft.X;
-
-            var rotationBottomTopRadians = (float)Math.Atan2(diffY, diffX);
-
-            // Test documents:
-            // - SPARC - v9 Architecture Manual.pdf, page 1
-            // - 68-1990-01_A.pdf, page 15
-            // - GHOSTSCRIPT-686821-0.pdf
-
-            double radians = (Math.PI / 2.0 + rotationRadians - rotationBottomTopRadians) % Math.PI;
-
-            return (float)Math.Round(radians, 5);
-        }
-
+        
         private static bool CanRender(string unicode)
         {
             ReadOnlySpan<char> chars = unicode.AsSpan();
