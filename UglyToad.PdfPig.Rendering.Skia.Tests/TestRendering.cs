@@ -713,6 +713,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             {
                 "GHOSTSCRIPT-692637-0-270_1.png",
                 "GHOSTSCRIPT-692637-0-270.pdf", 1, 2
+            },
+            new object[]
+            {
+                "full-size-image_1.png",
+                "full-size-image.pdf", 1, 2
             }
         };
 
