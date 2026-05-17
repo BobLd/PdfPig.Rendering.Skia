@@ -125,6 +125,9 @@
 		<None Update="Documents\fseprd1102849.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+		<None Update="Documents\full-size-image.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 		<None Update="Documents\GHOSTSCRIPT-505429-0.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
@@ -550,6 +553,9 @@
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\fseprd1102849_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\full-size-image_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-539359-0.zip-0_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>

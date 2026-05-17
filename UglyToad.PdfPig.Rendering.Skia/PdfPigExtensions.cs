@@ -188,45 +188,38 @@ public static class PdfPigExtensions
 
     internal static TransformationMatrix GetTilingPatterInitialMatrix(this TilingPatternColor pattern)
     {
-        // For uncoloured patterns, the sub-processor's initial CTM is a pure translation
-        // that aligns the pattern cell's lower-left BBox corner with picture origin (0, 0).
-        // pattern.Matrix is intentionally NOT applied here (PdfBox does the same): the
-        // pattern stream is rendered into a tile in pattern-local space, and pattern.Matrix
-        // — which encodes pattern-to-user-space and may include rotations or sign flips
-        // (e.g. /Matrix [-1 0 0 -1 0 0]) — would otherwise push the content outside the
-        // recording rect.
-        // Coloured patterns stay on the legacy path that passes pattern.Matrix, to preserve
-        // existing visual baselines.
+        // The sub-processor's initial CTM is a pure translation that aligns the pattern
+        // cell's lower-left BBox corner with the picture origin (0, 0). pattern.Matrix is
+        // intentionally NOT applied here (PdfBox does the same): the pattern stream is
+        // rendered into a tile in pattern-local space, and pattern.Matrix — which encodes
+        // pattern-to-user-space and may scale the cell so a single tile covers the whole
+        // page (e.g. full-size-image.pdf: BBox 942x626 with /Matrix [0.63 0 0 1.34 0 0]
+        // tiles to 595x842) or include rotations/sign flips (e.g. /Matrix [-1 0 0 -1 0 0])
+        // — would otherwise push the content outside the BBox-sized recording rect and
+        // cause the shader's XStep/YStep tile area to slice the content into bands.
+        // pattern.Matrix is reapplied in GetTilingPatterAdjMatrix as part of the shader's
+        // local matrix.
 
-        return pattern.PaintType == PatternPaintType.Uncoloured
-            ? TransformationMatrix.GetTranslationMatrix(-pattern.BBox.BottomLeft.X, -pattern.BBox.BottomLeft.Y)
-            : pattern.Matrix;
+        return TransformationMatrix.GetTranslationMatrix(-pattern.BBox.BottomLeft.X, -pattern.BBox.BottomLeft.Y);
     }
 
     internal static SKMatrix GetTilingPatterAdjMatrix(this TilingPatternColor pattern)
     {
-        if (pattern.PaintType == PatternPaintType.Uncoloured)
-        {
-            // The shader's local matrix maps PICTURE coords → user-space PDF coords (Skia
-            // inverts it internally when sampling). The picture was drawn with
-            // initialMatrix = Translate(-BBox.LowerLeft) plus the canvas' Y-flip (around
-            // BBox.Height/2), so for picture (X, Y):
-            //     pattern_local.x = X + LL.X
-            //     pattern_local.y = UR.Y - Y                      (undo Y-flip + LL shift)
-            //     user_space     = pattern.Matrix * pattern_local  (apply 8.7.2 alteration)
-            // In matrix form: localMatrix = pattern.Matrix * Translate(LL.X, UR.Y) * Scale(1,-1).
-            // Wrap that with inv(CTM) * orig so cm modifications and the parent stream's
-            // initial transform stay consistent with the existing rendering pipeline.
-            return pattern.Matrix.ToSkMatrix()
-                .PreConcat(SKMatrix.CreateTranslation(
-                    (float)pattern.BBox.BottomLeft.X,
-                    (float)pattern.BBox.TopRight.Y))
-                .PreConcat(SKMatrix.CreateScale(1, -1));
-        }
-
-        // We cancel CTM, but not canvas' Y flip, as we still need it.
-        // We are drawing a SKPicture, we need to flip the Y axis of this picture.
-        return SKMatrix.CreateScale(1, -1, 0, (float)pattern.BBox.Height / 2f);
+        // The shader's local matrix maps PICTURE coords → user-space PDF coords (Skia
+        // inverts it internally when sampling). The picture was drawn with
+        // initialMatrix = Translate(-BBox.LowerLeft) plus the canvas' Y-flip (around
+        // BBox.Height/2), so for picture (X, Y):
+        //     pattern_local.x = X + LL.X
+        //     pattern_local.y = UR.Y - Y                      (undo Y-flip + LL shift)
+        //     user_space     = pattern.Matrix * pattern_local  (apply 8.7.2 alteration)
+        // In matrix form: localMatrix = pattern.Matrix * Translate(LL.X, UR.Y) * Scale(1,-1).
+        // Wrap that with inv(CTM) * orig so cm modifications and the parent stream's
+        // initial transform stay consistent with the existing rendering pipeline.
+        return pattern.Matrix.ToSkMatrix()
+            .PreConcat(SKMatrix.CreateTranslation(
+                (float)pattern.BBox.BottomLeft.X,
+                (float)pattern.BBox.TopRight.Y))
+            .PreConcat(SKMatrix.CreateScale(1, -1));
     }
 
     /// <summary>
