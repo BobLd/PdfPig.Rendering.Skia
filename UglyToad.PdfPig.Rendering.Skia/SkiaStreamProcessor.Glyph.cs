@@ -375,21 +375,30 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </remarks>
         private SKPicture BuildType3Picture(IReadOnlyList<IGraphicsStateOperation> operations, IType3Font font, int code)
         {
-            // SKPictureRecorder culling bounds — a hint only, not a hard clip. Try the per-code
-            // glyph bbox first (raw glyph space, pre-fontMatrix). Type3 fonts may not have widths
-            // for every encountered code (Differences encodings), in which case GetBoundingBox
-            // throws — fall back to a generous default since the bound is only an optimization.
+            // SKPictureRecorder culling bounds. The picture records CharProc ops in raw glyph
+            // space (pre-fontMatrix), so the cull rect must be expressed in that same space.
+            // Type3Font.GetBoundingBox returns GlyphBounds *after* applying fontMatrix (text
+            // space), so we invert fontMatrix to map it back. Getting this wrong is not just a
+            // hint-level mistake: when the parent page picture is RTree-recorded, the bbox it
+            // stores for this DrawPicture op is cullRect × CTM (CTM already includes fontMatrix),
+            // so a text-space cullRect ends up with fontMatrix applied twice and shrinks the op
+            // bbox by ~1/scale². Tiles whose clip doesn't contain that shrunken anchor will skip
+            // the glyph entirely even though it visually overlaps them — the artifact reported
+            // in https://github.com/BobLd/Caly (Type 3 glyphs vanishing across tile boundaries).
+            // Type3 fonts may not have widths for every encountered code (Differences encodings);
+            // in that case GetBoundingBox throws and we fall back to a generous default.
             SKRect bounds = SKRect.Create(-1000, -1000, 2000, 2000);
             try
             {
-                var fontBbox = font.GetBoundingBox(code).GlyphBounds;
-                
+                var glyphBbox = font.GetFontMatrix().Inverse()
+                    .Transform(font.GetBoundingBox(code).GlyphBounds);
+
                 var candidate = new SKRect(
-                    (float)Math.Min(fontBbox.BottomLeft.X, fontBbox.TopRight.X),
-                    (float)Math.Min(fontBbox.BottomLeft.Y, fontBbox.TopRight.Y),
-                    (float)Math.Max(fontBbox.BottomLeft.X, fontBbox.TopRight.X),
-                    (float)Math.Max(fontBbox.BottomLeft.Y, fontBbox.TopRight.Y));
-                
+                    (float)Math.Min(glyphBbox.BottomLeft.X, glyphBbox.TopRight.X),
+                    (float)Math.Min(glyphBbox.BottomLeft.Y, glyphBbox.TopRight.Y),
+                    (float)Math.Max(glyphBbox.BottomLeft.X, glyphBbox.TopRight.X),
+                    (float)Math.Max(glyphBbox.BottomLeft.Y, glyphBbox.TopRight.Y));
+
                 if (!candidate.IsEmpty)
                 {
                     bounds = candidate;
