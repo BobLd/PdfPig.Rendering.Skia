@@ -16,106 +16,146 @@ using System;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Graphics;
+using UglyToad.PdfPig.Graphics.Colors;
+using UglyToad.PdfPig.Graphics.Colors.Icc;
 using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 using UglyToad.PdfPig.XObjects;
 
-namespace UglyToad.PdfPig.Rendering.Skia
+namespace UglyToad.PdfPig.Rendering.Skia;
+
+internal partial class SkiaStreamProcessor
 {
-    internal partial class SkiaStreamProcessor
+    protected override void RenderXObjectImage(XObjectContentRecord xObjectContentRecord)
     {
-        protected override void RenderXObjectImage(XObjectContentRecord xObjectContentRecord)
+        RenderImage(XObjectFactory.ReadImage(xObjectContentRecord, PdfScanner, FilterProvider, ResourceStore));
+    }
+
+    protected override void RenderInlineImage(InlineImage inlineImage)
+    {
+        RenderImage(inlineImage);
+    }
+
+    /// <summary>
+    /// Resolve the output-intent transform to colour-manage a raster image whose colour space is a
+    /// device space (<c>DeviceCMYK</c>/<c>DeviceRGB</c>/<c>DeviceGray</c>), mirroring how device
+    /// vector colours are managed in <see cref="UglyToad.PdfPig.Graphics.ColorSpaceContext"/>.
+    /// Returns <c>null</c> for non-device colour spaces (ICCBased, Indexed, … already carry their
+    /// own colour management) or when the output intent does not characterize this device space.
+    /// </summary>
+    private IIccTransform? GetOutputIntentImageTransform(IPdfImage pdfImage)
+    {
+        // The effective output intent is held on the graphics state (page-scoped; null inside a soft-mask
+        // group, so the mask's device pixels keep their built-in conversion). See CurrentGraphicsState.OutputIntent.
+        var profile = GetCurrentState().OutputIntent?.DestOutputProfile;
+        if (profile is null)
         {
-            RenderImage(XObjectFactory.ReadImage(xObjectContentRecord, PdfScanner, FilterProvider, ResourceStore));
+            return null;
         }
 
-        protected override void RenderInlineImage(InlineImage inlineImage)
+        var colorSpace = pdfImage.ColorSpaceDetails;
+        if (colorSpace is null ||
+            colorSpace.Type is not (ColorSpace.DeviceGray or ColorSpace.DeviceRGB or ColorSpace.DeviceCMYK))
         {
-            RenderImage(inlineImage);
+            return null;
         }
 
-        private void RenderImage(IPdfImage pdfImage)
+        // The device colour space must be expressible in the output intent's colour space: either the
+        // component counts match, or it is DeviceGray, which is expanded neutrally into a 3-/4-component
+        // profile (grey -> (g,g,g) for RGB, or the black channel for CMYK) in SkiaImageExtensions. Other
+        // mismatches (e.g. DeviceRGB with a CMYK output intent) keep their built-in conversion.
+        int deviceComponents = colorSpace.BaseNumberOfColorComponents;
+        bool canManage = profile.NumberOfComponents == deviceComponents
+            || (colorSpace.Type == ColorSpace.DeviceGray && profile.NumberOfComponents is 3 or 4);
+
+        if (!canManage)
         {
-            if (pdfImage.WidthInSamples == 0 || pdfImage.HeightInSamples == 0)
+            return null;
+        }
+
+        return profile.TryGetTransform(pdfImage.RenderingIntent, out var transform) ? transform : null;
+    }
+
+    private void RenderImage(IPdfImage pdfImage)
+    {
+        if (pdfImage.WidthInSamples == 0 || pdfImage.HeightInSamples == 0)
+        {
+            return;
+        }
+
+        if (pdfImage.Bounds.Width == 0 || pdfImage.Bounds.Height == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using SKAutoCanvasRestore skAutoCanvasRestore = new SKAutoCanvasRestore(_canvas, true);
+            using var bitmap = pdfImage.GetSKBitmap(ParsingOptions.Logger, GetOutputIntentImageTransform(pdfImage));
+
+            if (bitmap is null)
             {
-                return;
+                throw new NullReferenceException("Got a null image.");
             }
 
-            if (pdfImage.Bounds.Width == 0 || pdfImage.Bounds.Height == 0)
+            // Images are upside down in PDF
+            _canvas.Scale(1, -1, 0, 0.5f);
+
+            var currentState = GetCurrentState();
+
+            if (!pdfImage.IsImageMask)
             {
-                return;
-            }
-
-            try
-            {
-                using SKAutoCanvasRestore skAutoCanvasRestore = new SKAutoCanvasRestore(_canvas, true);
-                using var bitmap = pdfImage.GetSKBitmap(ParsingOptions.Logger);
-
-                if (bitmap is null)
+                bitmap.SetImmutable();
+                using SKImage image = SKImage.FromBitmap(bitmap);
+                if (TryGetActiveSoftMask(out var softMask))
                 {
-                    throw new NullReferenceException("Got a null image.");
-                }
-
-                // Images are upside down in PDF
-                _canvas.Scale(1, -1, 0, 0.5f);
-
-                var currentState = GetCurrentState();
-
-                if (!pdfImage.IsImageMask)
-                {
-                    bitmap.SetImmutable();
-                    using SKImage image = SKImage.FromBitmap(bitmap);
-                    if (TryGetActiveSoftMask(out var softMask))
-                    {
-                        var innerPaint = _paintCache.GetPaint(pdfImage, BlendMode.Normal);
-                        DrawWithSoftMask(softMask!, currentState.BlendMode,
-                            () => _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, innerPaint));
-                    }
-                    else
-                    {
-                        var imagePaint = _paintCache.GetPaint(pdfImage, currentState.BlendMode);
-                        _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, imagePaint);
-                    }
+                    var innerPaint = _paintCache.GetPaint(pdfImage, BlendMode.Normal);
+                    DrawWithSoftMask(softMask!, currentState.BlendMode,
+                        () => _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, innerPaint));
                 }
                 else
                 {
-                    // Image mask: 1-bit stencil. The source bitmap is Gray8 in canonical PDF
-                    // convention (0 = paint, 255 = transparent), so invert into an Alpha8 image
-                    // (Alpha8 is set in GetSKBitmap) and let Skia composite the current
-                    // non-stroking colour through it
-                    System.Diagnostics.Debug.Assert(bitmap.ColorType == SKColorType.Alpha8);
-                    System.Diagnostics.Debug.Assert(bitmap.AlphaType == SKAlphaType.Premul);
-
-                    Span<byte> src = bitmap.GetPixelSpan();
-                    for (int i = 0; i < src.Length; i++)
-                    {
-                        src[i] = (byte)~src[i];
-                    }
-                    bitmap.SetImmutable();
-
-                    using SKImage image = SKImage.FromBitmap(bitmap);
-                    if (TryGetActiveSoftMask(out var softMask))
-                    {
-                        var innerMaskPaint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
-                            currentState.AlphaConstantNonStroking, false, null, null, null, null, BlendMode.Normal);
-                        DrawWithSoftMask(softMask!, currentState.BlendMode,
-                            () => _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, innerMaskPaint));
-                    }
-                    else
-                    {
-                        var maskPaint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
-                            currentState.AlphaConstantNonStroking, false, null, null, null, null,
-                            currentState.BlendMode);
-                        _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, maskPaint);
-                    }
+                    var imagePaint = _paintCache.GetPaint(pdfImage, currentState.BlendMode);
+                    _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, imagePaint);
                 }
             }
-            catch (Exception ex)
+            else
             {
-                // We have no way so far to know if skia will be able to draw the picture
-                ParsingOptions.Logger.Error($"Failed to render image: {ex}");
-            }
+                // Image mask: 1-bit stencil. The source bitmap is Gray8 in canonical PDF
+                // convention (0 = paint, 255 = transparent), so invert into an Alpha8 image
+                // (Alpha8 is set in GetSKBitmap) and let Skia composite the current
+                // non-stroking colour through it
+                System.Diagnostics.Debug.Assert(bitmap.ColorType == SKColorType.Alpha8);
+                System.Diagnostics.Debug.Assert(bitmap.AlphaType == SKAlphaType.Premul);
 
+                Span<byte> src = bitmap.GetPixelSpan();
+                for (int i = 0; i < src.Length; i++)
+                {
+                    src[i] = (byte)~src[i];
+                }
+                bitmap.SetImmutable();
+
+                using SKImage image = SKImage.FromBitmap(bitmap);
+                if (TryGetActiveSoftMask(out var softMask))
+                {
+                    var innerMaskPaint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
+                        currentState.AlphaConstantNonStroking, false, null, null, null, null, BlendMode.Normal);
+                    DrawWithSoftMask(softMask!, currentState.BlendMode,
+                        () => _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, innerMaskPaint));
+                }
+                else
+                {
+                    var maskPaint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
+                        currentState.AlphaConstantNonStroking, false, null, null, null, null,
+                        currentState.BlendMode);
+                    _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, maskPaint);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // We have no way so far to know if skia will be able to draw the picture
+            ParsingOptions.Logger.Error($"Failed to render image: {ex}");
 #if DEBUG
             _canvas.DrawRect(new SKRect(0, 0, 1, 1), _paintCache.GetImageDebug());
 #endif

@@ -18,6 +18,7 @@ using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Colors;
+using UglyToad.PdfPig.Graphics.Colors.Icc;
 using UglyToad.PdfPig.Images;
 using UglyToad.PdfPig.Logging;
 using UglyToad.PdfPig.Tokens;
@@ -113,7 +114,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return pdfImage.MaskImage is not null || pdfImage.ImageDictionary.ContainsKey(NameToken.Mask);
         }
 
-        private static bool TryGenerate(this IPdfImage pdfImage, out SKBitmap? skBitmap, ILog? log)
+        private static bool TryGenerate(this IPdfImage pdfImage, out SKBitmap? skBitmap, ILog? log,
+            IIccTransform? outputIntentTransform)
         {
             skBitmap = null;
 
@@ -136,7 +138,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 int height = pdfImage.HeightInSamples;
 
                 imageSpan = ColorSpaceDetailsByteConverter.Convert(pdfImage.ColorSpaceDetails!, imageSpan,
-                    pdfImage.BitsPerComponent, width, height, pdfImage.Decode);
+                    pdfImage.BitsPerComponent, width, height, pdfImage.Decode, pdfImage.RenderingIntent);
 
                 var numberOfComponents = pdfImage.ColorSpaceDetails!.BaseNumberOfColorComponents;
 
@@ -151,6 +153,36 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     imageSpan = imageSpan.Slice(0, requiredSize);
                 }
 
+                // PDF/X output intent: a DeviceCMYK/RGB/Gray raster image is characterized by the
+                // document's (or page's) output intent, exactly like the equivalent device vector
+                // colour. When an applicable transform is supplied (resolved by the renderer only
+                // for matching device colour spaces), convert the whole device buffer to sRGB
+                // up-front and continue as a 3-component RGB image, so a managed device image and a
+                // managed device vector fill render identically. Skipped when a colour-key /Mask is
+                // present, whose range test is defined in the original device colour space.
+                if (outputIntentTransform is not null
+                    && !pdfImage.ImageDictionary.TryGet(NameToken.Mask, out ArrayToken _))
+                {
+                    int pixels = width * height;
+                    int profileComponents = outputIntentTransform.NumberOfComponents;
+
+                    // Device buffer to feed the profile. When the device space matches the profile it is
+                    // used directly; a DeviceGray buffer is expanded neutrally into the profile's colour
+                    // space (grey g -> (g,g,g) for RGB, or (0,0,0,255-g) i.e. the black channel for CMYK)
+                    // so grey images share the managed space (mirrors ColorSpaceContext for vectors).
+                    ReadOnlySpan<byte> deviceSpan = numberOfComponents == profileComponents
+                        ? imageSpan.Slice(0, pixels * numberOfComponents)
+                        : ExpandGrayToProfile(imageSpan.Slice(0, pixels * numberOfComponents), numberOfComponents, profileComponents);
+
+                    if (!deviceSpan.IsEmpty)
+                    {
+                        var managedRgb = new byte[pixels * 3];
+                        outputIntentTransform.Transform(deviceSpan, managedRgb);
+                        imageSpan = managedRgb;
+                        numberOfComponents = 3;
+                    }
+                }
+
                 bool isRgba = numberOfComponents > 1 || pdfImage.HasAlphaChannel();
                 var colorSpace = isRgba ? SKColorType.Rgba8888 : SKColorType.Gray8;
 
@@ -159,12 +191,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 // appear black instead of transparent at certain scales.
                 // See https://groups.google.com/g/skia-discuss/c/sV6e3dpf4CE for related question
                 var alphaType = SKAlphaType.Unpremul;
-                
+
                 // Special case for mask
                 if (pdfImage.IsImageMask && colorSpace == SKColorType.Gray8)
                 {
                     colorSpace = SKColorType.Alpha8;
-                    alphaType  = SKAlphaType.Premul;
+                    alphaType = SKAlphaType.Premul;
                 }
 
                 var info = new SKImageInfo(width, height, colorSpace, alphaType);
@@ -179,7 +211,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 bool compositeMaskImage = false;
                 if (pdfImage.MaskImage is not null)
                 {
-                    if (pdfImage.MaskImage.TryGenerate(out mask!, log) && !mask.IsEmpty)
+                    // A separate /SMask or stencil /Mask image is a greyscale alpha source, not a
+                    // colour to manage, so it is never routed through the output intent.
+                    if (pdfImage.MaskImage.TryGenerate(out mask!, log, null) && !mask.IsEmpty)
                     {
                         alphaMode = pdfImage.MaskImage.IsImageMask ? ImageAlphaType.MaskInv : ImageAlphaType.Mask;
                         compositeMaskImage = true;
@@ -194,7 +228,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         bytes,
                         pdfImage.BitsPerComponent,
                         bytes.Length / pdfImage.ColorSpaceDetails!.NumberOfColorComponents,
-                        1);
+                        1,
+                        null,
+                        pdfImage.RenderingIntent);
 
                     if (numberOfComponents == 4)
                     {
@@ -399,6 +435,45 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear);
         }
 
+        /// <summary>
+        /// Expand a single-component (DeviceGray) sample buffer into the output intent profile's colour
+        /// space: grey <c>g</c> maps to <c>(g, g, g)</c> for a 3-component (RGB) profile, or to
+        /// <c>(0, 0, 0, 255 - g)</c> — the black channel — for a 4-component (CMYK) profile. Returns an
+        /// empty span for any other combination (caller then keeps the built-in conversion).
+        /// </summary>
+        private static ReadOnlySpan<byte> ExpandGrayToProfile(ReadOnlySpan<byte> gray, int sourceComponents, int profileComponents)
+        {
+            if (sourceComponents != 1)
+            {
+                return ReadOnlySpan<byte>.Empty;
+            }
+
+            int pixels = gray.Length;
+            byte[] expanded = new byte[pixels * profileComponents];
+
+            switch (profileComponents)
+            {
+                case 3:
+                    for (int p = 0; p < pixels; p++)
+                    {
+                        int d = p * 3;
+                        expanded[d] = expanded[d + 1] = expanded[d + 2] = gray[p];
+                    }
+                    break;
+                case 4:
+                    // C = M = Y = 0 (already zero); K = 255 - grey.
+                    for (int p = 0; p < pixels; p++)
+                    {
+                        expanded[(p * 4) + 3] = (byte)(255 - gray[p]);
+                    }
+                    break;
+                default:
+                    return ReadOnlySpan<byte>.Empty;
+            }
+
+            return expanded;
+        }
+
         private static bool TryGetTruncationSize(IPdfImage pdfImage, int decodedLength, out int expectedSize)
         {
             expectedSize = 0;
@@ -407,10 +482,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             {
                 return false;
             }
-            
+
             int actualComponents = pdfImage.ColorSpaceDetails.NumberOfColorComponents;
             var streamDictionary = pdfImage.ImageDictionary;
-            
+
             // Only activate when /DecodeParms /Colors disagrees with the colour space.
             if (!streamDictionary.TryGet(NameToken.DecodeParms, out DictionaryToken? decodeParams) || decodeParams is null)
             {
@@ -440,6 +515,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         /// </summary>
         /// <param name="pdfImage">The PDF image to convert.</param>
         /// <param name="log"></param>
+        /// <param name="outputIntentTransform">
+        /// Optional output-intent transform used to colour-manage a <c>DeviceCMYK</c>/<c>DeviceRGB</c>/
+        /// <c>DeviceGray</c> image through the document's (or page's) output intent. Should only be
+        /// supplied when the image's device colour space matches the transform's component count;
+        /// pass <c>null</c> (the default) to use the built-in approximation.
+        /// </param>
         /// <returns>
         /// An <see cref="SKBitmap"/> representation of the provided <paramref name="pdfImage"/>.
         /// If the conversion fails, a fallback mechanism is used to create the image from raw bytes.
@@ -449,9 +530,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         /// This method attempts to generate an <see cref="SKBitmap"/> using the image's data and color space.
         /// If the generation fails, it falls back to creating the image using encoded or raw byte data.
         /// </remarks>
-        public static SKBitmap? GetSKBitmap(this IPdfImage pdfImage, ILog? log = null)
+        public static SKBitmap? GetSKBitmap(this IPdfImage pdfImage, ILog? log = null, IIccTransform? outputIntentTransform = null)
         {
-            if (pdfImage.TryGenerate(out var bitmap, log))
+            if (pdfImage.TryGenerate(out var bitmap, log, outputIntentTransform))
             {
                 return bitmap!;
             }

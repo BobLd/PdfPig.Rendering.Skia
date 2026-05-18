@@ -103,7 +103,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
             ParsingOptions parsingOptions,
             AnnotationProvider? annotationProvider,
             SkiaFontCache fontCache,
-            CancellationToken token)
+            CancellationToken token,
+            DictionaryToken? pageDictionary = null)
             : base(pageNumber,
                 resourceStore,
                 pdfScanner,
@@ -113,7 +114,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 userSpaceUnit,
                 rotation,
                 initialMatrix,
-                parsingOptions)
+                parsingOptions,
+                pageDictionary)
         {
             _renderAnnotations = annotationProvider is not null;
             _annotations = new Lazy<Annotation[]>(() => annotationProvider?.GetAnnotations().ToArray() ?? []);
@@ -131,7 +133,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // supplied alongside pattern names (PdfPig drops them otherwise). Required to render
             // uncoloured tiling patterns.
             var initialState = GetCurrentState();
-            initialState.ColorSpaceContext = new PatternAwareColorSpaceContext(initialState.ColorSpaceContext);
+            initialState.ColorSpaceContext = new PatternAwareColorSpaceContext(initialState.ColorSpaceContext, GetCurrentState);
         }
 
         public override SKPicture Process(int pageNumberCurrent, IReadOnlyList<IGraphicsStateOperation> operations)
