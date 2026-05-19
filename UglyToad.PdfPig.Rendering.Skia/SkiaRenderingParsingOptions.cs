@@ -1,4 +1,4 @@
-﻿// Copyright 2024 BobLd
+﻿// Copyright BobLd
 //
 // Licensed under the Apache License, Version 2.0 (the "License").
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using UglyToad.PdfPig.Colors.Icc.Unicolour;
+
 namespace UglyToad.PdfPig.Rendering.Skia
 {
     public static class SkiaRenderingParsingOptions
@@ -20,7 +22,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             UseLenientParsing = true,
             SkipMissingFonts = true,
-            FilterProvider = SkiaRenderingFilterProvider.Instance
+            FilterProvider = SkiaRenderingFilterProvider.Instance,
+            IccProfileService = UnicolourIccProfileService.Default
         };
     }
 }
