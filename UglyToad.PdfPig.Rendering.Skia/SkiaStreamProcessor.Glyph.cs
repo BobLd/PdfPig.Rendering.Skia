@@ -349,11 +349,21 @@ namespace UglyToad.PdfPig.Rendering.Skia
                             currentState.CurrentStrokingColor,
                             currentState.CurrentNonStrokingColor,
                             currentState.FontState.TextRenderingMode,
-                            in TransformationMatrix.Identity, in TransformationMatrix.Identity);
+                            in TransformationMatrix.Identity,
+                            in TransformationMatrix.Identity);
                         return;
 
                     case Type3PictureGlyph picture:
                         _canvas.DrawPicture(picture.Picture);
+#if DEBUG
+                        var rect = picture.Picture.CullRect;
+                        _canvas.DrawRect(rect, new SKPaint()
+                        {
+                            Color = SKColors.BlueViolet,
+                            IsStroke = true,
+                            StrokeWidth = 2f
+                        });
+#endif
                         return;
                 }
             }
@@ -380,7 +390,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             var pageCanvas = _canvas;
             using var recorder = new SKPictureRecorder();
-            _canvas = recorder.BeginRecording(bounds);
+            _canvas = recorder.BeginRecording(bounds, true);
 
             bool pushedResources = false;
             var savedTextMatrix = TextMatrices.TextMatrix;
@@ -441,61 +451,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             try
             {
-                // TODO - Need to add tests. When the bbox is wrong,
-                // Type 3 glyphs vanish across clip boundaries.
-                var glyphBbox = font.GetFontMatrix()
+                var charBbox = font.GetBoundingBox(code);
+                var glyphSpaceBox = font.GetFontMatrix()
                     .Inverse()
-                    .Transform(font.GetBoundingBox(code).GlyphBounds);
+                    .Transform(charBbox.GlyphBounds);
 
-                var candidate = new SKRect(
-                    (float)Math.Min(glyphBbox.BottomLeft.X, glyphBbox.TopRight.X),
-                    (float)Math.Min(glyphBbox.BottomLeft.Y, glyphBbox.TopRight.Y),
-                    (float)Math.Max(glyphBbox.BottomLeft.X, glyphBbox.TopRight.X),
-                    (float)Math.Max(glyphBbox.BottomLeft.Y, glyphBbox.TopRight.Y));
-
-                if (!candidate.IsEmpty)
-                {
-                    return candidate;
-                }
-            }
-            catch
-            {
-                // No op
-            }
-
-            return SKRect.Create(-1000, -1000, 2000, 2000);
-
-            /* Possible alternative to the above try/catch
-            try
-            {
-                var fontBox = font.FontBoundingBox;
-                float fbLeft = (float)Math.Min(fontBox.Left, fontBox.Right);
-                float fbRight = (float)Math.Max(fontBox.Left, fontBox.Right);
-                float fbBottom = (float)Math.Min(fontBox.Bottom, fontBox.Top);
-                float fbTop = (float)Math.Max(fontBox.Bottom, fontBox.Top);
-
-                try
-                {
-                    // d0 CharProcs only declare an advance width; widen the FontBBox horizontally
-                    // if the advance exceeds it so paint up to the advance edge is still covered.
-                    float advance = (float)font.GetBoundingBox(code).Width;
-                    if (advance > 0)
-                    {
-                        float advanceInGlyphSpace = (float)font.GetFontMatrix().Inverse().TransformX(advance);
-                        if (advanceInGlyphSpace > fbRight)
-                        {
-                            fbRight = advanceInGlyphSpace;
-                        }
-                        if (0 < fbLeft)
-                        {
-                            fbLeft = 0;
-                        }
-                    }
-                }
-                catch
-                {
-                    // No width for this code (Differences encoding gap). FontBBox alone is fine.
-                }
+                float fbLeft = (float)Math.Min(glyphSpaceBox.Left, glyphSpaceBox.Right);
+                float fbRight = (float)Math.Max(glyphSpaceBox.Left, glyphSpaceBox.Right);
+                float fbBottom = (float)Math.Min(glyphSpaceBox.Bottom, glyphSpaceBox.Top);
+                float fbTop = (float)Math.Max(glyphSpaceBox.Bottom, glyphSpaceBox.Top);
 
                 var fbRect = new SKRect(fbLeft, fbBottom, fbRight, fbTop);
                 if (!fbRect.IsEmpty)
@@ -507,8 +471,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 // Fall through to the generous default.
             }
-            */
+
+            return SKRect.Create(-1000, -1000, 2000, 2000);
         }
+        
         private static SKPath GetPath(SkiaFontCacheItem fontItem, string unicode)
         {
             using (var skFont = fontItem.Typeface.ToFont(1f))
