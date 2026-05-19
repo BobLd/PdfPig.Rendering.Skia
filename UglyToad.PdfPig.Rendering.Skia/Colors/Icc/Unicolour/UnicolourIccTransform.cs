@@ -44,7 +44,23 @@ namespace UglyToad.PdfPig.Colors.Icc.Unicolour
             var channels = new Channels(values.ToArray());
             var uc = new Unicolour(config, channels);
             var rgb = uc.Rgb;
-            return (rgb.R, rgb.G, rgb.B);
+
+            // ICC conversion from CMYK/wide-gamut sources can produce sRGB
+            // components outside [0,1] for out-of-gamut colors. Clip to [0,1]
+            // so downstream consumers (SKColor conversion, image bytes) see
+            // a valid sRGB triple. The IMAGE path's caller already clamps via
+            // ClampToByte, but the paint path's caller (ICCBasedColorSpaceDetails
+            // → RGBColor → ToSKColor) treats doubles outside [0,1] as raw bytes,
+            // which silently destroys the color (e.g. 0.62 -> byte 1).
+            return (Clip01(rgb.R), Clip01(rgb.G), Clip01(rgb.B));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double Clip01(double v)
+        {
+            if (v <= 0.0) return 0.0;
+            if (v >= 1.0) return 1.0;
+            return v;
         }
 
         public void Transform(ReadOnlySpan<byte> src, Span<byte> dstRgb)

@@ -136,7 +136,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 int height = pdfImage.HeightInSamples;
 
                 imageSpan = ColorSpaceDetailsByteConverter.Convert(pdfImage.ColorSpaceDetails!, imageSpan,
-                    pdfImage.BitsPerComponent, width, height);
+                    pdfImage.BitsPerComponent, width, height, pdfImage.RenderingIntent);
 
                 var numberOfComponents = pdfImage.ColorSpaceDetails!.BaseNumberOfColorComponents;
 
@@ -159,12 +159,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 // appear black instead of transparent at certain scales.
                 // See https://groups.google.com/g/skia-discuss/c/sV6e3dpf4CE for related question
                 var alphaType = SKAlphaType.Unpremul;
-                
+
                 // Special case for mask
                 if (pdfImage.IsImageMask && colorSpace == SKColorType.Gray8)
                 {
                     colorSpace = SKColorType.Alpha8;
-                    alphaType  = SKAlphaType.Premul;
+                    alphaType = SKAlphaType.Premul;
                 }
 
                 var info = new SKImageInfo(width, height, colorSpace, alphaType);
@@ -202,7 +202,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         bytes,
                         pdfImage.BitsPerComponent,
                         bytes.Length / pdfImage.ColorSpaceDetails!.NumberOfColorComponents,
-                        1);
+                        1,
+                        pdfImage.RenderingIntent);
 
                     if (numberOfComponents == 4)
                     {
@@ -352,10 +353,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             {
                 return false;
             }
-            
+
             int actualComponents = pdfImage.ColorSpaceDetails.NumberOfColorComponents;
             var streamDictionary = pdfImage.ImageDictionary;
-            
+
             // Only activate when /DecodeParms /Colors disagrees with the colour space.
             if (!streamDictionary.TryGet(NameToken.DecodeParms, out DictionaryToken? decodeParams) || decodeParams is null)
             {
