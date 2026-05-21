@@ -33,7 +33,7 @@ public class ShadingBenchmarks
         "2_shading_type3.pdf",
         "2_shading_type4_h.pdf",
         "2_shading_type5_h.pdf",
-        "2_shading_type_6_0010.pdf",
+        "2_shading_type_6_001.pdf",
         "P.pdf",
         "PDFBOX-1869-4.pdf",
         "PDFBOX-2100-gouraud-RGB-function.pdf"
