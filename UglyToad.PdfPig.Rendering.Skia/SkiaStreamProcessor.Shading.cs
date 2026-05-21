@@ -377,14 +377,28 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // function's non-linear behaviour.
             bool hasFunction = shading.Functions is { Length: > 0 };
 
-            // Storage for the triangles that will be passed to DrawVertices.
-            // Each triangle contributes exactly 3 entries (one per corner).
-            var positions = new List<SKPoint>();
-            var colors = new List<SKColor>();
+            // Output buffer for batched DrawVertices calls. In the function path each parent
+            // triangle subdivides into n² sub-triangles and the buffer is sized to fit exactly
+            // one parent's output, so EmitGouraudTriangle flushes after every emit. The
+            // no-function path packs 3-vertex triangles into the buffer and flushes when full
+            // or when the patch loop ends. Sub-vertex scratch and the bilinear scratch buffer
+            // are likewise hoisted out of the per-emit hot path.
+            const int functionPerParentVerts = GouraudFunctionSubdivisions * GouraudFunctionSubdivisions * 3;
+            const int gouraudNoFunctionBatchVerts = 4096 * 3;
+            int outCapacity = hasFunction ? functionPerParentVerts : gouraudNoFunctionBatchVerts;
+            var outPositions = new SKPoint[outCapacity];
+            var outColors = new SKColor[outCapacity];
+            int outCount = 0;
+
+            // Barycentric sub-vertex grid for the function path; reused across all parent
+            // triangles in this Render call so we don't pay the (n+1)(n+2)/2 allocation per
+            // emit.
+            int subVertCount = (GouraudFunctionSubdivisions + 1) * (GouraudFunctionSubdivisions + 2) / 2;
+            SKPoint[]? subPts = hasFunction ? new SKPoint[subVertCount] : null;
+            SKColor[]? subCols = hasFunction ? new SKColor[subVertCount] : null;
 
             // Reusable scratch buffer for the barycentric component blend inside
-            // EmitGouraudTriangle's subdivision loop. Allocated once here instead of per
-            // sub-vertex (153 sub-vertices × N triangles can otherwise add up).
+            // EmitGouraudTriangle's subdivision loop.
             double[] emitBuffer = hasFunction ? new double[numStreamColorComponents] : Array.Empty<double>();
 
             // The three corners of the most-recently completed triangle.
@@ -400,115 +414,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             var bitReader = new GouraudBitReader(shading.Data.Span);
 
-            while (bitReader.HasData)
-            {
-                int flag;
-                long rawX, rawY;
-
-                // colorComponents is the per-vertex output (stored on the GouraudVertex), so
-                // it must live on the heap. Read directly into it — no separate rawC stage.
-                double[] colorComponents = new double[numStreamColorComponents];
-
-                try
-                {
-                    flag = (int)(bitReader.ReadBits(bitsPerFlag) & 3);
-                    rawX = bitReader.ReadBits(bitsPerCoordinate);
-                    rawY = bitReader.ReadBits(bitsPerCoordinate);
-                    for (int i = 0; i < numStreamColorComponents; i++)
-                    {
-                        long raw = bitReader.ReadBits(bitsPerComponent);
-                        double cMin = decode[4 + i * 2];
-                        double cMax = decode[5 + i * 2];
-                        colorComponents[i] = cMin + (raw / maxColorRaw) * (cMax - cMin);
-                    }
-
-                    // PDF spec: each vertex record occupies a whole number of bytes.
-                    bitReader.AlignToByte();
-                }
-                catch
-                {
-                    break;
-                }
-
-                // Decode coordinates via linear interpolation from raw integer range to Decode range.
-                double x = xMin + (rawX / maxCoordRaw) * (xMax - xMin);
-                double y = yMin + (rawY / maxCoordRaw) * (yMax - yMin);
-
-                // Evaluate optional function and convert to an SKColor through the colour space
-                // for the no-function fast path. When subdivision is needed the raw components
-                // are used instead.
-                double[] evalResult = shading.Eval(colorComponents);
-                SKColor skColor = shading.ColorSpace.GetColor(evalResult).ToSKColor(currentState.AlphaConstantNonStroking);
-
-                // Transform the vertex from shading/pattern space to canvas space.
-                SKPoint pt = patternTransformMatrix.MapPoint(new SKPoint((float)x, (float)y));
-                var vertex = new GouraudVertex(pt, colorComponents, skColor);
-
-                // Build triangles according to the edge-flag value (PDF spec Table 92).
-                switch (flag)
-                {
-                    case 0:
-                        // Accumulate free vertices; emit a triangle once three are collected.
-                        flag0Buf[flag0Count] = vertex;
-                        flag0Count++;
-
-                        if (flag0Count == 3)
-                        {
-                            EmitGouraudTriangle(shading, currentState, hasFunction,
-                                flag0Buf[0], flag0Buf[1], flag0Buf[2], emitBuffer, positions, colors);
-                            for (int i = 0; i < 3; i++)
-                            {
-                                prevTri[i] = flag0Buf[i];
-                            }
-                            hasPrevTri = true;
-                            flag0Count = 0;
-                        }
-                        break;
-
-                    case 1:
-                        // New triangle shares edge prevTri[1]–prevTri[2] with the previous triangle.
-                        if (hasPrevTri)
-                        {
-                            EmitGouraudTriangle(shading, currentState, hasFunction,
-                                prevTri[1], prevTri[2], vertex, emitBuffer, positions, colors);
-
-                            // Slide the window: new prevTri = [prevTri[1], prevTri[2], newVertex]
-                            prevTri[0] = prevTri[1];
-                            prevTri[1] = prevTri[2];
-                            prevTri[2] = vertex;
-                            flag0Count = 0;
-                        }
-                        break;
-
-                    case 2:
-                        // New triangle shares edge prevTri[0]–prevTri[2] with the previous triangle.
-                        if (hasPrevTri)
-                        {
-                            EmitGouraudTriangle(shading, currentState, hasFunction,
-                                prevTri[0], prevTri[2], vertex, emitBuffer, positions, colors);
-
-                            // Slide the window: new prevTri = [prevTri[0], prevTri[2], newVertex]
-                            prevTri[1] = prevTri[2];
-                            prevTri[2] = vertex;
-                            flag0Count = 0;
-                        }
-                        break;
-                }
-            }
-
-            if (positions.Count == 0)
-            {
-                return;
-            }
-
-            SKPoint[] posArray = positions.ToArray();
-            SKColor[] colArray = colors.ToArray();
-
             using var paint = new SKPaint();
             paint.IsAntialias = shading.AntiAlias;
-            paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
-            // White paint + Modulate: vertex_colour × (1,1,1,1) = vertex_colour.
-            // This preserves the Gouraud-interpolated colours regardless of which role
+            paint.BlendMode = currentState.BlendMode.ToSKBlendMode(); // White paint + Modulate: vertex_colour × (1,1,1,1) = vertex_colour.
+            // Preserves the Gouraud-interpolated colours regardless of which role
             // (src / dst) SkiaSharp assigns to the vertex vs. paint colour.
             paint.Color = SKColors.White;
 
@@ -518,13 +427,144 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 _canvas.ClipPath(path);
             }
 
-            // paint.BlendMode handles compositing the result with the existing canvas content.
-            _canvas.DrawVertices(SKVertexMode.Triangles, posArray, null, colArray, SKBlendMode.Modulate, null, paint);
-
-            if (path is not null)
+            try
             {
-                _canvas.Restore();
+                while (bitReader.HasData)
+                {
+                    int flag;
+                    long rawX, rawY;
+
+                    // colorComponents is the per-vertex output (stored on the GouraudVertex), so
+                    // it must live on the heap. Read directly into it — no separate rawC stage.
+                    double[] colorComponents = new double[numStreamColorComponents];
+
+                    try
+                    {
+                        flag = (int)(bitReader.ReadBits(bitsPerFlag) & 3);
+                        rawX = bitReader.ReadBits(bitsPerCoordinate);
+                        rawY = bitReader.ReadBits(bitsPerCoordinate);
+                        for (int i = 0; i < numStreamColorComponents; i++)
+                        {
+                            long raw = bitReader.ReadBits(bitsPerComponent);
+                            double cMin = decode[4 + i * 2];
+                            double cMax = decode[5 + i * 2];
+                            colorComponents[i] = cMin + (raw / maxColorRaw) * (cMax - cMin);
+                        }
+
+                        // PDF spec: each vertex record occupies a whole number of bytes.
+                        bitReader.AlignToByte();
+                    }
+                    catch
+                    {
+                        break;
+                    }
+
+                    // Decode coordinates via linear interpolation from raw integer range to Decode range.
+                    double x = xMin + (rawX / maxCoordRaw) * (xMax - xMin);
+                    double y = yMin + (rawY / maxCoordRaw) * (yMax - yMin);
+
+                    // Evaluate optional function and convert to an SKColor through the colour space
+                    // for the no-function fast path. When subdivision is needed the raw components
+                    // are used instead.
+                    double[] evalResult = shading.Eval(colorComponents);
+                    SKColor skColor = shading.ColorSpace.GetColor(evalResult).ToSKColor(currentState.AlphaConstantNonStroking);
+
+                    // Transform the vertex from shading/pattern space to canvas space.
+                    SKPoint pt = patternTransformMatrix.MapPoint(new SKPoint((float)x, (float)y));
+                    var vertex = new GouraudVertex(pt, colorComponents, skColor);
+
+                    // Build triangles according to the edge-flag value (PDF spec Table 92).
+                    switch (flag)
+                    {
+                        case 0:
+                            // Accumulate free vertices; emit a triangle once three are collected.
+                            flag0Buf[flag0Count] = vertex;
+                            flag0Count++;
+
+                            if (flag0Count == 3)
+                            {
+                                EmitGouraudTriangle(shading, currentState, hasFunction,
+                                    flag0Buf[0], flag0Buf[1], flag0Buf[2],
+                                    emitBuffer, subPts, subCols, outPositions, outColors, ref outCount, paint);
+                                for (int i = 0; i < 3; i++)
+                                {
+                                    prevTri[i] = flag0Buf[i];
+                                }
+                                hasPrevTri = true;
+                                flag0Count = 0;
+                            }
+                            break;
+
+                        case 1:
+                            // New triangle shares edge prevTri[1]–prevTri[2] with the previous triangle.
+                            if (hasPrevTri)
+                            {
+                                EmitGouraudTriangle(shading, currentState, hasFunction,
+                                    prevTri[1], prevTri[2], vertex,
+                                    emitBuffer, subPts, subCols, outPositions, outColors, ref outCount, paint);
+
+                                // Slide the window: new prevTri = [prevTri[1], prevTri[2], newVertex]
+                                prevTri[0] = prevTri[1];
+                                prevTri[1] = prevTri[2];
+                                prevTri[2] = vertex;
+                                flag0Count = 0;
+                            }
+                            break;
+
+                        case 2:
+                            // New triangle shares edge prevTri[0]–prevTri[2] with the previous triangle.
+                            if (hasPrevTri)
+                            {
+                                EmitGouraudTriangle(shading, currentState, hasFunction,
+                                    prevTri[0], prevTri[2], vertex,
+                                    emitBuffer, subPts, subCols, outPositions, outColors, ref outCount, paint);
+
+                                // Slide the window: new prevTri = [prevTri[0], prevTri[2], newVertex]
+                                prevTri[1] = prevTri[2];
+                                prevTri[2] = vertex;
+                                flag0Count = 0;
+                            }
+                            break;
+                    }
+                }
+
+                FlushGouraudBatch(outPositions, outColors, outCount, paint);
             }
+            finally
+            {
+                if (path is not null)
+                {
+                    _canvas.Restore();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Submits any unflushed no-function-path triangles to the canvas. Allocates an
+        /// exact-size temporary array when the batch is partial; passes the full-size buffer
+        /// through unchanged on the common full-buffer path. Calls with <paramref name="outCount"/>
+        /// equal to 0 (the function-path resting state) are a no-op.
+        /// </summary>
+        private void FlushGouraudBatch(SKPoint[] outPositions, SKColor[] outColors, int outCount, SKPaint paint)
+        {
+            if (outCount == 0)
+            {
+                return;
+            }
+
+            if (outCount == outPositions.Length)
+            {
+                _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
+                    SKBlendMode.Modulate, null, paint);
+                return;
+            }
+
+            var partialPts = new SKPoint[outCount];
+            var partialCols = new SKColor[outCount];
+            Array.Copy(outPositions, partialPts, outCount);
+            Array.Copy(outColors, partialCols, outCount);
+            _canvas.DrawVertices(SKVertexMode.Triangles, partialPts, null, partialCols,
+                SKBlendMode.Modulate, null, paint);
         }
 
         /// <summary>
@@ -542,22 +582,42 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private const int GouraudFunctionSubdivisions = 128;
 
         /// <summary>
-        /// Emits one Gouraud triangle into the position/colour lists, subdividing it when
-        /// <paramref name="hasFunction"/> is true so per-pixel function output is visible.
+        /// Emits one parent Gouraud triangle. When <paramref name="hasFunction"/> is false
+        /// the three vertices are appended to <paramref name="outPositions"/> / <paramref name="outColors"/>;
+        /// when the next 3-vertex append would overflow the buffer it is first flushed via
+        /// DrawVertices (the buffer capacity is a multiple of 3 so this means the buffer is
+        /// exactly full). When <paramref name="hasFunction"/> is true the triangle is
+        /// subdivided to capture non-linear function output, the n² sub-triangles fill
+        /// <paramref name="outPositions"/> / <paramref name="outColors"/> exactly, and a
+        /// single DrawVertices call is made before resetting <paramref name="outCount"/>.
         /// </summary>
         /// <param name="interpBuffer">
         /// Reusable buffer for the barycentric component blend; must have length ≥
         /// <c>a.Components.Length</c>. Owned by the caller so the per-sub-vertex allocation
         /// doesn't fall inside the n²/2 subdivision loop.
         /// </param>
-        private static void EmitGouraudTriangle(FreeFormGouraudShading shading, CurrentGraphicsState currentState,
+        /// <param name="subPts">
+        /// Sub-vertex grid scratch ((n+1)(n+2)/2 entries). Required when
+        /// <paramref name="hasFunction"/> is true; may be null otherwise.
+        /// </param>
+        private void EmitGouraudTriangle(FreeFormGouraudShading shading, CurrentGraphicsState currentState,
             bool hasFunction, in GouraudVertex a, in GouraudVertex b, in GouraudVertex c,
-            double[] interpBuffer, List<SKPoint> outPositions, List<SKColor> outColors)
+            double[] interpBuffer, SKPoint[]? subPts, SKColor[]? subCols,
+            SKPoint[] outPositions, SKColor[] outColors, ref int outCount, SKPaint paint)
         {
             if (!hasFunction)
             {
-                outPositions.Add(a.Pt); outPositions.Add(b.Pt); outPositions.Add(c.Pt);
-                outColors.Add(a.Col); outColors.Add(b.Col); outColors.Add(c.Col);
+                if (outCount + 3 > outPositions.Length)
+                {
+                    // Capacity is a multiple of 3 and writes step by 3, so outCount must
+                    // equal outPositions.Length here — the array is exactly full.
+                    _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
+                        SKBlendMode.Modulate, null, paint);
+                    outCount = 0;
+                }
+                outPositions[outCount] = a.Pt; outColors[outCount] = a.Col; outCount++;
+                outPositions[outCount] = b.Pt; outColors[outCount] = b.Col; outCount++;
+                outPositions[outCount] = c.Pt; outColors[outCount] = c.Col; outCount++;
                 return;
             }
 
@@ -570,76 +630,69 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             const float invN = 1f / GouraudFunctionSubdivisions;
 
-            // (n+1)*(n+2)/2 sub-vertices on a barycentric grid (i + j ≤ n, with k = n − i − j).
-            // At n=128 that's 8385 SKPoints + 8385 SKColors per parent triangle. SKPoint is 8 B
-            // (~67 KB) and SKColor 4 B (~33 KB); both rented from the shared pool to keep heap
-            // pressure flat regardless of how many Type-4 triangles a shading produces.
-            int subVertCount = (GouraudFunctionSubdivisions + 1) * (GouraudFunctionSubdivisions + 2) / 2;
-            var ptsPool = ArrayPool<SKPoint>.Shared;
-            var colsPool = ArrayPool<SKColor>.Shared;
-            SKPoint[] subPts = ptsPool.Rent(subVertCount);
-            SKColor[] subCols = colsPool.Rent(subVertCount);
-
-            try
+            // Fill the (n+1)(n+2)/2 barycentric sub-vertex grid for this parent triangle.
+            // subPts/subCols are caller-owned, reused across all parent triangles in the
+            // current Render call so the ~100 KB grid scratch is allocated once.
+            for (int i = 0; i <= GouraudFunctionSubdivisions; i++)
             {
-                for (int i = 0; i <= GouraudFunctionSubdivisions; i++)
+                int rowOffset = i * (GouraudFunctionSubdivisions + 1) - i * (i - 1) / 2;
+                for (int j = 0; j <= GouraudFunctionSubdivisions - i; j++)
                 {
-                    int rowOffset = i * (GouraudFunctionSubdivisions + 1) - i * (i - 1) / 2;
-                    for (int j = 0; j <= GouraudFunctionSubdivisions - i; j++)
+                    int k = GouraudFunctionSubdivisions - i - j;
+                    float wa = i * invN;
+                    float wb = j * invN;
+                    float wc = k * invN;
+
+                    SKPoint pt = new SKPoint(
+                        wa * ax + wb * bx + wc * cx,
+                        wa * ay + wb * by + wc * cy);
+
+                    for (int ci = 0; ci < components; ci++)
                     {
-                        int k = GouraudFunctionSubdivisions - i - j;
-                        float wa = i * invN;
-                        float wb = j * invN;
-                        float wc = k * invN;
-
-                        SKPoint pt = new SKPoint(
-                            wa * ax + wb * bx + wc * cx,
-                            wa * ay + wb * by + wc * cy);
-
-                        for (int ci = 0; ci < components; ci++)
-                        {
-                            interpBuffer[ci] = wa * a.Components[ci] + wb * b.Components[ci] + wc * c.Components[ci];
-                        }
-
-                        double[] eval = shading.Eval(interpBuffer);
-                        SKColor col = shading.ColorSpace.GetColor(eval).ToSKColor(alpha);
-
-                        int idx = rowOffset + j;
-                        subPts[idx] = pt;
-                        subCols[idx] = col;
+                        interpBuffer[ci] = wa * a.Components[ci] + wb * b.Components[ci] + wc * c.Components[ci];
                     }
+
+                    double[] eval = shading.Eval(interpBuffer);
+                    SKColor col = shading.ColorSpace.GetColor(eval).ToSKColor(alpha);
+
+                    int idx = rowOffset + j;
+                    subPts![idx] = pt;
+                    subCols![idx] = col;
                 }
+            }
 
-                // Stitch the sub-grid into 2 triangles per "rhombus" cell, plus boundary
-                // triangles along the diagonal. For each row i (0..n-1), column j (0..n-1-i):
-                //   upper-tri: (i,j), (i+1,j), (i,j+1)
-                //   lower-tri: (i+1,j), (i+1,j+1), (i,j+1) — only when i+j < n-1
-                for (int i = 0; i < GouraudFunctionSubdivisions; i++)
+            // Stitch the sub-grid into 2 triangles per "rhombus" cell, plus boundary
+            // triangles along the diagonal. For each row i (0..n-1), column j (0..n-1-i):
+            //   upper-tri: (i,j), (i+1,j), (i,j+1)
+            //   lower-tri: (i+1,j), (i+1,j+1), (i,j+1) — only when i+j < n-1
+            // The writes fill outPositions/outColors exactly (length = n² × 3).
+            int w = 0;
+            for (int i = 0; i < GouraudFunctionSubdivisions; i++)
+            {
+                int rowOffset = i * (GouraudFunctionSubdivisions + 1) - i * (i - 1) / 2;
+                int nextRowOffset = (i + 1) * (GouraudFunctionSubdivisions + 1) - (i + 1) * i / 2;
+                for (int j = 0; j < GouraudFunctionSubdivisions - i; j++)
                 {
-                    int rowOffset = i * (GouraudFunctionSubdivisions + 1) - i * (i - 1) / 2;
-                    int nextRowOffset = (i + 1) * (GouraudFunctionSubdivisions + 1) - (i + 1) * i / 2;
-                    for (int j = 0; j < GouraudFunctionSubdivisions - i; j++)
-                    {
-                        int v0 = rowOffset + j;
-                        int v1 = nextRowOffset + j;
-                        int v2 = rowOffset + j + 1;
-                        outPositions.Add(subPts[v0]); outPositions.Add(subPts[v1]); outPositions.Add(subPts[v2]);
-                        outColors.Add(subCols[v0]); outColors.Add(subCols[v1]); outColors.Add(subCols[v2]);
+                    int v0 = rowOffset + j;
+                    int v1 = nextRowOffset + j;
+                    int v2 = rowOffset + j + 1;
+                    outPositions[w] = subPts![v0]; outColors[w] = subCols![v0]; w++;
+                    outPositions[w] = subPts[v1]; outColors[w] = subCols[v1]; w++;
+                    outPositions[w] = subPts[v2]; outColors[w] = subCols[v2]; w++;
 
-                        if (i + j < GouraudFunctionSubdivisions - 1)
-                        {
-                            int v3 = nextRowOffset + j + 1;
-                            outPositions.Add(subPts[v1]); outPositions.Add(subPts[v3]); outPositions.Add(subPts[v2]);
-                            outColors.Add(subCols[v1]); outColors.Add(subCols[v3]); outColors.Add(subCols[v2]);
-                        }
+                    if (i + j < GouraudFunctionSubdivisions - 1)
+                    {
+                        int v3 = nextRowOffset + j + 1;
+                        outPositions[w] = subPts[v1]; outColors[w] = subCols[v1]; w++;
+                        outPositions[w] = subPts[v3]; outColors[w] = subCols[v3]; w++;
+                        outPositions[w] = subPts[v2]; outColors[w] = subCols[v2]; w++;
                     }
                 }
             }
-            finally
-            {
-                ptsPool.Return(subPts);
-                colsPool.Return(subCols);
-            }
+
+            _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
+                SKBlendMode.Modulate, null, paint);
+            outCount = 0;
         }
 
         /// <summary>
@@ -755,7 +808,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         bOut = components.Length > 2 ? components[2] : rOut;
                     }
 
-                    raster[index]     = (rOut * 255.0).ToByte();
+                    raster[index] = (rOut * 255.0).ToByte();
                     raster[index + 1] = (gOut * 255.0).ToByte();
                     raster[index + 2] = (bOut * 255.0).ToByte();
                     raster[index + 3] = 255;
@@ -946,12 +999,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
             double xMin = decode[0], xMax = decode[1];
             double yMin = decode[2], yMax = decode[3];
 
-            // Read every vertex in stream order. Estimate the vertex count from the stream
-            // size to pre-size the list (avoids the ~10 doubling re-allocations a default
-            // List<T> would do).
-            int bytesPerVertex = (bitsPerCoordinate * 2 + bitsPerComponent * numStreamColorComponents + 7) / 8;
-            int estimatedVerts = bytesPerVertex > 0 ? shading.Data.Length / bytesPerVertex : 16;
-            var verts = new List<(SKPoint pt, SKColor col)>(estimatedVerts);
+            // Stream the lattice row by row: hold only the previous and current row of
+            // vertices, and submit each row-pair (2·(verticesPerRow − 1) triangles) via its
+            // own DrawVertices call. Peak memory stays bounded — no full-mesh accumulation.
+            int rowPairVertexCount = (verticesPerRow - 1) * 6;
+            var rowA = new (SKPoint pt, SKColor col)[verticesPerRow];
+            var rowB = new (SKPoint pt, SKColor col)[verticesPerRow];
+            var outPositions = new SKPoint[rowPairVertexCount];
+            var outColors = new SKColor[rowPairVertexCount];
 
             // Reusable per-vertex buffer — Eval() needs a heap double[], but it doesn't keep
             // the reference (it returns it directly when no Function is present, otherwise
@@ -959,68 +1014,50 @@ namespace UglyToad.PdfPig.Rendering.Skia
             double[] colorBuffer = new double[numStreamColorComponents];
             var bitReader = new GouraudBitReader(shading.Data.Span);
 
-            while (bitReader.HasData)
-            {
-                long rawX, rawY;
-                try
-                {
-                    rawX = bitReader.ReadBits(bitsPerCoordinate);
-                    rawY = bitReader.ReadBits(bitsPerCoordinate);
-                    for (int i = 0; i < numStreamColorComponents; i++)
-                    {
-                        long raw = bitReader.ReadBits(bitsPerComponent);
-                        double cMin = decode[4 + i * 2];
-                        double cMax = decode[5 + i * 2];
-                        colorBuffer[i] = cMin + (raw / maxColorRaw) * (cMax - cMin);
-                    }
-                    bitReader.AlignToByte();
-                }
-                catch
-                {
-                    break;
-                }
-
-                double x = xMin + (rawX / maxCoordRaw) * (xMax - xMin);
-                double y = yMin + (rawY / maxCoordRaw) * (yMax - yMin);
-
-                double[] evalResult = shading.Eval(colorBuffer);
-                SKColor skColor = shading.ColorSpace.GetColor(evalResult).ToSKColor(currentState.AlphaConstantNonStroking);
-                SKPoint pt = patternTransformMatrix.MapPoint(new SKPoint((float)x, (float)y));
-                verts.Add((pt, skColor));
-            }
-
-            int totalRows = verts.Count / verticesPerRow;
-            if (totalRows < 2)
+            // No first row means no triangles can ever be produced — bail before allocating
+            // the paint or touching canvas clipping state.
+            if (!TryReadLatticeRow(ref bitReader, rowA, bitsPerCoordinate, bitsPerComponent,
+                    maxCoordRaw, maxColorRaw, decode, numStreamColorComponents,
+                    xMin, xMax, yMin, yMax, in patternTransformMatrix,
+                    shading, currentState, colorBuffer))
             {
                 return;
             }
 
-            // For each (row, col) cell, emit two triangles between (row, col)/(row, col+1)/(row+1, col)
-            // and (row, col+1)/(row+1, col+1)/(row+1, col).
-            int triCount = (totalRows - 1) * (verticesPerRow - 1) * 2;
-            var positions = new List<SKPoint>(triCount * 3);
-            var colors = new List<SKColor>(triCount * 3);
-
-            for (int r = 0; r < totalRows - 1; r++)
+            using var paint = new SKPaint
             {
-                int rowBase = r * verticesPerRow;
-                int nextRowBase = rowBase + verticesPerRow;
-                for (int c = 0; c < verticesPerRow - 1; c++)
-                {
-                    var v00 = verts[rowBase + c];
-                    var v10 = verts[rowBase + c + 1];
-                    var v01 = verts[nextRowBase + c];
-                    var v11 = verts[nextRowBase + c + 1];
+                IsAntialias = shading.AntiAlias,
+                BlendMode = currentState.BlendMode.ToSKBlendMode(),
+                Color = SKColors.White,
+            };
 
-                    positions.Add(v00.pt); positions.Add(v10.pt); positions.Add(v01.pt);
-                    colors.Add(v00.col); colors.Add(v10.col); colors.Add(v01.col);
-
-                    positions.Add(v10.pt); positions.Add(v11.pt); positions.Add(v01.pt);
-                    colors.Add(v10.col); colors.Add(v11.col); colors.Add(v01.col);
-                }
+            if (path is not null)
+            {
+                _canvas.Save();
+                _canvas.ClipPath(path);
             }
 
-            DrawShadingVertices(positions, colors, path, shading.AntiAlias, currentState.BlendMode.ToSKBlendMode());
+            try
+            {
+                while (TryReadLatticeRow(ref bitReader, rowB, bitsPerCoordinate, bitsPerComponent,
+                           maxCoordRaw, maxColorRaw, decode, numStreamColorComponents,
+                           xMin, xMax, yMin, yMax, in patternTransformMatrix,
+                           shading, currentState, colorBuffer))
+                {
+                    EmitRowPairTriangles(rowA, rowB, verticesPerRow, outPositions, outColors);
+                    _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
+                        SKBlendMode.Modulate, null, paint);
+
+                    (rowA, rowB) = (rowB, rowA);
+                }
+            }
+            finally
+            {
+                if (path is not null)
+                {
+                    _canvas.Restore();
+                }
+            }
         }
 
         /// <summary>
@@ -1056,119 +1093,139 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // and texture-coordinate mapping, getting per-pixel function output.
             bool hasFunction = shading.Functions is { Length: > 0 };
 
-            // Each Coons patch tessellates to PatchSubdivisions² × 6 triangle vertices.
-            // Pre-size for the common single-patch case so the no-function path doesn't
-            // pay log₂(N) doubling re-allocations.
+            // Per-shading scratch for the no-function (vertex-colour Gouraud) path. Each
+            // patch tessellates into the same fixed-size triangle arrays and is submitted
+            // via its own DrawVertices call, so memory stays bounded regardless of mesh size.
+            const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
             const int perPatchVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
-            var positions = hasFunction ? null : new List<SKPoint>(perPatchVertexCount);
-            var colors = hasFunction ? null : new List<SKColor>(perPatchVertexCount);
+            SKPoint[]? grid = null;
+            SKColor[]? gridCol = null;
+            double[]? interpBuffer = null;
+            SKPoint[]? outPositions = null;
+            SKColor[]? outColors = null;
+            SKPaint? gouraudPaint = null;
 
-            if (hasFunction && path is not null)
+            if (!hasFunction)
+            {
+                grid = new SKPoint[gridCount];
+                gridCol = new SKColor[gridCount];
+                interpBuffer = new double[numStreamColorComponents];
+                outPositions = new SKPoint[perPatchVertexCount];
+                outColors = new SKColor[perPatchVertexCount];
+                gouraudPaint = new SKPaint
+                {
+                    IsAntialias = shading.AntiAlias,
+                    BlendMode = currentState.BlendMode.ToSKBlendMode(),
+                    Color = SKColors.White,
+                };
+            }
+
+            if (path is not null)
             {
                 _canvas.Save();
                 _canvas.ClipPath(path);
             }
 
-            // Previous patch state — corners (12 points) and 4 corner colour components — used by flag 1/2/3.
-            SKPoint[]? prevPts = null;
-            double[][]? prevColors = null;
-            var bitReader = new GouraudBitReader(shading.Data.Span);
-
-            while (bitReader.HasData)
+            try
             {
-                int flag;
-                try
-                {
-                    flag = (int)(bitReader.ReadBits(bitsPerFlag) & 3);
-                }
-                catch
-                {
-                    break;
-                }
+                // Previous patch state — corners (12 points) and 4 corner colour components — used by flag 1/2/3.
+                SKPoint[]? prevPts = null;
+                double[][]? prevColors = null;
+                var bitReader = new GouraudBitReader(shading.Data.Span);
 
-                int newPointCount = flag == 0 ? 12 : 8;
-                int newColorCount = flag == 0 ? 4 : 2;
-
-                SKPoint[] points = new SKPoint[12];
-                double[][] cornerColors = new double[4][];
-
-                if (flag == 0)
+                while (bitReader.HasData)
                 {
-                    if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
-                            in patternTransformMatrix, points, 0, newPointCount))
+                    int flag;
+                    try
+                    {
+                        flag = (int)(bitReader.ReadBits(bitsPerFlag) & 3);
+                    }
+                    catch
                     {
                         break;
                     }
-                    if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
-                            cornerColors, 0, newColorCount))
+
+                    int newPointCount = flag == 0 ? 12 : 8;
+                    int newColorCount = flag == 0 ? 4 : 2;
+
+                    SKPoint[] points = new SKPoint[12];
+                    double[][] cornerColors = new double[4][];
+
+                    if (flag == 0)
                     {
-                        break;
+                        if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
+                                in patternTransformMatrix, points, 0, newPointCount))
+                        {
+                            break;
+                        }
+                        if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
+                                cornerColors, 0, newColorCount))
+                        {
+                            break;
+                        }
                     }
+                    else
+                    {
+                        if (prevPts is null || prevColors is null)
+                        {
+                            // No previous patch — malformed stream; bail out gracefully.
+                            break;
+                        }
+
+                        // Per PDF spec Table 90: the implicit edge of the new patch is the C2 curve of the
+                        // previous patch, the right curve, or the left curve, depending on the flag value.
+                        int p11Idx, p12Idx, p13Idx, p14Idx;        // previous patch boundary points re-used as new patch corners
+                        int newC1ColorIdx, newC2ColorIdx;          // previous patch corner colours that become new patch corner colours
+                        switch (flag)
+                        {
+                            case 1: p11Idx = 3; p12Idx = 4; p13Idx = 5; p14Idx = 6; newC1ColorIdx = 1; newC2ColorIdx = 2; break;
+                            case 2: p11Idx = 6; p12Idx = 7; p13Idx = 8; p14Idx = 9; newC1ColorIdx = 2; newC2ColorIdx = 3; break;
+                            case 3: p11Idx = 9; p12Idx = 10; p13Idx = 11; p14Idx = 0; newC1ColorIdx = 3; newC2ColorIdx = 0; break;
+                            default: return;
+                        }
+
+                        points[0] = prevPts[p11Idx];
+                        points[1] = prevPts[p12Idx];
+                        points[2] = prevPts[p13Idx];
+                        points[3] = prevPts[p14Idx];
+                        cornerColors[0] = prevColors[newC1ColorIdx];
+                        cornerColors[1] = prevColors[newC2ColorIdx];
+
+                        if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
+                                in patternTransformMatrix, points, 4, newPointCount))
+                        {
+                            break;
+                        }
+                        if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
+                                cornerColors, 2, newColorCount))
+                        {
+                            break;
+                        }
+                    }
+
                     bitReader.AlignToByte();
-                }
-                else
-                {
-                    if (prevPts is null || prevColors is null)
+
+                    if (hasFunction)
                     {
-                        // No previous patch — malformed stream; bail out gracefully.
-                        break;
+                        DrawCoonsPatchTextured(shading, currentState, points, cornerColors);
+                    }
+                    else
+                    {
+                        TessellateAndDrawCoonsPatch(shading, currentState, points, cornerColors,
+                            grid!, gridCol!, interpBuffer!, outPositions!, outColors!, gouraudPaint!);
                     }
 
-                    // Per PDF spec Table 90: the implicit edge of the new patch is the C2 curve of the
-                    // previous patch, the right curve, or the left curve, depending on the flag value.
-                    int p11Idx, p12Idx, p13Idx, p14Idx;        // previous patch boundary points re-used as new patch corners
-                    int newC1ColorIdx, newC2ColorIdx;          // previous patch corner colours that become new patch corner colours
-                    switch (flag)
-                    {
-                        case 1: p11Idx = 3; p12Idx = 4; p13Idx = 5; p14Idx = 6; newC1ColorIdx = 1; newC2ColorIdx = 2; break;
-                        case 2: p11Idx = 6; p12Idx = 7; p13Idx = 8; p14Idx = 9; newC1ColorIdx = 2; newC2ColorIdx = 3; break;
-                        case 3: p11Idx = 9; p12Idx = 10; p13Idx = 11; p14Idx = 0; newC1ColorIdx = 3; newC2ColorIdx = 0; break;
-                        default: return;
-                    }
-
-                    points[0] = prevPts[p11Idx];
-                    points[1] = prevPts[p12Idx];
-                    points[2] = prevPts[p13Idx];
-                    points[3] = prevPts[p14Idx];
-                    cornerColors[0] = prevColors[newC1ColorIdx];
-                    cornerColors[1] = prevColors[newC2ColorIdx];
-
-                    if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
-                            in patternTransformMatrix, points, 4, newPointCount))
-                    {
-                        break;
-                    }
-                    if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
-                            cornerColors, 2, newColorCount))
-                    {
-                        break;
-                    }
-                    bitReader.AlignToByte();
+                    prevPts = points;
+                    prevColors = cornerColors;
                 }
-
-                if (hasFunction)
-                {
-                    DrawCoonsPatchTextured(shading, currentState, points, cornerColors);
-                }
-                else
-                {
-                    TessellateCoonsPatch(shading, currentState, points, cornerColors, positions!, colors!);
-                }
-
-                prevPts = points;
-                prevColors = cornerColors;
             }
-
-            if (hasFunction)
+            finally
             {
+                gouraudPaint?.Dispose();
                 if (path is not null)
                 {
                     _canvas.Restore();
                 }
-            }
-            else
-            {
-                DrawShadingVertices(positions!, colors!, path, shading.AntiAlias, currentState.BlendMode.ToSKBlendMode());
             }
         }
 
@@ -1200,114 +1257,136 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // See RenderCoonsPatchShading for why the function path uses textured drawing.
             bool hasFunction = shading.Functions is { Length: > 0 };
 
+            // Per-shading scratch for the no-function (vertex-colour Gouraud) path. See
+            // RenderCoonsPatchShading for the per-patch-DrawVertices rationale.
+            const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
             const int perPatchVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
-            var positions = hasFunction ? null : new List<SKPoint>(perPatchVertexCount);
-            var colors = hasFunction ? null : new List<SKColor>(perPatchVertexCount);
+            SKPoint[]? grid = null;
+            SKColor[]? gridCol = null;
+            double[]? interpBuffer = null;
+            SKPoint[]? outPositions = null;
+            SKColor[]? outColors = null;
+            SKPaint? gouraudPaint = null;
 
-            if (hasFunction && path is not null)
+            if (!hasFunction)
+            {
+                grid = new SKPoint[gridCount];
+                gridCol = new SKColor[gridCount];
+                interpBuffer = new double[numStreamColorComponents];
+                outPositions = new SKPoint[perPatchVertexCount];
+                outColors = new SKColor[perPatchVertexCount];
+                gouraudPaint = new SKPaint
+                {
+                    IsAntialias = shading.AntiAlias,
+                    BlendMode = currentState.BlendMode.ToSKBlendMode(),
+                    Color = SKColors.White,
+                };
+            }
+
+            if (path is not null)
             {
                 _canvas.Save();
                 _canvas.ClipPath(path);
             }
 
-            SKPoint[]? prevPts = null;
-            double[][]? prevColors = null;
-            var bitReader = new GouraudBitReader(shading.Data.Span);
-
-            while (bitReader.HasData)
+            try
             {
-                int flag;
-                try
-                {
-                    flag = (int)(bitReader.ReadBits(bitsPerFlag) & 3);
-                }
-                catch
-                {
-                    break;
-                }
+                SKPoint[]? prevPts = null;
+                double[][]? prevColors = null;
+                var bitReader = new GouraudBitReader(shading.Data.Span);
 
-                int newPointCount = flag == 0 ? 16 : 12;
-                int newColorCount = flag == 0 ? 4 : 2;
-
-                SKPoint[] points = new SKPoint[16];
-                double[][] cornerColors = new double[4][];
-
-                if (flag == 0)
+                while (bitReader.HasData)
                 {
-                    if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
-                            in patternTransformMatrix, points, 0, newPointCount))
+                    int flag;
+                    try
+                    {
+                        flag = (int)(bitReader.ReadBits(bitsPerFlag) & 3);
+                    }
+                    catch
                     {
                         break;
                     }
-                    if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
-                            cornerColors, 0, newColorCount))
+
+                    int newPointCount = flag == 0 ? 16 : 12;
+                    int newColorCount = flag == 0 ? 4 : 2;
+
+                    SKPoint[] points = new SKPoint[16];
+                    double[][] cornerColors = new double[4][];
+
+                    if (flag == 0)
                     {
-                        break;
+                        if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
+                                in patternTransformMatrix, points, 0, newPointCount))
+                        {
+                            break;
+                        }
+                        if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
+                                cornerColors, 0, newColorCount))
+                        {
+                            break;
+                        }
                     }
+                    else
+                    {
+                        if (prevPts is null || prevColors is null)
+                        {
+                            break;
+                        }
+
+                        // For Type 7, only the four boundary corners (indices 0, 3, 6, 9 in the 16-point sequence)
+                        // are reused; the four interior control points (indices 12-15) are always new.
+                        int p11Idx, p12Idx, p13Idx, p14Idx;
+                        int newC1ColorIdx, newC2ColorIdx;
+                        switch (flag)
+                        {
+                            case 1: p11Idx = 3; p12Idx = 4; p13Idx = 5; p14Idx = 6; newC1ColorIdx = 1; newC2ColorIdx = 2; break;
+                            case 2: p11Idx = 6; p12Idx = 7; p13Idx = 8; p14Idx = 9; newC1ColorIdx = 2; newC2ColorIdx = 3; break;
+                            case 3: p11Idx = 9; p12Idx = 10; p13Idx = 11; p14Idx = 0; newC1ColorIdx = 3; newC2ColorIdx = 0; break;
+                            default: return;
+                        }
+
+                        points[0] = prevPts[p11Idx];
+                        points[1] = prevPts[p12Idx];
+                        points[2] = prevPts[p13Idx];
+                        points[3] = prevPts[p14Idx];
+                        cornerColors[0] = prevColors[newC1ColorIdx];
+                        cornerColors[1] = prevColors[newC2ColorIdx];
+
+                        if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
+                                in patternTransformMatrix, points, 4, newPointCount))
+                        {
+                            break;
+                        }
+                        if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
+                                cornerColors, 2, newColorCount))
+                        {
+                            break;
+                        }
+                    }
+
                     bitReader.AlignToByte();
-                }
-                else
-                {
-                    if (prevPts is null || prevColors is null)
+
+                    if (hasFunction)
                     {
-                        break;
+                        DrawTensorPatchTextured(shading, currentState, points, cornerColors);
+                    }
+                    else
+                    {
+                        TessellateAndDrawTensorPatch(shading, currentState, points, cornerColors,
+                            grid!, gridCol!, interpBuffer!, outPositions!, outColors!, gouraudPaint!);
                     }
 
-                    // For Type 7, only the four boundary corners (indices 0, 3, 6, 9 in the 16-point sequence)
-                    // are reused; the four interior control points (indices 12-15) are always new.
-                    int p11Idx, p12Idx, p13Idx, p14Idx;
-                    int newC1ColorIdx, newC2ColorIdx;
-                    switch (flag)
-                    {
-                        case 1: p11Idx = 3; p12Idx = 4; p13Idx = 5; p14Idx = 6; newC1ColorIdx = 1; newC2ColorIdx = 2; break;
-                        case 2: p11Idx = 6; p12Idx = 7; p13Idx = 8; p14Idx = 9; newC1ColorIdx = 2; newC2ColorIdx = 3; break;
-                        case 3: p11Idx = 9; p12Idx = 10; p13Idx = 11; p14Idx = 0; newC1ColorIdx = 3; newC2ColorIdx = 0; break;
-                        default: return;
-                    }
-
-                    points[0] = prevPts[p11Idx];
-                    points[1] = prevPts[p12Idx];
-                    points[2] = prevPts[p13Idx];
-                    points[3] = prevPts[p14Idx];
-                    cornerColors[0] = prevColors[newC1ColorIdx];
-                    cornerColors[1] = prevColors[newC2ColorIdx];
-
-                    if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
-                            in patternTransformMatrix, points, 4, newPointCount))
-                    {
-                        break;
-                    }
-                    if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
-                            cornerColors, 2, newColorCount))
-                    {
-                        break;
-                    }
-                    bitReader.AlignToByte();
+                    prevPts = points;
+                    prevColors = cornerColors;
                 }
-
-                if (hasFunction)
-                {
-                    DrawTensorPatchTextured(shading, currentState, points, cornerColors);
-                }
-                else
-                {
-                    TessellateTensorPatch(shading, currentState, points, cornerColors, positions!, colors!);
-                }
-
-                prevPts = points;
-                prevColors = cornerColors;
             }
-
-            if (hasFunction)
+            finally
             {
+                gouraudPaint?.Dispose();
                 if (path is not null)
                 {
                     _canvas.Restore();
                 }
-            }
-            else
-            {
-                DrawShadingVertices(positions!, colors!, path, shading.AntiAlias, currentState.BlendMode.ToSKBlendMode());
             }
         }
 
@@ -1319,7 +1398,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private static bool ReadPatchPoints(ref GouraudBitReader bitReader, int bitsPerCoordinate, double maxCoordRaw,
             double xMin, double xMax, double yMin, double yMax,
             in SKMatrix patternTransformMatrix,
-            SKPoint[] dest, int destOffset, int count)
+            Span<SKPoint> dest, int destOffset, int count)
         {
             for (int i = 0; i < count; i++)
             {
@@ -1360,8 +1439,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     for (int k = 0; k < numStreamColorComponents; k++)
                     {
                         long raw = bitReader.ReadBits(bitsPerComponent);
-                        double cMin = decode[4 + k * 2];
-                        double cMax = decode[5 + k * 2];
+                        ref double cMin = ref decode[4 + k * 2];
+                        ref double cMax = ref decode[5 + k * 2];
                         components[k] = cMin + (raw / maxColorRaw) * (cMax - cMin);
                     }
                 }
@@ -1376,23 +1455,22 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <summary>
-        /// Samples a Coons patch surface on a (PatchSubdivisions+1)² UV grid and emits two triangles
-        /// per cell into the supplied vertex/colour lists.
-        /// Corner-colour bilinear interpolation matches PDFBox: cornerColors[0..3] correspond to
-        /// (u,v) = (0,0), (1,0), (1,1), (0,1).
+        /// Samples a Coons patch surface on a (PatchSubdivisions+1)² UV grid, builds the
+        /// triangle list into the supplied exact-size buffers, and submits a single
+        /// DrawVertices call. Corner-colour bilinear interpolation matches PDFBox:
+        /// cornerColors[0..3] correspond to (u,v) = (0,0), (1,0), (1,1), (0,1).
+        /// <para>
+        /// All scratch (<paramref name="grid"/>, <paramref name="gridCol"/>,
+        /// <paramref name="interpBuffer"/>) and output buffers are owned by the caller and
+        /// reused across every patch in the mesh, so the per-patch loop runs without
+        /// allocations.
+        /// </para>
         /// </summary>
-        private void TessellateCoonsPatch(Shading shading, CurrentGraphicsState currentState,
-            SKPoint[] pts, double[][] cornerColors,
-            List<SKPoint> outPositions, List<SKColor> outColors)
+        private void TessellateAndDrawCoonsPatch(Shading shading, CurrentGraphicsState currentState,
+            ReadOnlySpan<SKPoint> pts, double[][] cornerColors,
+            SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
+            SKPoint[] outPositions, SKColor[] outColors, SKPaint paint)
         {
-            const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
-            var grid = new SKPoint[gridCount];
-            var gridCol = new SKColor[gridCount];
-
-            // Single reusable buffer for the bilinear corner-colour blend; passed to
-            // EvaluatePatchColor for every grid sample so we allocate once instead of (n+1)².
-            double[] interpBuffer = new double[cornerColors[0].Length];
-
             for (int j = 0; j <= PatchSubdivisions; j++)
             {
                 float v = (float)j / PatchSubdivisions;
@@ -1406,15 +1484,22 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
 
             EmitTrianglesFromGrid(grid, gridCol, PatchSubdivisions, outPositions, outColors);
+
+            _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
+                SKBlendMode.Modulate, null, paint);
         }
 
         /// <summary>
-        /// Samples a Tensor-product patch surface on a (PatchSubdivisions+1)² UV grid.
-        /// The 4×4 control grid follows the PDFBox layout: rows indexed by v, columns by u.
+        /// Samples a Tensor-product patch surface on a (PatchSubdivisions+1)² UV grid,
+        /// builds the triangle list into the supplied exact-size buffers, and submits a
+        /// single DrawVertices call. The 4×4 control grid follows the PDFBox layout:
+        /// rows indexed by v, columns by u. See <see cref="TessellateAndDrawCoonsPatch"/>
+        /// for the buffer-ownership rationale.
         /// </summary>
-        private void TessellateTensorPatch(Shading shading, CurrentGraphicsState currentState,
+        private void TessellateAndDrawTensorPatch(Shading shading, CurrentGraphicsState currentState,
             SKPoint[] tcp, double[][] cornerColors,
-            List<SKPoint> outPositions, List<SKColor> outColors)
+            SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
+            SKPoint[] outPositions, SKColor[] outColors, SKPaint paint)
         {
             // Map the 16 stream points into a 4×4 grid indexed [row][col] where col is u and row is v.
             // Layout from PDF spec § 8.7.4.5.7 / PDFBox TensorPatch:
@@ -1430,10 +1515,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             p[2, 0] = tcp[10]; p[2, 1] = tcp[15]; p[2, 2] = tcp[14]; p[2, 3] = tcp[5];
             p[3, 0] = tcp[9]; p[3, 1] = tcp[8]; p[3, 2] = tcp[7]; p[3, 3] = tcp[6];
 
-            const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
-            var grid = new SKPoint[gridCount];
-            var gridCol = new SKColor[gridCount];
-
             // Precompute Bernstein basis values for each sampled u and v into flat 4×(n+1)
             // spans so the inner sampling loop reads contiguous memory and skips the
             // jagged-array allocations the previous float[][] form required.
@@ -1448,10 +1529,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 BernsteinCubic((float)j / PatchSubdivisions, bV.Slice(j * 4, 4));
             }
-
-            // Single reusable buffer for the bilinear corner-colour blend; passed to
-            // EvaluatePatchColor for every grid sample so we allocate once instead of (n+1)².
-            double[] interpBuffer = new double[cornerColors[0].Length];
 
             for (int j = 0; j <= PatchSubdivisions; j++)
             {
@@ -1480,6 +1557,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
 
             EmitTrianglesFromGrid(grid, gridCol, PatchSubdivisions, outPositions, outColors);
+
+            _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
+                SKBlendMode.Modulate, null, paint);
         }
 
         /// <summary>
@@ -1511,13 +1591,16 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <summary>
-        /// Emits two triangles for each grid cell into the supplied lists.
+        /// Writes two triangles per grid cell into the supplied exact-size output arrays.
         /// Cell (i,j) connects vertices at (i, j), (i+1, j), (i, j+1), (i+1, j+1).
+        /// The output arrays must have length ≥ n² × 6; the first n² × 6 entries are
+        /// overwritten in scan order, matching the contract DrawVertices expects.
         /// </summary>
         private static void EmitTrianglesFromGrid(SKPoint[] grid, SKColor[] gridCol, int n,
-            List<SKPoint> outPositions, List<SKColor> outColors)
+            SKPoint[] outPositions, SKColor[] outColors)
         {
             int stride = n + 1;
+            int w = 0;
             for (int j = 0; j < n; j++)
             {
                 for (int i = 0; i < n; i++)
@@ -1527,51 +1610,104 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     int i01 = i00 + stride;
                     int i11 = i01 + 1;
 
-                    outPositions.Add(grid[i00]); outPositions.Add(grid[i10]); outPositions.Add(grid[i01]);
-                    outColors.Add(gridCol[i00]); outColors.Add(gridCol[i10]); outColors.Add(gridCol[i01]);
+                    outPositions[w] = grid[i00]; outColors[w] = gridCol[i00]; w++;
+                    outPositions[w] = grid[i10]; outColors[w] = gridCol[i10]; w++;
+                    outPositions[w] = grid[i01]; outColors[w] = gridCol[i01]; w++;
 
-                    outPositions.Add(grid[i10]); outPositions.Add(grid[i11]); outPositions.Add(grid[i01]);
-                    outColors.Add(gridCol[i10]); outColors.Add(gridCol[i11]); outColors.Add(gridCol[i01]);
+                    outPositions[w] = grid[i10]; outColors[w] = gridCol[i10]; w++;
+                    outPositions[w] = grid[i11]; outColors[w] = gridCol[i11]; w++;
+                    outPositions[w] = grid[i01]; outColors[w] = gridCol[i01]; w++;
                 }
             }
         }
 
         /// <summary>
-        /// Submits the accumulated triangle list to the canvas, optionally clipped to <paramref name="clipPath"/>.
-        /// White paint × Modulate preserves the per-vertex colours regardless of the src/dst role assignment.
+        /// Reads <paramref name="row"/>.Length consecutive vertex records (coordinates +
+        /// decoded colour, byte-aligned per record) from a Type 5 lattice-form stream into
+        /// <paramref name="row"/>. Returns false if the stream ends mid-record so the
+        /// caller can stop without producing a partial row of triangles.
         /// </summary>
-        private void DrawShadingVertices(List<SKPoint> positions, List<SKColor> colors,
-            SKPath? clipPath, bool antiAlias, SKBlendMode blendMode)
+        private static bool TryReadLatticeRow(ref GouraudBitReader bitReader,
+            (SKPoint pt, SKColor col)[] row,
+            int bitsPerCoordinate, int bitsPerComponent,
+            double maxCoordRaw, double maxColorRaw,
+            double[] decode, int numStreamColorComponents,
+            double xMin, double xMax, double yMin, double yMax,
+            in SKMatrix patternTransformMatrix,
+            Shading shading, CurrentGraphicsState currentState,
+            double[] colorBuffer)
         {
-            if (positions.Count == 0)
+            for (int c = 0; c < row.Length; c++)
             {
-                return;
+                if (!bitReader.HasData)
+                {
+                    return false;
+                }
+
+                long rawX, rawY;
+                try
+                {
+                    rawX = bitReader.ReadBits(bitsPerCoordinate);
+                    rawY = bitReader.ReadBits(bitsPerCoordinate);
+                    for (int i = 0; i < numStreamColorComponents; i++)
+                    {
+                        long raw = bitReader.ReadBits(bitsPerComponent);
+                        double cMin = decode[4 + i * 2];
+                        double cMax = decode[5 + i * 2];
+                        colorBuffer[i] = cMin + (raw / maxColorRaw) * (cMax - cMin);
+                    }
+                    bitReader.AlignToByte();
+                }
+                catch
+                {
+                    return false;
+                }
+
+                double x = xMin + (rawX / maxCoordRaw) * (xMax - xMin);
+                double y = yMin + (rawY / maxCoordRaw) * (yMax - yMin);
+
+                double[] evalResult = shading.Eval(colorBuffer);
+                SKColor skColor = shading.ColorSpace.GetColor(evalResult).ToSKColor(currentState.AlphaConstantNonStroking);
+                SKPoint pt = patternTransformMatrix.MapPoint(new SKPoint((float)x, (float)y));
+                row[c] = (pt, skColor);
             }
 
-            using var paint = new SKPaint();
-            paint.IsAntialias = antiAlias;
-            paint.BlendMode = blendMode;
-            paint.Color = SKColors.White;
+            return true;
+        }
 
-            if (clipPath is not null)
+        /// <summary>
+        /// Emits 2·(verticesPerRow − 1) triangles for the row-pair (<paramref name="rowA"/>,
+        /// <paramref name="rowB"/>) into the supplied exact-size output arrays.
+        /// Cell c connects vertices at (rowA[c], rowA[c+1], rowB[c], rowB[c+1]).
+        /// </summary>
+        private static void EmitRowPairTriangles(
+            (SKPoint pt, SKColor col)[] rowA,
+            (SKPoint pt, SKColor col)[] rowB,
+            int verticesPerRow,
+            SKPoint[] outPositions, SKColor[] outColors)
+        {
+            int w = 0;
+            for (int c = 0; c < verticesPerRow - 1; c++)
             {
-                _canvas.Save();
-                _canvas.ClipPath(clipPath);
-            }
+                var v00 = rowA[c];
+                var v10 = rowA[c + 1];
+                var v01 = rowB[c];
+                var v11 = rowB[c + 1];
 
-            _canvas.DrawVertices(SKVertexMode.Triangles, positions.ToArray(), null, colors.ToArray(),
-                SKBlendMode.Modulate, null, paint);
+                outPositions[w] = v00.pt; outColors[w] = v00.col; w++;
+                outPositions[w] = v10.pt; outColors[w] = v10.col; w++;
+                outPositions[w] = v01.pt; outColors[w] = v01.col; w++;
 
-            if (clipPath is not null)
-            {
-                _canvas.Restore();
+                outPositions[w] = v10.pt; outColors[w] = v10.col; w++;
+                outPositions[w] = v11.pt; outColors[w] = v11.col; w++;
+                outPositions[w] = v01.pt; outColors[w] = v01.col; w++;
             }
         }
 
         /// <summary>
         /// Evaluates the Coons surface S(u,v) for the supplied 12-control-point patch.
         /// </summary>
-        private static SKPoint EvaluateCoonsSurface(SKPoint[] pts, float u, float v)
+        private static SKPoint EvaluateCoonsSurface(ReadOnlySpan<SKPoint> pts, float u, float v)
         {
             SKPoint sBottom = CubicBezier(pts[0], pts[1], pts[2], pts[3], u);
             SKPoint sTop = CubicBezier(pts[9], pts[8], pts[7], pts[6], u);
@@ -1617,7 +1753,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// Constructs the 4×4 Tensor control grid from the 16 stream points,
         /// per the PDF spec / PDFBox layout (rows indexed by v, columns by u).
         /// </summary>
-        private static SKPoint[,] BuildTensorControlGrid(SKPoint[] tcp)
+        private static SKPoint[,] BuildTensorControlGrid(ReadOnlySpan<SKPoint> tcp)
         {
             return new SKPoint[4, 4]
             {
@@ -1688,7 +1824,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// rendering that vertex-colour Gouraud cannot.
         /// </summary>
         private void DrawCoonsPatchTextured(Shading shading, CurrentGraphicsState currentState,
-            SKPoint[] pts, double[][] cornerColors)
+            ReadOnlySpan<SKPoint> pts, double[][] cornerColors)
         {
             using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
 
@@ -1735,7 +1871,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// Draws a Tensor-product patch via texture mapping. See <see cref="DrawCoonsPatchTextured"/>.
         /// </summary>
         private void DrawTensorPatchTextured(Shading shading, CurrentGraphicsState currentState,
-            SKPoint[] tcp, double[][] cornerColors)
+            ReadOnlySpan<SKPoint> tcp, double[][] cornerColors)
         {
             using SKBitmap bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
             SKPoint[,] p = BuildTensorControlGrid(tcp);
