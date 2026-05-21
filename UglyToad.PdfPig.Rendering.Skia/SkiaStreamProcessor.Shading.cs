@@ -16,6 +16,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
@@ -68,14 +69,16 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <summary>
         /// This is very hackish, should never happen.
         /// </summary>
-        private static void FixIncorrectValues(double[] v, double[] domain)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void FixIncorrectValues(Span<double> v, ReadOnlySpan<double> domain)
         {
+            double fallback = domain[0];
             for (int i = 0; i < v.Length; i++)
             {
                 ref double c = ref v[i];
                 if (double.IsNaN(c) || double.IsInfinity(c))
                 {
-                    c = domain[0];
+                    c = fallback;
                 }
             }
         }
@@ -86,12 +89,27 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// the gradient's actual on-screen extent rather than the unit space the coords live in.
         /// Used to size the gradient colour-stop table for axial / radial shadings.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float MapToDevicePixels(in SKMatrix patternTransformMatrix, float dx, float dy)
         {
             SKMatrix toDevice = _canvas.TotalMatrix.PreConcat(patternTransformMatrix);
             float mappedDx = toDevice.ScaleX * dx + toDevice.SkewX * dy;
             float mappedDy = toDevice.SkewY * dx + toDevice.ScaleY * dy;
             return (float)Math.Sqrt(mappedDx * mappedDx + mappedDy * mappedDy);
+        }
+
+        /// <summary>
+        /// Apply an affine matrix to a point without going through the P/Invoke
+        /// <see cref="SKMatrix.MapPoint(float,float)"/>. Safe because every matrix we feed
+        /// the shading pipeline (CTM, pattern transform, shading.Matrix) is constructed from
+        /// PDF 2D transforms that have no perspective row.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static SKPoint MapPointAffine(in SKMatrix m, float x, float y)
+        {
+            return new SKPoint(
+                m.ScaleX * x + m.SkewX * y + m.TransX,
+                m.SkewY * x + m.ScaleY * y + m.TransY);
         }
 
         private void RenderRadialShading(RadialShading shading, in SKMatrix patternTransformMatrix,
@@ -401,6 +419,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // EmitGouraudTriangle's subdivision loop.
             double[] emitBuffer = hasFunction ? new double[numStreamColorComponents] : Array.Empty<double>();
 
+            // No-function fast path doesn't need per-vertex raw components — only the
+            // pre-evaluated SKColor is consulted, so we read every vertex into the same
+            // scratch buffer and pass Array.Empty<double>() to GouraudVertex.
+            // Function path stores the raw components on each vertex so the subdivision
+            // loop can blend them barycentrically; allocations there are unavoidable.
+            double[] noFuncScratch = hasFunction ? [] : new double[numStreamColorComponents];
+
             // The three corners of the most-recently completed triangle.
             // Required for edge-sharing flags 1 and 2. Each entry stores the pt, the raw
             // (decoded) colour components for subdivision, and the pre-evaluated colour for
@@ -434,9 +459,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     int flag;
                     long rawX, rawY;
 
-                    // colorComponents is the per-vertex output (stored on the GouraudVertex), so
-                    // it must live on the heap. Read directly into it — no separate rawC stage.
-                    double[] colorComponents = new double[numStreamColorComponents];
+                    // Per-vertex raw components only need to live on the heap when the
+                    // function path will later barycentrically blend them. The no-function
+                    // path consumes them immediately and shares one scratch buffer across
+                    // every vertex.
+                    double[] colorComponents = hasFunction
+                        ? new double[numStreamColorComponents]
+                        : noFuncScratch;
 
                     try
                     {
@@ -471,7 +500,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     // Transform the vertex from shading/pattern space to canvas space.
                     SKPoint pt = patternTransformMatrix.MapPoint(new SKPoint((float)x, (float)y));
-                    var vertex = new GouraudVertex(pt, colorComponents, skColor);
+                    var vertex = new GouraudVertex(
+                        pt,
+                        hasFunction ? colorComponents : [],
+                        skColor);
 
                     // Build triangles according to the edge-flag value (PDF spec Table 92).
                     switch (flag)
@@ -762,17 +794,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
             double[] values = new double[2];
             ColorSpaceDetails? shadingColorSpace = shading.ColorSpace;
 
+            // Hoist the per-pixel divisions out of the loop: each pixel walks the Domain in
+            // linear steps, so xi = xBase + i*xStep and yi = yBase + j*yStep is exactly the
+            // same texel-centre sample without a `/ w` or `/ h` in the inner body.
+            double xStep = xExtent / w;
+            double yStep = yExtent / h;
+            double xBase = x0 + 0.5 * xStep;
+            double yBase = y0 + 0.5 * yStep;
+            int rowStride = w * 4;
+
             for (int j = 0; j < h; j++)
             {
-                // Sample at the texel centre to avoid biasing the gradient toward one corner.
-                double yi = y0 + (j + 0.5) * yExtent / h;
+                double yi = yBase + j * yStep;
+                int rowOffset = j * rowStride;
                 for (int i = 0; i < w; i++)
                 {
-                    double xi = x0 + (i + 0.5) * xExtent / w;
-                    values[0] = xi;
+                    values[0] = xBase + i * xStep;
                     values[1] = yi;
 
-                    int index = (j * w + i) * 4;
+                    int index = rowOffset + i * 4;
 
                     double[] components;
                     try
@@ -1128,7 +1168,23 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             try
             {
-                // Previous patch state — corners (12 points) and 4 corner colour components — used by flag 1/2/3.
+                // Patch buffers are alternated between the current and previous patch via a
+                // two-slot pool: the implicit-edge flags (1/2/3) require keeping the previous
+                // patch alive, but at most one previous and one current patch are live at a
+                // time. Pre-allocating both pairs lifts ~12 SKPoint slots + 4 component
+                // arrays out of the per-patch hot loop.
+                var ptsBufA = new SKPoint[12];
+                var ptsBufB = new SKPoint[12];
+                var colorsBufA = new double[4][];
+                var colorsBufB = new double[4][];
+                for (int i = 0; i < 4; i++)
+                {
+                    colorsBufA[i] = new double[numStreamColorComponents];
+                    colorsBufB[i] = new double[numStreamColorComponents];
+                }
+
+                SKPoint[] points = ptsBufA;
+                double[][] cornerColors = colorsBufA;
                 SKPoint[]? prevPts = null;
                 double[][]? prevColors = null;
                 var bitReader = new GouraudBitReader(shading.Data.Span);
@@ -1148,9 +1204,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     int newPointCount = flag == 0 ? 12 : 8;
                     int newColorCount = flag == 0 ? 4 : 2;
 
-                    SKPoint[] points = new SKPoint[12];
-                    double[][] cornerColors = new double[4][];
-
                     if (flag == 0)
                     {
                         if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
@@ -1158,7 +1211,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         {
                             break;
                         }
-                        if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
+                        if (!ReadPatchColorsInto(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
                                 cornerColors, 0, newColorCount))
                         {
                             break;
@@ -1188,15 +1241,20 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         points[1] = prevPts[p12Idx];
                         points[2] = prevPts[p13Idx];
                         points[3] = prevPts[p14Idx];
-                        cornerColors[0] = prevColors[newC1ColorIdx];
-                        cornerColors[1] = prevColors[newC2ColorIdx];
+
+                        // Copy component values from prev's slot into current's slot — the
+                        // destination array is already owned by `cornerColors`, so we don't
+                        // reassign the slot reference (that would alias prev's buffer and the
+                        // next patch would overwrite both).
+                        Array.Copy(prevColors[newC1ColorIdx], cornerColors[0], numStreamColorComponents);
+                        Array.Copy(prevColors[newC2ColorIdx], cornerColors[1], numStreamColorComponents);
 
                         if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
                                 in patternTransformMatrix, points, 4, newPointCount))
                         {
                             break;
                         }
-                        if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
+                        if (!ReadPatchColorsInto(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
                                 cornerColors, 2, newColorCount))
                         {
                             break;
@@ -1217,6 +1275,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     prevPts = points;
                     prevColors = cornerColors;
+                    // Alternate the active buffer so prev stays valid while we fill current.
+                    points = ReferenceEquals(points, ptsBufA) ? ptsBufB : ptsBufA;
+                    cornerColors = ReferenceEquals(cornerColors, colorsBufA) ? colorsBufB : colorsBufA;
                 }
             }
             finally
@@ -1291,6 +1352,19 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             try
             {
+                // See RenderCoonsPatchShading for the two-slot ring-buffer rationale.
+                var ptsBufA = new SKPoint[16];
+                var ptsBufB = new SKPoint[16];
+                var colorsBufA = new double[4][];
+                var colorsBufB = new double[4][];
+                for (int i = 0; i < 4; i++)
+                {
+                    colorsBufA[i] = new double[numStreamColorComponents];
+                    colorsBufB[i] = new double[numStreamColorComponents];
+                }
+
+                SKPoint[] points = ptsBufA;
+                double[][] cornerColors = colorsBufA;
                 SKPoint[]? prevPts = null;
                 double[][]? prevColors = null;
                 var bitReader = new GouraudBitReader(shading.Data.Span);
@@ -1310,9 +1384,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     int newPointCount = flag == 0 ? 16 : 12;
                     int newColorCount = flag == 0 ? 4 : 2;
 
-                    SKPoint[] points = new SKPoint[16];
-                    double[][] cornerColors = new double[4][];
-
                     if (flag == 0)
                     {
                         if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
@@ -1320,7 +1391,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         {
                             break;
                         }
-                        if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
+                        if (!ReadPatchColorsInto(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
                                 cornerColors, 0, newColorCount))
                         {
                             break;
@@ -1349,15 +1420,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         points[1] = prevPts[p12Idx];
                         points[2] = prevPts[p13Idx];
                         points[3] = prevPts[p14Idx];
-                        cornerColors[0] = prevColors[newC1ColorIdx];
-                        cornerColors[1] = prevColors[newC2ColorIdx];
+                        Array.Copy(prevColors[newC1ColorIdx], cornerColors[0], numStreamColorComponents);
+                        Array.Copy(prevColors[newC2ColorIdx], cornerColors[1], numStreamColorComponents);
 
                         if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
                                 in patternTransformMatrix, points, 4, newPointCount))
                         {
                             break;
                         }
-                        if (!ReadPatchColors(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
+                        if (!ReadPatchColorsInto(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
                                 cornerColors, 2, newColorCount))
                         {
                             break;
@@ -1378,6 +1449,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     prevPts = points;
                     prevColors = cornerColors;
+                    points = ReferenceEquals(points, ptsBufA) ? ptsBufB : ptsBufA;
+                    cornerColors = ReferenceEquals(cornerColors, colorsBufA) ? colorsBufB : colorsBufA;
                 }
             }
             finally
@@ -1400,6 +1473,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
             in SKMatrix patternTransformMatrix,
             Span<SKPoint> dest, int destOffset, int count)
         {
+            double xScale = (xMax - xMin) / maxCoordRaw;
+            double yScale = (yMax - yMin) / maxCoordRaw;
             for (int i = 0; i < count; i++)
             {
                 long rawX, rawY;
@@ -1413,43 +1488,46 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     return false;
                 }
 
-                double x = xMin + (rawX / maxCoordRaw) * (xMax - xMin);
-                double y = yMin + (rawY / maxCoordRaw) * (yMax - yMin);
+                double x = xMin + rawX * xScale;
+                double y = yMin + rawY * yScale;
                 dest[destOffset + i] = patternTransformMatrix.MapPoint(new SKPoint((float)x, (float)y));
             }
             return true;
         }
 
         /// <summary>
-        /// Reads <paramref name="count"/> corner-colour records from the bit stream into <paramref name="dest"/>
-        /// starting at <paramref name="destOffset"/>. Each colour is stored as the per-vertex stream components
-        /// (n components if no Function, 1 parametric value otherwise) decoded via the Decode array.
-        /// Function evaluation is deferred until the patch is tessellated so that the per-pixel function eval
-        /// can capture non-linear / stitched / step functions correctly.
+        /// Reads <paramref name="count"/> corner-colour records from the bit stream into the
+        /// pre-allocated double[] slots of <paramref name="dest"/> starting at
+        /// <paramref name="destOffset"/>. The slots are not reassigned — each existing inner
+        /// array is overwritten in place so the caller can use a two-buffer ring across
+        /// successive patches without aliasing the previous patch's components.
+        /// Each colour is stored as the per-vertex stream components (n components if no
+        /// Function, 1 parametric value otherwise) decoded via the Decode array. Function
+        /// evaluation is deferred until the patch is tessellated so that the per-pixel
+        /// function eval can capture non-linear / stitched / step functions correctly.
         /// </summary>
-        private static bool ReadPatchColors(ref GouraudBitReader bitReader, int bitsPerComponent, double maxColorRaw,
+        private static bool ReadPatchColorsInto(ref GouraudBitReader bitReader, int bitsPerComponent, double maxColorRaw,
             double[] decode, int numStreamColorComponents,
             double[][] dest, int destOffset, int count)
         {
+            double invMaxColorRaw = 1.0 / maxColorRaw;
             for (int i = 0; i < count; i++)
             {
-                double[] components = new double[numStreamColorComponents];
+                double[] components = dest[destOffset + i];
                 try
                 {
                     for (int k = 0; k < numStreamColorComponents; k++)
                     {
                         long raw = bitReader.ReadBits(bitsPerComponent);
-                        ref double cMin = ref decode[4 + k * 2];
-                        ref double cMax = ref decode[5 + k * 2];
-                        components[k] = cMin + (raw / maxColorRaw) * (cMax - cMin);
+                        double cMin = decode[4 + k * 2];
+                        double cMax = decode[5 + k * 2];
+                        components[k] = cMin + (raw * invMaxColorRaw) * (cMax - cMin);
                     }
                 }
                 catch
                 {
                     return false;
                 }
-
-                dest[destOffset + i] = components;
             }
             return true;
         }
@@ -1471,15 +1549,65 @@ namespace UglyToad.PdfPig.Rendering.Skia
             SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
             SKPoint[] outPositions, SKColor[] outColors, SKPaint paint)
         {
-            for (int j = 0; j <= PatchSubdivisions; j++)
-            {
-                float v = (float)j / PatchSubdivisions;
-                for (int i = 0; i <= PatchSubdivisions; i++)
-                {
-                    float u = (float)i / PatchSubdivisions;
+            // The four Coons boundary curves only depend on either u or v, not both, so
+            // evaluating them once per axis turns the (n+1)² cubic-Bezier-pair workload
+            // into (n+1) × 4 evaluations — a ~17× drop at n = 32. Sampled values land in
+            // stackalloc Span<SKPoint> tables (≤ 132 entries each, ~1 KB total).
+            const int axisLen = PatchSubdivisions + 1;
+            Span<SKPoint> sBottom = stackalloc SKPoint[axisLen];
+            Span<SKPoint> sTop = stackalloc SKPoint[axisLen];
+            Span<SKPoint> sLeft = stackalloc SKPoint[axisLen];
+            Span<SKPoint> sRight = stackalloc SKPoint[axisLen];
 
-                    grid[j * (PatchSubdivisions + 1) + i] = EvaluateCoonsSurface(pts, u, v);
-                    gridCol[j * (PatchSubdivisions + 1) + i] = EvaluatePatchColor(shading, currentState, cornerColors, u, v, interpBuffer);
+            SKPoint p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
+            SKPoint p4 = pts[4], p5 = pts[5], p6 = pts[6], p7 = pts[7];
+            SKPoint p8 = pts[8], p9 = pts[9], p10 = pts[10], p11 = pts[11];
+
+            const float invN = 1f / PatchSubdivisions;
+            for (int i = 0; i < axisLen; i++)
+            {
+                float u = i * invN;
+                sBottom[i] = CubicBezier(p0, p1, p2, p3, u);
+                sTop[i] = CubicBezier(p9, p8, p7, p6, u);
+            }
+            
+            for (int j = 0; j < axisLen; j++)
+            {
+                float v = j * invN;
+                sLeft[j] = CubicBezier(p0, p11, p10, p9, v);
+                sRight[j] = CubicBezier(p3, p4, p5, p6, v);
+            }
+
+            float p00x = p0.X, p00y = p0.Y;
+            float p10x = p3.X, p10y = p3.Y;
+            float p11x = p6.X, p11y = p6.Y;
+            float p01x = p9.X, p01y = p9.Y;
+
+            for (int j = 0; j < axisLen; j++)
+            {
+                float v = j * invN;
+                float oneMinusV = 1f - v;
+                SKPoint sLj = sLeft[j];
+                SKPoint sRj = sRight[j];
+                int rowOffset = j * axisLen;
+                for (int i = 0; i < axisLen; i++)
+                {
+                    float u = i * invN;
+                    float oneMinusU = 1f - u;
+                    SKPoint sBi = sBottom[i];
+                    SKPoint sTi = sTop[i];
+
+                    float x = oneMinusV * sBi.X + v * sTi.X
+                              + oneMinusU * sLj.X + u * sRj.X
+                              - oneMinusU * oneMinusV * p00x - u * oneMinusV * p10x
+                              - u * v * p11x - oneMinusU * v * p01x;
+                    float y = oneMinusV * sBi.Y + v * sTi.Y
+                              + oneMinusU * sLj.Y + u * sRj.Y
+                              - oneMinusU * oneMinusV * p00y - u * oneMinusV * p10y
+                              - u * v * p11y - oneMinusU * v * p01y;
+
+                    grid[rowOffset + i] = new SKPoint(x, y);
+                    gridCol[rowOffset + i] = EvaluatePatchColor(shading, currentState, cornerColors, u, v, interpBuffer);
                 }
             }
 
@@ -1501,19 +1629,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
             SKPoint[] outPositions, SKColor[] outColors, SKPaint paint)
         {
-            // Map the 16 stream points into a 4×4 grid indexed [row][col] where col is u and row is v.
-            // Layout from PDF spec § 8.7.4.5.7 / PDFBox TensorPatch:
-            //   row v=0 (forward in u): tcp[0..3]
-            //   row v=1 (forward in u): tcp[9, 8, 7, 6]
-            //   col u=0 interior (v=1/3, v=2/3): tcp[11], tcp[10]
-            //   col u=1 interior (v=1/3, v=2/3): tcp[4], tcp[5]
-            //   inner row v=1/3: tcp[12], tcp[13]
-            //   inner row v=2/3: tcp[15], tcp[14]
-            var p = new SKPoint[4, 4];
-            p[0, 0] = tcp[0]; p[0, 1] = tcp[1]; p[0, 2] = tcp[2]; p[0, 3] = tcp[3];
-            p[1, 0] = tcp[11]; p[1, 1] = tcp[12]; p[1, 2] = tcp[13]; p[1, 3] = tcp[4];
-            p[2, 0] = tcp[10]; p[2, 1] = tcp[15]; p[2, 2] = tcp[14]; p[2, 3] = tcp[5];
-            p[3, 0] = tcp[9]; p[3, 1] = tcp[8]; p[3, 2] = tcp[7]; p[3, 3] = tcp[6];
+            // Map the 16 stream points into a 4×4 grid stored row-major in a stackalloc
+            // span. Indexing is row * 4 + col (col is u, row is v). See the comment on
+            // BuildTensorControlGrid for the layout.
+            Span<SKPoint> p = stackalloc SKPoint[16];
+            BuildTensorControlGrid(tcp, p);
 
             // Precompute Bernstein basis values for each sampled u and v into flat 4×(n+1)
             // spans so the inner sampling loop reads contiguous memory and skips the
@@ -1542,12 +1662,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     float x = 0, y = 0;
                     for (int row = 0; row < 4; row++)
                     {
+                        int rowBase = row * 4;
+                        float bvr = bv[row];
                         for (int col = 0; col < 4; col++)
                         {
                             // u indexes columns, v indexes rows.
-                            float w = bu[col] * bv[row];
-                            x += p[row, col].X * w;
-                            y += p[row, col].Y * w;
+                            float w = bu[col] * bvr;
+                            SKPoint cp = p[rowBase + col];
+                            x += cp.X * w;
+                            y += cp.Y * w;
                         }
                     }
 
@@ -1572,18 +1695,28 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// would otherwise dominate this hot loop is moved to once-per-patch.
         /// </para>
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static SKColor EvaluatePatchColor(Shading shading, CurrentGraphicsState currentState,
             double[][] cornerColors, float u, float v, double[] interpBuffer)
         {
-            int components = cornerColors[0].Length;
-            double w00 = (1 - u) * (1 - v);
-            double w10 = u * (1 - v);
+            // Cache the four corner arrays once per call so the inner k-loop walks four
+            // contiguous double[] strides rather than re-dereferencing cornerColors[...]
+            // on every k. Called PatchSubdivisions² × patches times — small per-call win
+            // adds up.
+            double[] cc0 = cornerColors[0];
+            double[] cc1 = cornerColors[1];
+            double[] cc2 = cornerColors[2];
+            double[] cc3 = cornerColors[3];
+            int components = cc0.Length;
+            float oneMinusU = 1f - u;
+            float oneMinusV = 1f - v;
+            double w00 = oneMinusU * oneMinusV;
+            double w10 = u * oneMinusV;
             double w11 = u * v;
-            double w01 = (1 - u) * v;
+            double w01 = oneMinusU * v;
             for (int k = 0; k < components; k++)
             {
-                interpBuffer[k] = w00 * cornerColors[0][k] + w10 * cornerColors[1][k]
-                                  + w11 * cornerColors[2][k] + w01 * cornerColors[3][k];
+                interpBuffer[k] = w00 * cc0[k] + w10 * cc1[k] + w11 * cc2[k] + w01 * cc3[k];
             }
 
             double[] evalResult = shading.Eval(interpBuffer);
@@ -1668,7 +1801,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 double[] evalResult = shading.Eval(colorBuffer);
                 SKColor skColor = shading.ColorSpace.GetColor(evalResult).ToSKColor(currentState.AlphaConstantNonStroking);
-                SKPoint pt = patternTransformMatrix.MapPoint(new SKPoint((float)x, (float)y));
+                SKPoint pt = MapPointAffine(in patternTransformMatrix, (float)x, (float)y);
                 row[c] = (pt, skColor);
             }
 
@@ -1705,63 +1838,42 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <summary>
-        /// Evaluates the Coons surface S(u,v) for the supplied 12-control-point patch.
-        /// </summary>
-        private static SKPoint EvaluateCoonsSurface(ReadOnlySpan<SKPoint> pts, float u, float v)
-        {
-            SKPoint sBottom = CubicBezier(pts[0], pts[1], pts[2], pts[3], u);
-            SKPoint sTop = CubicBezier(pts[9], pts[8], pts[7], pts[6], u);
-            SKPoint sLeft = CubicBezier(pts[0], pts[11], pts[10], pts[9], v);
-            SKPoint sRight = CubicBezier(pts[3], pts[4], pts[5], pts[6], v);
-
-            float p00x = pts[0].X, p00y = pts[0].Y;
-            float p10x = pts[3].X, p10y = pts[3].Y;
-            float p11x = pts[6].X, p11y = pts[6].Y;
-            float p01x = pts[9].X, p01y = pts[9].Y;
-
-            float x = (1 - v) * sBottom.X + v * sTop.X
-                      + (1 - u) * sLeft.X + u * sRight.X
-                      - (1 - u) * (1 - v) * p00x - u * (1 - v) * p10x
-                      - u * v * p11x - (1 - u) * v * p01x;
-            float y = (1 - v) * sBottom.Y + v * sTop.Y
-                      + (1 - u) * sLeft.Y + u * sRight.Y
-                      - (1 - u) * (1 - v) * p00y - u * (1 - v) * p10y
-                      - u * v * p11y - (1 - u) * v * p01y;
-            return new SKPoint(x, y);
-        }
-
-        /// <summary>
         /// Evaluates the Tensor-product Bezier surface using precomputed Bernstein bases.
-        /// <paramref name="p"/> is the 4×4 control grid laid out [row=v, col=u].
+        /// <paramref name="p"/> is the 4×4 control grid stored row-major (16 entries,
+        /// indexed as row * 4 + col where col is u and row is v).
         /// </summary>
-        private static SKPoint EvaluateTensorSurface(SKPoint[,] p, ReadOnlySpan<float> bU, ReadOnlySpan<float> bV)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static SKPoint EvaluateTensorSurface(ReadOnlySpan<SKPoint> p, ReadOnlySpan<float> bU, ReadOnlySpan<float> bV)
         {
             float x = 0, y = 0;
             for (int row = 0; row < 4; row++)
             {
+                int rowBase = row * 4;
+                float bvr = bV[row];
                 for (int col = 0; col < 4; col++)
                 {
-                    float w = bU[col] * bV[row];
-                    x += p[row, col].X * w;
-                    y += p[row, col].Y * w;
+                    float w = bU[col] * bvr;
+                    SKPoint cp = p[rowBase + col];
+                    x += cp.X * w;
+                    y += cp.Y * w;
                 }
             }
             return new SKPoint(x, y);
         }
 
         /// <summary>
-        /// Constructs the 4×4 Tensor control grid from the 16 stream points,
-        /// per the PDF spec / PDFBox layout (rows indexed by v, columns by u).
+        /// Fills the 16-entry row-major 4×4 Tensor control grid in <paramref name="grid"/>
+        /// from the 16 stream points, per the PDF spec / PDFBox layout (rows indexed by v,
+        /// columns by u). Caller-owned buffer avoids the per-patch <c>new SKPoint[4,4]</c>
+        /// allocation that the previous form paid on every patch in the mesh.
         /// </summary>
-        private static SKPoint[,] BuildTensorControlGrid(ReadOnlySpan<SKPoint> tcp)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void BuildTensorControlGrid(ReadOnlySpan<SKPoint> tcp, Span<SKPoint> grid)
         {
-            return new SKPoint[4, 4]
-            {
-                { tcp[0],  tcp[1],  tcp[2],  tcp[3]  },
-                { tcp[11], tcp[12], tcp[13], tcp[4]  },
-                { tcp[10], tcp[15], tcp[14], tcp[5]  },
-                { tcp[9],  tcp[8],  tcp[7],  tcp[6]  },
-            };
+            grid[0]  = tcp[0];  grid[1]  = tcp[1];  grid[2]  = tcp[2];  grid[3]  = tcp[3];
+            grid[4]  = tcp[11]; grid[5]  = tcp[12]; grid[6]  = tcp[13]; grid[7]  = tcp[4];
+            grid[8]  = tcp[10]; grid[9]  = tcp[15]; grid[10] = tcp[14]; grid[11] = tcp[5];
+            grid[12] = tcp[9];  grid[13] = tcp[8];  grid[14] = tcp[7];  grid[15] = tcp[6];
         }
 
         /// <summary>
@@ -1782,29 +1894,41 @@ namespace UglyToad.PdfPig.Rendering.Skia
             int components = cornerColors[0].Length;
             double[] interp = new double[components];
             float invDen = 1f / (texSize - 1);
+            double alpha = currentState.AlphaConstantNonStroking;
+            ColorSpaceDetails colorSpace = shading.ColorSpace;
+
+            // Hoist the 4 corner component arrays out of the inner loop — index per slot
+            // once, blend per k. Reads are sequential through cc0..cc3, friendlier to the
+            // prefetcher than the previous cornerColors[0..3][k] pattern.
+            double[] cc0 = cornerColors[0];
+            double[] cc1 = cornerColors[1];
+            double[] cc2 = cornerColors[2];
+            double[] cc3 = cornerColors[3];
 
             Span<byte> pixelBytes = bitmap.GetPixelSpan();
+            int rowStride = texSize * 4;
 
             for (int j = 0; j < texSize; j++)
             {
                 float v = j * invDen;
-                int rowOffset = j * texSize * 4;
+                float oneMinusV = 1f - v;
+                int rowOffset = j * rowStride;
                 for (int i = 0; i < texSize; i++)
                 {
                     float u = i * invDen;
+                    float oneMinusU = 1f - u;
 
-                    double w00 = (1 - u) * (1 - v);
-                    double w10 = u * (1 - v);
+                    double w00 = oneMinusU * oneMinusV;
+                    double w10 = u * oneMinusV;
                     double w11 = u * v;
-                    double w01 = (1 - u) * v;
+                    double w01 = oneMinusU * v;
                     for (int k = 0; k < components; k++)
                     {
-                        interp[k] = w00 * cornerColors[0][k] + w10 * cornerColors[1][k]
-                                    + w11 * cornerColors[2][k] + w01 * cornerColors[3][k];
+                        interp[k] = w00 * cc0[k] + w10 * cc1[k] + w11 * cc2[k] + w01 * cc3[k];
                     }
 
                     double[] evalResult = shading.Eval(interp);
-                    SKColor c = shading.ColorSpace.GetColor(evalResult).ToSKColor(currentState.AlphaConstantNonStroking);
+                    SKColor c = colorSpace.GetColor(evalResult).ToSKColor(alpha);
 
                     int idx = rowOffset + i * 4;
                     pixelBytes[idx] = c.Red;
@@ -1843,14 +1967,61 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 const int stride = PatchSubdivisions + 1;
                 const float texScale = PatchTextureSize - 1;
 
-                for (int j = 0; j <= PatchSubdivisions; j++)
+                // See TessellateAndDrawCoonsPatch for the per-axis Bezier precompute rationale.
+                const int axisLen = PatchSubdivisions + 1;
+                Span<SKPoint> sBottom = stackalloc SKPoint[axisLen];
+                Span<SKPoint> sTop = stackalloc SKPoint[axisLen];
+                Span<SKPoint> sLeft = stackalloc SKPoint[axisLen];
+                Span<SKPoint> sRight = stackalloc SKPoint[axisLen];
+
+                SKPoint p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
+                SKPoint p4 = pts[4], p5 = pts[5], p6 = pts[6], p7 = pts[7];
+                SKPoint p8 = pts[8], p9 = pts[9], p10 = pts[10], p11 = pts[11];
+
+                const float invN = 1f / PatchSubdivisions;
+                for (int i2 = 0; i2 < axisLen; i2++)
                 {
-                    float v = (float)j / PatchSubdivisions;
-                    for (int i = 0; i <= PatchSubdivisions; i++)
+                    float u = i2 * invN;
+                    sBottom[i2] = CubicBezier(p0, p1, p2, p3, u);
+                    sTop[i2] = CubicBezier(p9, p8, p7, p6, u);
+                }
+                for (int j2 = 0; j2 < axisLen; j2++)
+                {
+                    float v = j2 * invN;
+                    sLeft[j2] = CubicBezier(p0, p11, p10, p9, v);
+                    sRight[j2] = CubicBezier(p3, p4, p5, p6, v);
+                }
+
+                float p00x = p0.X, p00y = p0.Y;
+                float p10x = p3.X, p10y = p3.Y;
+                float p11x = p6.X, p11y = p6.Y;
+                float p01x = p9.X, p01y = p9.Y;
+
+                for (int j = 0; j < axisLen; j++)
+                {
+                    float v = j * invN;
+                    float oneMinusV = 1f - v;
+                    SKPoint sLj = sLeft[j];
+                    SKPoint sRj = sRight[j];
+                    int rowOffset = j * stride;
+                    for (int i = 0; i < axisLen; i++)
                     {
-                        float u = (float)i / PatchSubdivisions;
-                        int idx = j * stride + i;
-                        positions[idx] = EvaluateCoonsSurface(pts, u, v);
+                        float u = i * invN;
+                        float oneMinusU = 1f - u;
+                        SKPoint sBi = sBottom[i];
+                        SKPoint sTi = sTop[i];
+
+                        float x = oneMinusV * sBi.X + v * sTi.X
+                                  + oneMinusU * sLj.X + u * sRj.X
+                                  - oneMinusU * oneMinusV * p00x - u * oneMinusV * p10x
+                                  - u * v * p11x - oneMinusU * v * p01x;
+                        float y = oneMinusV * sBi.Y + v * sTi.Y
+                                  + oneMinusU * sLj.Y + u * sRj.Y
+                                  - oneMinusU * oneMinusV * p00y - u * oneMinusV * p10y
+                                  - u * v * p11y - oneMinusU * v * p01y;
+
+                        int idx = rowOffset + i;
+                        positions[idx] = new SKPoint(x, y);
                         texCoords[idx] = new SKPoint(u * texScale, v * texScale);
                     }
                 }
@@ -1874,7 +2045,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             ReadOnlySpan<SKPoint> tcp, double[][] cornerColors)
         {
             using SKBitmap bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
-            SKPoint[,] p = BuildTensorControlGrid(tcp);
+
+            // Row-major 4×4 control grid lives on the stack — saves the heap allocation the
+            // SKPoint[,] form paid per patch.
+            Span<SKPoint> p = stackalloc SKPoint[16];
+            BuildTensorControlGrid(tcp, p);
 
             const int gridLen = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
             const int triVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
@@ -1980,6 +2155,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <summary>De Casteljau evaluation of a cubic Bézier curve at parameter <paramref name="t"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static SKPoint CubicBezier(SKPoint p0, SKPoint p1, SKPoint p2, SKPoint p3, float t)
         {
             float u = 1 - t;
@@ -1999,6 +2175,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// <paramref name="result"/> (must have at least 4 elements). Span output avoids the
         /// per-call allocation that would otherwise dominate the inner Tensor sampling loop.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void BernsteinCubic(float t, Span<float> result)
         {
             float u = 1 - t;
@@ -2026,24 +2203,48 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
 
             /// <summary>Returns <see langword="true"/> when there is at least one more byte to read.</summary>
-            public readonly bool HasData => _bytePos < _data.Length;
+            public readonly bool HasData
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get => _bytePos < _data.Length;
+            }
 
-            /// <summary>Reads <paramref name="count"/> bits and returns them as a non-negative <see cref="long"/>, MSB first.</summary>
+            /// <summary>
+            /// Reads <paramref name="count"/> bits and returns them as a non-negative <see cref="long"/>, MSB first.
+            /// <para>
+            /// Pulls whole-byte chunks where possible rather than walking one bit at a time —
+            /// shading streams routinely ask for 8/16/24 bits per field, so the per-bit loop
+            /// was paying eight loop iterations and eight bounds-checks where one byte read
+            /// would do. <paramref name="count"/> is bounded by the shading's BitsPerCoordinate
+            /// (≤ 32 per PDF spec), well under the 63-bit ceiling implied by the shift below.
+            /// </para>
+            /// </summary>
             public long ReadBits(int count)
             {
                 long result = 0;
-                for (int i = 0; i < count; i++)
+                while (count > 0)
                 {
                     if (_bytePos >= _data.Length)
                     {
                         throw new InvalidOperationException("Unexpected end of shading stream.");
                     }
 
-                    result = (result << 1) | (long)((_data[_bytePos] >> _bitPos) & 1);
-                    if (--_bitPos < 0)
+                    int available = _bitPos + 1; // bits still left in current byte starting at _bitPos
+                    int take = count < available ? count : available;
+                    int shift = available - take;
+                    int mask = (1 << take) - 1;
+                    int bits = (_data[_bytePos] >> shift) & mask;
+                    result = (result << take) | (uint)bits;
+                    count -= take;
+
+                    if (shift == 0)
                     {
-                        _bitPos = 7;
                         _bytePos++;
+                        _bitPos = 7;
+                    }
+                    else
+                    {
+                        _bitPos -= take;
                     }
                 }
                 return result;
@@ -2054,6 +2255,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             /// discarding any remaining bits in the current byte.
             /// No-op when already at a byte boundary.
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void AlignToByte()
             {
                 if (_bitPos != 7)
