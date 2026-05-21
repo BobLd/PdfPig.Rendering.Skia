@@ -40,47 +40,47 @@ public class ShadingBenchmarks
         return Helpers.RenderAllPages("2_shading_type1.pdf");
     }
 
-    [Benchmark]
-    public IReadOnlyList<SKPicture> _2_shading_type1_sc_()
-    {
-        return Helpers.RenderAllPages("2_shading_type1_sc_.pdf");
-    }
-    
-    [Benchmark]
-    public IReadOnlyList<SKPicture> _2_shading_type3()
-    {
-        return Helpers.RenderAllPages("2_shading_type3.pdf");
-    }
+    //[Benchmark]
+    //public IReadOnlyList<SKPicture> _2_shading_type1_sc_()
+    //{
+    //    return Helpers.RenderAllPages("2_shading_type1_sc_.pdf");
+    //}
+
+    //[Benchmark]
+    //public IReadOnlyList<SKPicture> _2_shading_type3()
+    //{
+    //    return Helpers.RenderAllPages("2_shading_type3.pdf");
+    //}
 
     [Benchmark]
     public IReadOnlyList<SKPicture> _2_shading_type4_h()
     {
         return Helpers.RenderAllPages("2_shading_type4_h.pdf");
     }
-    
+
     [Benchmark]
     public IReadOnlyList<SKPicture> _2_shading_type5_h()
     {
         return Helpers.RenderAllPages("2_shading_type5_h.pdf");
     }
-    
+
     [Benchmark]
     public IReadOnlyList<SKPicture> _2_shading_type_6_001()
     {
         return Helpers.RenderAllPages("2_shading_type_6_001.pdf");
     }
-    
-    [Benchmark]
-    public IReadOnlyList<SKPicture> P()
-    {
-        return Helpers.RenderAllPages("P.pdf");
-    }
-    
-    [Benchmark]
-    public IReadOnlyList<SKPicture> PDFBOX_1869_4()
-    {
-        return Helpers.RenderAllPages("PDFBOX-1869-4.pdf");
-    }
+
+    //[Benchmark]
+    //public IReadOnlyList<SKPicture> P()
+    //{
+    //    return Helpers.RenderAllPages("P.pdf");
+    //}
+
+    //[Benchmark]
+    //public IReadOnlyList<SKPicture> PDFBOX_1869_4()
+    //{
+    //    return Helpers.RenderAllPages("PDFBOX-1869-4.pdf");
+    //}
 
     [Benchmark]
     public IReadOnlyList<SKPicture> PDFBOX_2100_gouraud_RGB_function()
@@ -88,15 +88,15 @@ public class ShadingBenchmarks
         return Helpers.RenderAllPages("PDFBOX-2100-gouraud-RGB-function.pdf");
     }
 
-    [Benchmark]
-    public IReadOnlyList<SKPicture> GWG060_Shading_x1a()
-    {
-        return Helpers.RenderAllPages("GWG060_Shading_x1a.pdf");
-    }
+    //[Benchmark]
+    //public IReadOnlyList<SKPicture> GWG060_Shading_x1a()
+    //{
+    //    return Helpers.RenderAllPages("GWG060_Shading_x1a.pdf");
+    //}
 
-    [Benchmark]
-    public IReadOnlyList<SKPicture> GWG061_Shading_x1a()
-    {
-        return Helpers.RenderAllPages("GWG061_Shading_x1a.pdf");
-    }
+    //[Benchmark]
+    //public IReadOnlyList<SKPicture> GWG061_Shading_x1a()
+    //{
+    //    return Helpers.RenderAllPages("GWG061_Shading_x1a.pdf");
+    //}
 }
