@@ -296,6 +296,12 @@
 		<None Update="Documents\gs-bugzilla694385.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+		<None Update="Documents\GWG060_Shading_x1a.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="Documents\GWG061_Shading_x1a.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 		<None Update="Documents\GWG090_Font-Support_x3.pdf">
 		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
@@ -655,6 +661,12 @@
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\gs-bugzilla694385_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\GWG060_Shading_x1a_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\GWG061_Shading_x1a_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\GWG090_Font-Support_x3_1.png">
 		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>

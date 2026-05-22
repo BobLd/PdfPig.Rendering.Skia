@@ -228,8 +228,9 @@ public static class PdfPigExtensions
     /// clamping, matching <see cref="Shading.Eval"/>'s behaviour. Handles both the
     /// "single n-out function" and "n separate 1-out functions" forms allowed by
     /// PDF 1.7 §8.7.4.5 for Type 1 / Type 4 / Type 6 / Type 7 shadings.
+    /// Allocation-free for the common single-function and multi-function fan-out forms.
     /// </summary>
-    internal static double[] EvalWithRangeRemap(this Shading shading, params double[] inputs)
+    internal static int EvalWithRangeRemap(this Shading shading, ReadOnlySpan<double> inputs, Span<double> output)
     {
         // Bypass shading.Eval (which clamps to [0,1] without using Range) so we
         // can linearly remap each component from its declared Range to [0,1].
@@ -240,26 +241,45 @@ public static class PdfPigExtensions
         PdfFunction[]? funcs = shading.Functions;
         if (funcs is null || funcs.Length == 0)
         {
-            return inputs;
+            inputs.CopyTo(output);
+            return inputs.Length;
         }
 
         if (funcs.Length == 1)
         {
-            double[] raw = funcs[0].Eval(inputs);
-            for (int k = 0; k < raw.Length; k++)
+            int written = funcs[0].Eval(inputs, output);
+            for (int k = 0; k < written; k++)
             {
-                raw[k] = RemapWithRange(raw[k], funcs[0], k);
+                output[k] = RemapWithRange(output[k], funcs[0], k);
             }
-            return raw;
+
+            return written;
         }
 
-        double[] result = new double[funcs.Length];
+        // Multi-function fan-out: each function is 1-out, we keep only the first value of each.
+        Span<double> buffer = stackalloc double[32];
         for (int k = 0; k < funcs.Length; k++)
         {
-            double v = funcs[k].Eval(inputs)[0];
-            result[k] = RemapWithRange(v, funcs[k], 0);
+            int outLen = funcs[k].NumberOfOutputParameters;
+            if (outLen <= 0)
+            {
+                outLen = 1;
+            }
+
+            if (outLen > buffer.Length)
+            {
+                double[] big = new double[outLen];
+                funcs[k].Eval(inputs, big);
+                output[k] = RemapWithRange(big[0], funcs[k], 0);
+            }
+            else
+            {
+                funcs[k].Eval(inputs, buffer);
+                output[k] = RemapWithRange(buffer[0], funcs[k], 0);
+            }
         }
-        return result;
+
+        return funcs.Length;
     }
 
     private static double RemapWithRange(double value, PdfFunction func, int outputIndex)
