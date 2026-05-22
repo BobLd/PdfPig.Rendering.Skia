@@ -196,6 +196,45 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return fillingRule == FillingRule.NonZeroWinding ? SKPathFillType.Winding : SKPathFillType.EvenOdd;
         }
 
+        /// <summary>
+        /// Converts colour-space components into an <see cref="SKColor"/>, bypassing the per-call <see cref="IColor"/> allocation.
+        /// <para>
+        /// Fast paths (allocation-free): DeviceRgb, DeviceGray and DeviceCmyk.
+        /// </para>
+        /// Anything else through <see cref="ColorSpaceDetails.GetColor"/> + <see cref="Helpers.SkiaExtensions.ToSKColor"/>
+        /// path so colour spaces whose <c>GetColor</c> returns a <see cref="CMYKColor"/> still hit
+        /// the same RGB approximation.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SKColor GetSKColor(this ColorSpaceDetails colorSpace, ReadOnlySpan<double> components, double alpha)
+        {
+            byte a = (alpha * 255.0).ToByte();
+            if (colorSpace is DeviceCmykColorSpaceDetails && components.Length >= 4)
+            {
+                ApproximateCmykToRgb(
+                    (components[0] * 255.0).ToByte(),
+                    (components[1] * 255.0).ToByte(),
+                    (components[2] * 255.0).ToByte(),
+                    (components[3] * 255.0).ToByte(),
+                    out byte r, out byte g, out byte b);
+                return new SKColor(r, g, b, a);
+            }
+
+            if (colorSpace is DeviceRgbColorSpaceDetails || colorSpace is DeviceGrayColorSpaceDetails)
+            {
+                colorSpace.GetRgb(components, out double rd, out double gd, out double bd);
+                return new SKColor(
+                    (rd * 255.0).ToByte(),
+                    (gd * 255.0).ToByte(),
+                    (bd * 255.0).ToByte(),
+                    a);
+            }
+
+            // Complex / wrapped colour spaces — defer to IColor so the renderer keeps its
+            // CMYK approximation when the underlying space resolves to CMYKColor.
+            return colorSpace.GetColor(components.ToArray()).ToSKColor(alpha);
+        }
+
         public static SKColor ToSKColor(this IColor? pdfColor, double alpha = 1)
         {
             if (pdfColor is not null)
