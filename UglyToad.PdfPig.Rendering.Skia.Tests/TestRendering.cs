@@ -722,13 +722,19 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
             new object[]
             {
-                "GWG060_Shading_x1a_1.png", // reference image on the left is wrong
+                "GWG060_Shading_x1a_1.png",
                 "GWG060_Shading_x1a.pdf", 1, 2
             },
             new object[]
             {
                 "GWG061_Shading_x1a_1.png",
                 "GWG061_Shading_x1a.pdf", 1, 2
+            },
+
+            new object[]
+            {
+                "JD5008_2.png",
+                "JD5008.pdf", 2, 2
             },
         };
 

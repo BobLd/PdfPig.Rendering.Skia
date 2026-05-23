@@ -326,6 +326,9 @@
 		<None Update="Documents\ICML03-081.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+		<None Update="Documents\JD5008.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 		<None Update="Documents\journal.pone.0196757.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
@@ -697,6 +700,9 @@
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\issue-50_2.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\JD5008_2.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\journal.pone.0196757_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
