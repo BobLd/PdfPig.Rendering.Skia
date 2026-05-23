@@ -136,7 +136,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 int height = pdfImage.HeightInSamples;
 
                 imageSpan = ColorSpaceDetailsByteConverter.Convert(pdfImage.ColorSpaceDetails!, imageSpan,
-                    pdfImage.BitsPerComponent, width, height);
+                    pdfImage.BitsPerComponent, width, height, pdfImage.Decode);
 
                 var numberOfComponents = pdfImage.ColorSpaceDetails!.BaseNumberOfColorComponents;
 
@@ -299,16 +299,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             rasterSpan[dstIdx + 2] = gv;
                             rasterSpan[dstIdx + 3] = getImageAlphaChannel(p, maskSpan, gv, gv, gv);
                             dstIdx += 4;
-                        }
-
-                        return true;
-                    }
-
-                    if (pdfImage.NeedsReverseDecode())
-                    {
-                        for (int i = 0; i < imageSpan.Length; ++i)
-                        {
-                            rasterSpan[i] = (byte)~imageSpan[i];
                         }
 
                         return true;
