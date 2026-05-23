@@ -184,7 +184,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 {
                     _token.ThrowIfCancellationRequested();
                 }
-                
+
                 operations[i].Run(this);
             }
         }
@@ -195,7 +195,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // composited into the still-open offscreen buffer. DstIn keeps only the parts of
             // the layer where the mask has alpha; the LumaColor filter converts the source
             // colour to luminosity-as-alpha for /Luminosity-subtype masks.
-            var maskImage = _pendingMasks.Pop();
+            var maskImage = _pendingMasks.Count > 0 ? _pendingMasks.Pop() : null;
             if (maskImage is not null)
             {
                 _canvas.Save();
@@ -204,11 +204,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 // covering the same logical bounds as the layer).
                 _canvas.SetMatrix(SKMatrix.Identity);
 
-                using var maskPaint = new SKPaint
-                {
-                    BlendMode = SKBlendMode.DstIn,
-                    ColorFilter = SKColorFilter.CreateLumaColor()
-                };
+                using var maskPaint = new SKPaint();
+                maskPaint.BlendMode = SKBlendMode.DstIn;
+                maskPaint.ColorFilter = SKColorFilter.CreateLumaColor();
 
                 _canvas.DrawImage(maskImage, SKRect.Create(0, 0, _width, _height), maskPaint);
                 _canvas.Restore();
@@ -219,7 +217,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             _canvas.Restore();
 
             // Dispose layer paint if one was used for this state
-            var layerPaint = _transparencyLayerPaints.Pop();
+            var layerPaint = _transparencyLayerPaints.Count > 0 ? _transparencyLayerPaints.Pop() : null;
             layerPaint?.Dispose();
 
             EndPath();
