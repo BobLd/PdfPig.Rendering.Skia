@@ -1,0 +1,166 @@
+name: Unit Tests
+
+# Reusable workflow. Triggered by the per-platform caller workflows
+# (unit-tests-windows.yml, unit-tests-linux.yml, unit-tests-macos.yml), each of which
+# passes its own matrix. Splitting by platform gives one status badge per OS.
+on:
+  workflow_call:
+    inputs:
+      matrix:
+        description: 'Matrix (JSON) of runner/os/arch/framework combinations to test.'
+        required: true
+        type: string
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }}-${{ matrix.arch }} / ${{ matrix.framework }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(inputs.matrix) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SkiaSharp Linux dependencies
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1 libfreetype6 libuuid1
+
+      - name: Install common fonts (Linux)
+        if: matrix.os == 'linux'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          # Pre-accept the EULA for the Microsoft Core Fonts package so apt is non-interactive.
+          echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" \
+            | sudo debconf-set-selections
+          sudo apt-get install -y \
+            fonts-liberation \
+            fonts-liberation2 \
+            fonts-dejavu \
+            fonts-noto-core \
+            fonts-noto-mono \
+            fonts-noto-cjk \
+            ttf-mscorefonts-installer
+          fc-cache -f
+
+      - name: Install common fonts (macOS)
+        if: matrix.os == 'macos'
+        run: |
+          # macOS already ships the Microsoft "core web fonts" (Arial, Times New Roman,
+          # Courier New, Verdana, Georgia, ...). Add the open families for the same
+          # glyph-fallback coverage (Unicode / CJK / symbols) the Linux runners have.
+          # Install each cask independently so a single bad/renamed cask can't fail the step.
+          for c in \
+            font-dejavu \
+            font-liberation \
+            font-noto-sans \
+            font-noto-serif \
+            font-noto-sans-mono \
+            font-noto-sans-cjk-sc \
+            font-noto-color-emoji; do
+            brew install --cask "$c" || echo "::warning::skipped font cask $c"
+          done
+
+      - name: Install common fonts (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          # Windows runners already ship the Microsoft core fonts. Add the open families
+          # (DejaVu, Liberation) so the glyph-fallback set matches the Linux/macOS runners.
+          # Installs machine-wide (the runner has admin rights): copy into the Fonts dir and
+          # register under HKLM so DirectWrite/Skia enumerate them.
+          $ErrorActionPreference = 'Stop'
+          $tmp = Join-Path $env:RUNNER_TEMP 'fontdl'
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+
+          function Install-FontsFrom([string]$dir) {
+            $fontsDir = Join-Path $env:WINDIR 'Fonts'
+            $reg = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+            Get-ChildItem -Path $dir -Recurse -Include *.ttf,*.otf | ForEach-Object {
+              Copy-Item $_.FullName -Destination $fontsDir -Force
+              New-ItemProperty -Path $reg -Name "$($_.BaseName) (TrueType)" `
+                -Value $_.Name -PropertyType String -Force | Out-Null
+            }
+          }
+
+          # DejaVu (official release, .zip)
+          try {
+            $z = Join-Path $tmp 'dejavu.zip'
+            Invoke-WebRequest -UseBasicParsing -OutFile $z `
+              -Uri 'https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.zip'
+            Expand-Archive -Path $z -DestinationPath (Join-Path $tmp 'dejavu') -Force
+            Install-FontsFrom (Join-Path $tmp 'dejavu')
+          } catch { Write-Warning "DejaVu install failed: $_" }
+
+          # Liberation (official release, .tar.gz; tar.exe ships with Windows runners)
+          try {
+            $t = Join-Path $tmp 'liberation.tar.gz'
+            Invoke-WebRequest -UseBasicParsing -OutFile $t `
+              -Uri 'https://github.com/liberationfonts/liberation-fonts/releases/download/2.1.5/liberation-fonts-ttf-2.1.5.tar.gz'
+            $libDir = Join-Path $tmp 'liberation'
+            New-Item -ItemType Directory -Force -Path $libDir | Out-Null
+            tar -xzf $t -C $libDir
+            Install-FontsFrom $libDir
+          } catch { Write-Warning "Liberation install failed: $_" }
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            8.0.x
+            9.0.x
+
+      - name: NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Restore
+        run: dotnet restore UglyToad.PdfPig.Rendering.Skia.Tests/UglyToad.PdfPig.Rendering.Skia.Tests.csproj
+
+      - name: Build
+        run: >
+          dotnet build UglyToad.PdfPig.Rendering.Skia.Tests/UglyToad.PdfPig.Rendering.Skia.Tests.csproj
+          --framework ${{ matrix.framework }}
+          --configuration Release
+          --no-restore
+
+      - name: Test
+        run: >
+          dotnet test UglyToad.PdfPig.Rendering.Skia.Tests/UglyToad.PdfPig.Rendering.Skia.Tests.csproj
+          --framework ${{ matrix.framework }}
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --logger "console;verbosity=normal"
+          --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.framework }}
+          path: ./TestResults/**/*.trx
+          if-no-files-found: ignore
+
+      - name: Upload rendered diff images (failures only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-images-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.framework }}
+          # PdfToImageHelper writes diff + rendered PNGs here on assertion failure.
+          path: UglyToad.PdfPig.Rendering.Skia.Tests/**/ErrorImages/**
+          if-no-files-found: ignore

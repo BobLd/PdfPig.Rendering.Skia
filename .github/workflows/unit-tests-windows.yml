@@ -1,0 +1,26 @@
+name: Windows
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    uses: ./.github/workflows/unit-tests.yml
+    with:
+      # net462 (.NET Framework) is not supported on ARM64, so it only runs on x64.
+      matrix: |
+        {
+          "include": [
+            { "runner": "windows-latest", "os": "windows", "arch": "x64",   "framework": "net462" },
+            { "runner": "windows-latest", "os": "windows", "arch": "x64",   "framework": "net6.0" },
+            { "runner": "windows-latest", "os": "windows", "arch": "x64",   "framework": "net8.0" },
+            { "runner": "windows-latest", "os": "windows", "arch": "x64",   "framework": "net9.0" },
+            { "runner": "windows-11-arm", "os": "windows", "arch": "arm64", "framework": "net6.0" },
+            { "runner": "windows-11-arm", "os": "windows", "arch": "arm64", "framework": "net8.0" },
+            { "runner": "windows-11-arm", "os": "windows", "arch": "arm64", "framework": "net9.0" }
+          ]
+        }

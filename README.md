@@ -1,5 +1,9 @@
 # PdfPig.Rendering.Skia
 
+[![Windows](https://github.com/BobLd/PdfPig.Rendering.Skia/actions/workflows/unit-tests-windows.yml/badge.svg)](https://github.com/BobLd/PdfPig.Rendering.Skia/actions/workflows/unit-tests-windows.yml)
+[![Linux](https://github.com/BobLd/PdfPig.Rendering.Skia/actions/workflows/unit-tests-linux.yml/badge.svg)](https://github.com/BobLd/PdfPig.Rendering.Skia/actions/workflows/unit-tests-linux.yml)
+[![macOS](https://github.com/BobLd/PdfPig.Rendering.Skia/actions/workflows/unit-tests-macos.yml/badge.svg)](https://github.com/BobLd/PdfPig.Rendering.Skia/actions/workflows/unit-tests-macos.yml)
+
 Cross-platform library to render pdf documents as images with `PdfPig` using `SkiaSharp`, or to extract images contained in a pdf page as `SkiaSharp` images.
 
 Available as a Nuget package https://www.nuget.org/packages/PdfPig.Rendering.Skia/
