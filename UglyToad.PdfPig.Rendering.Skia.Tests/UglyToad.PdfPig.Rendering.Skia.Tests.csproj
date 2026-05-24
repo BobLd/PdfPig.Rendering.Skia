@@ -9,6 +9,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.1" />
+		<PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="8.3.1.2" />
 		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
 		<PackageReference Include="xunit" Version="2.4.1" />
 		<PackageReference Include="xunit.runner.visualstudio" Version="2.4.3">
@@ -23,6 +25,18 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\UglyToad.PdfPig.Rendering.Skia\UglyToad.PdfPig.Rendering.Skia.csproj" />
+	</ItemGroup>
+
+	<!-- Platform-specific expected images. PdfToImageHelper prefers ExpectedImages/<os>/...
+	     over the cross-platform default when present. Globbed so new goldens are picked up
+	     without editing the project file. -->
+	<ItemGroup>
+		<None Update="ExpectedImages\linux\**\*.png">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\macos\**\*.png">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 	</ItemGroup>
 
 	<ItemGroup>

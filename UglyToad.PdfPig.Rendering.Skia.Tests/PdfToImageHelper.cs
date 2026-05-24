@@ -14,6 +14,7 @@
 
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using SkiaSharp;
 
 namespace UglyToad.PdfPig.Rendering.Skia.Tests
@@ -21,6 +22,53 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
     // https://github.com/apache/pdfbox/blob/trunk/pdfbox/src/test/java/org/apache/pdfbox/rendering/TestPDFToImage.java
     public static class PdfToImageHelper
     {
+        private const string _expectedImagesFolder = "ExpectedImages";
+
+        /// <summary>
+        /// Resolves the expected image to compare against. Rendering differs slightly across
+        /// operating systems (font hinting, available fonts), so a per-OS override may exist under
+        /// <c>ExpectedImages/&lt;os&gt;/</c>. If found it is used; otherwise the cross-platform
+        /// default under <c>ExpectedImages/</c> is used.
+        /// </summary>
+        private static string resolveExpectedImagePath(string expectedFile)
+        {
+            string? os = currentOsFolder();
+            if (os is not null)
+            {
+                string platformSpecific = Path.Combine(_expectedImagesFolder, os, expectedFile);
+                if (File.Exists(platformSpecific))
+                {
+                    return platformSpecific;
+                }
+            }
+
+            return Path.Combine(_expectedImagesFolder, expectedFile);
+        }
+
+        // arm64 and x64 renders are treated as identical, so the folder is keyed by OS only.
+        private static string? currentOsFolder()
+        {
+#if NET
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                return "linux";
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                return "macos";
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return "windows";
+            }
+
+            return null;
+#else
+            return "windows";
+#endif
+        }
         private static SKBitmap createEmptyDiffImage(int minWidth, int minHeight, int maxWidth,
             int maxHeight)
         {
@@ -45,6 +93,44 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
         private const byte _threshold = 2;
 
+        // Maximum fraction of the overlapping pixels allowed to differ beyond the per-channel
+        // threshold before a comparison fails. Absorbs anti-aliasing / sub-pixel rasterization
+        // deltas (which vary slightly across platforms and font versions) without masking real
+        // rendering regressions. Tunable per call via the optional parameter on the Test* methods.
+        private const double _maxDifferingPixelRatio = 0.001;
+
+        private readonly struct DiffResult
+        {
+            public DiffResult(SKBitmap? diffImage, long differingPixels, long comparedPixels, bool dimensionsMismatch)
+            {
+                DiffImage = diffImage;
+                DifferingPixels = differingPixels;
+                ComparedPixels = comparedPixels;
+                DimensionsMismatch = dimensionsMismatch;
+            }
+
+            public SKBitmap? DiffImage { get; }
+
+            public long DifferingPixels { get; }
+
+            public long ComparedPixels { get; }
+
+            public bool DimensionsMismatch { get; }
+
+            public double DifferingRatio => ComparedPixels == 0L ? 0d : (double)DifferingPixels / ComparedPixels;
+        }
+
+        private static bool isWithinTolerance(in DiffResult diff, double maxDifferingPixelRatio)
+        {
+            // A different output size is a structural difference, not an anti-aliasing artifact.
+            if (diff.DimensionsMismatch)
+            {
+                return false;
+            }
+
+            return diff.DifferingRatio <= maxDifferingPixelRatio;
+        }
+
         /// <summary>
         /// Returns the byte offsets of the R, G, B channels within a pixel for the given color type.
         /// Byte order follows the naming convention: e.g. Bgra8888 → B=0, G=1, R=2, A=3.
@@ -57,12 +143,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             _ => throw new NotSupportedException($"Color type {colorType} is not supported for pixel diffing.")
         };
 
-        private static SKBitmap? diffImages(SKBitmap bim1, SKBitmap bim2)
+        private static DiffResult diffImages(SKBitmap bim1, SKBitmap bim2)
         {
             int minWidth = Math.Min(bim1.Width, bim2.Width);
             int minHeight = Math.Min(bim1.Height, bim2.Height);
             int maxWidth = Math.Max(bim1.Width, bim2.Width);
             int maxHeight = Math.Max(bim1.Height, bim2.Height);
+
+            bool dimensionsMismatch = minWidth != maxWidth || minHeight != maxHeight;
 
             // bim3 is always Rgb888x: memory layout is [R=0, G=1, B=2, X=3].
             // createEmptyDiffImage pre-fills the overlap area with white, so equal
@@ -72,7 +160,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             int rowBytes3 = 0;
             int bpp3 = 0;
 
-            if (minWidth != maxWidth || minHeight != maxHeight)
+            if (dimensionsMismatch)
             {
                 bim3 = createEmptyDiffImage(minWidth, minHeight, maxWidth, maxHeight);
                 span3 = bim3.GetPixelSpan();
@@ -92,6 +180,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             (int rOff2, int gOff2, int bOff2) = GetRgbChannelOffsets(bim2.ColorType);
 
             var sameColorTypes = bim1.ColorType == bim2.ColorType;
+
+            long differingPixels = 0L;
+            long comparedPixels = (long)minWidth * minHeight;
 
             for (int y = 0; y < minHeight; ++y)
             {
@@ -116,6 +207,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                         continue;
                     }
 
+                    differingPixels++;
+
                     if (bim3 is null)
                     {
                         bim3 = createEmptyDiffImage(minWidth, minHeight, maxWidth, maxHeight);
@@ -131,7 +224,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 }
             }
 
-            return bim3;
+            return new DiffResult(bim3, differingPixels, comparedPixels, dimensionsMismatch);
         }
 
         private static bool filesAreIdentical(SKBitmap left, SKBitmap right)
@@ -148,10 +241,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
         private static readonly string _errorFolder = "ErrorImages";
 
-        public static bool TestResizeSinglePage(string pdfFile, int pageNumber, string expectedFile, int scale = 1)
+        public static bool TestResizeSinglePage(string pdfFile, int pageNumber, string expectedFile, int scale = 1,
+            double maxDifferingPixelRatio = _maxDifferingPixelRatio)
         {
             string docPath = Path.Combine("Documents", pdfFile);
-            string expectedImage = Path.Combine("ExpectedImages", expectedFile);
+            string expectedImage = resolveExpectedImagePath(expectedFile);
 
             using (SKBitmap expected = SKBitmap.Decode(expectedImage))
             {
@@ -194,11 +288,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                                     return true;
                                 }
 
-                                using var bim3 = diffImages(expectedResize, actualResize);
-                                if (bim3 is null)
+                                DiffResult diff = diffImages(expectedResize, actualResize);
+                                using SKBitmap? bim3 = diff.DiffImage;
+
+                                if (isWithinTolerance(diff, maxDifferingPixelRatio))
                                 {
                                     return true;
                                 }
+
+                                Console.WriteLine(
+                                    $"{expectedFile} (page {pageNumber}): {diff.DifferingPixels} of {diff.ComparedPixels} pixels differ ({diff.DifferingRatio:P3}), tolerance {maxDifferingPixelRatio:P3}.");
 
                                 // Save error
                                 string rootName = expectedFile.Substring(0, expectedFile.Length - 4);
@@ -207,7 +306,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                                            Path.Combine(_errorFolder, $"{rootName}_{pageNumber}_diff.png"),
                                            FileMode.Create))
                                 {
-                                    bim3.Encode(fs, SKEncodedImageFormat.Png, 100);
+                                    bim3?.Encode(fs, SKEncodedImageFormat.Png, 100);
                                 }
                             }
                         }
@@ -218,10 +317,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             }
         }
 
-        public static bool TestSinglePage(string pdfFile, int pageNumber, string expectedFile, int scale = 1)
+        public static bool TestSinglePage(string pdfFile, int pageNumber, string expectedFile, int scale = 1,
+            double maxDifferingPixelRatio = _maxDifferingPixelRatio)
         {
             string docPath = Path.Combine("Documents", pdfFile);
-            string expectedImage = Path.Combine("ExpectedImages", expectedFile);
+            string expectedImage = resolveExpectedImagePath(expectedFile);
 
             using (SKBitmap expected = SKBitmap.Decode(expectedImage))
             {
@@ -240,11 +340,17 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                             return true;
                         }
 
-                        SKBitmap? bim3 = diffImages(expected, actual);
-                        if (bim3 is null)
+                        DiffResult diff = diffImages(expected, actual);
+                        SKBitmap? bim3 = diff.DiffImage;
+
+                        if (isWithinTolerance(diff, maxDifferingPixelRatio))
                         {
+                            bim3?.Dispose();
                             return true;
                         }
+
+                        Console.WriteLine(
+                            $"{expectedFile} (page {pageNumber}): {diff.DifferingPixels} of {diff.ComparedPixels} pixels differ ({diff.DifferingRatio:P3}), tolerance {maxDifferingPixelRatio:P3}.");
 
                         // Save error
                         string rootName = expectedFile.Substring(0, expectedFile.Length - 4);
@@ -254,8 +360,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                         Directory.CreateDirectory(Path.GetDirectoryName(errorToSaveFile));
                         using (var fs = new FileStream(errorToSaveFile, FileMode.Create))
                         {
-                            bim3.Encode(fs, SKEncodedImageFormat.Png, 100);
+                            bim3?.Encode(fs, SKEncodedImageFormat.Png, 100);
                         }
+
+                        bim3?.Dispose();
 
                         string renderToSaveFile = Path.Combine(_errorFolder, $"{rootName}_rendered.png");
 

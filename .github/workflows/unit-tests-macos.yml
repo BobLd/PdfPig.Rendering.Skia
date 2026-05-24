@@ -1,0 +1,22 @@
+name: macOS
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  macos:
+    uses: ./.github/workflows/unit-tests.yml
+    with:
+      # Only Apple Silicon (arm64) hosted runners exist; GitHub retired the Intel macOS image.
+      matrix: |
+        {
+          "include": [
+            { "runner": "macos-latest", "os": "macos", "arch": "arm64", "framework": "net6.0" },
+            { "runner": "macos-latest", "os": "macos", "arch": "arm64", "framework": "net8.0" },
+            { "runner": "macos-latest", "os": "macos", "arch": "arm64", "framework": "net9.0" }
+          ]
+        }
