@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using SkiaSharp;
 using SkiaSharp.HarfBuzz;
 using UglyToad.PdfPig.Core;
@@ -189,9 +190,26 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
 
             var drawTypeface = _fontCache.GetTypefaceOrFallback(font, unicode);
+            
+            string renderUnicode = unicode;
+
             if (!drawTypeface.Typeface.ContainsGlyphs(unicode))
             {
-                return;
+                string? normalized = TryCompatibilityDecompose(unicode);
+                if (normalized is not null)
+                {
+                    var normalizedTypeface = _fontCache.GetTypefaceOrFallback(font, normalized);
+                    if (normalizedTypeface.Typeface.ContainsGlyphs(normalized))
+                    {
+                        drawTypeface = normalizedTypeface;
+                        renderUnicode = normalized;
+                    }
+                }
+
+                if (!drawTypeface.Typeface.ContainsGlyphs(renderUnicode))
+                {
+                    return;
+                }
             }
 
             using var s = new SKAutoCanvasRestore(_canvas, true);
@@ -204,7 +222,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // canvas matrix so cm/q/Q changes later in the same text object don't shift it.
             if (textRenderingMode.IsClip())
             {
-                using var glyphPath = GetPath(drawTypeface, unicode);
+                using var glyphPath = GetPath(drawTypeface, renderUnicode);
                 if (!glyphPath.IsEmpty)
                 {
                     AppendGlyphToTextClipPath(glyphPath);
@@ -239,7 +257,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got '{nonStrokingColor.GetType()}'.");
                     }
 
-                    using (var path = GetPath(drawTypeface, unicode))
+                    using (var path = GetPath(drawTypeface, renderUnicode))
                     {
                         ShowVectorFontGlyph(path, strokingColor, nonStrokingColor,
                             textRenderingMode, in TransformationMatrix.Identity, in TransformationMatrix.Identity);
@@ -252,7 +270,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     DrawWithSoftMask(softMask!, currentState.BlendMode, () =>
                     {
                         using var skFont = drawTypeface.Typeface.ToFont(1f);
-                        _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, innerPaint);
+                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, SKPoint.Empty, SKTextAlign.Left, skFont, innerPaint);
                     });
                 }
                 else
@@ -262,7 +280,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     using (var skFont = drawTypeface.Typeface.ToFont(1f))
                     {
-                        _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, fillPaint);
+                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, SKPoint.Empty, SKTextAlign.Left, skFont, fillPaint);
                     }
                 }
             }
@@ -284,7 +302,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     DrawWithSoftMask(softMask!, currentState.BlendMode, () =>
                     {
                         using var skFont = drawTypeface.Typeface.ToFont(1f);
-                        _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, innerStrokePaint);
+                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, SKPoint.Empty, SKTextAlign.Left, skFont, innerStrokePaint);
                     });
                 }
                 else
@@ -295,7 +313,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     using (var skFont = drawTypeface.Typeface.ToFont(1f))
                     {
-                        _canvas.DrawShapedText(drawTypeface.Shaper, unicode, SKPoint.Empty, SKTextAlign.Left, skFont, strokePaint);
+                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, SKPoint.Empty, SKTextAlign.Left, skFont, strokePaint);
                     }
                 }
             }
@@ -499,6 +517,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
         
+        /// <summary>
+        /// Returns the Unicode compatibility (NFKD) decomposition of <paramref name="unicode"/> when it
+        /// differs from the input, otherwise <c>null</c>. Returns <c>null</c> on malformed input
+        /// (e.g. unpaired surrogates) so the caller simply skips the fallback rather than throwing.
+        /// </summary>
+        private static string? TryCompatibilityDecompose(string unicode)
+        {
+            try
+            {
+                string normalized = unicode.Normalize(NormalizationForm.FormKD);
+                return string.Equals(normalized, unicode, StringComparison.Ordinal) ? null : normalized;
+            }
+            catch (ArgumentException)
+            {
+                // Invalid unicode (e.g. unpaired surrogate) — nothing we can normalise.
+                return null;
+            }
+        }
+
         private static bool CanRender(string unicode)
         {
             ReadOnlySpan<char> chars = unicode.AsSpan();

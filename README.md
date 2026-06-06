@@ -102,3 +102,13 @@ using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instan
 	}
 }
 ```
+
+## Testing
+The visual regression tests (`TestRendering.PdfPigSkiaTest`) compare the rendered output against expected
+images and must be run in **Release** mode.
+
+> [!IMPORTANT]
+> Expected images are **platform specific**: Windows, Linux and macOS do not produce identical output.
+> The differences are font related. When a glyph has no usable embedded outline, rendering falls back to a
+> system font, and the available installed fonts (and their substitutions) differ from one OS / machine to another.
+> As a result, an expected image baseline generated on one OS will not match pixel-for-pixel on another.
