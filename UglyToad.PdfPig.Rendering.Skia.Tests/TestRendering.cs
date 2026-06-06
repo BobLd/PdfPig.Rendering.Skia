@@ -668,7 +668,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "MOZILLA-LINK-4379-0_1.png",
                 "MOZILLA-LINK-4379-0.pdf", 1, 2
             },
-
             new object[]
             {
                 "GWG1610_Softmasks_Text_part1_X4_1.png",
@@ -719,7 +718,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "full-size-image_1.png",
                 "full-size-image.pdf", 1, 2
             },
-
             new object[]
             {
                 "GWG060_Shading_x1a_1.png",
@@ -730,11 +728,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "GWG061_Shading_x1a_1.png",
                 "GWG061_Shading_x1a.pdf", 1, 2
             },
-
             new object[]
             {
                 "JD5008_2.png",
                 "JD5008.pdf", 2, 2
+            },
+            new object[]
+            {
+                "0000042_1.png",
+                "0000042.pdf", 1, 2
             },
         };
 

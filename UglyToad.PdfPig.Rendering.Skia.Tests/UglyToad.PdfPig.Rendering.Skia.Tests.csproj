@@ -40,6 +40,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<None Update="Documents\0000042.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 		<None Update="Documents\0000190.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
@@ -447,6 +450,9 @@
 		</None>
 		<None Update="ExpectedImages\GHOSTSCRIPT-699554-0.zip-4-pdfium-1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\0000042_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\0000190_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>

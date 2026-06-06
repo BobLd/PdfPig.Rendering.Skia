@@ -110,12 +110,20 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
-            var left = (float)x;
-            var top = (float)(y + height);
-            var right = (float)(x + width);
-            var bottom = (float)(y);
+            // Replicate the PDF 're' operator as an explicit subpath rather than using
+            // SKPath.AddRect. AddRect normalises the rectangle and always emits it with a
+            // fixed winding direction, which discards the winding implied by the signs of
+            // width/height.
+            var x0 = (float)x;
+            var y0 = (float)y;
+            var x1 = (float)(x + width);
+            var y1 = (float)(y + height);
 
-            _currentPath.AddRect(new SKRect(left, top, right, bottom));
+            _currentPath.MoveTo(x0, y0);
+            _currentPath.LineTo(x1, y0);
+            _currentPath.LineTo(x1, y1);
+            _currentPath.LineTo(x0, y1);
+            _currentPath.Close();
         }
 
         public override void StrokePath(bool close)
