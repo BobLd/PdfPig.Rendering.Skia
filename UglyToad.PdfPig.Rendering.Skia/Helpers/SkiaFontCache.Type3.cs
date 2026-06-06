@@ -21,6 +21,7 @@ using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Operations;
 using UglyToad.PdfPig.Graphics.Operations.InlineImages;
 using UglyToad.PdfPig.Graphics.Operations.PathConstruction;
+using UglyToad.PdfPig.Graphics.Operations.SpecialGraphicsState;
 using UglyToad.PdfPig.Graphics.Operations.TextState;
 using UglyToad.PdfPig.PdfFonts;
 
@@ -105,45 +106,94 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         }
 
         /// <summary>
-        /// Walk the operations once and translate only path-construction operators into the
-        /// returned <see cref="SKPath"/>. Painting, clipping, colour, transform, and width ops
-        /// are intentionally ignored — for a d1 stencil they don't influence the cacheable
-        /// geometry. The path is returned in raw glyph coordinates (pre-fontMatrix); callers
-        /// apply <c>fontMatrix × renderingMatrix × textMatrix</c> via the canvas CTM at draw
-        /// time, matching the matrix arithmetic of the un-cached pipeline byte-for-byte.
+        /// Walk the operations once and translate path-construction operators into the returned
+        /// <see cref="SKPath"/>. Painting, clipping, colour, and width ops are ignored — for a d1
+        /// stencil they don't influence the cacheable geometry. Transform ops (<c>cm</c>) and the
+        /// save/restore stack (<c>q</c>/<c>Q</c>) ARE honoured: a CharProc routinely establishes a
+        /// glyph-internal scale (e.g. <c>0.01 0 0 0.01 0 0 cm</c>) before drawing, so every point
+        /// must be mapped through the CharProc's own CTM. Ignoring it would render the glyph at the
+        /// raw drawing coordinates — orders of magnitude too large. The path is returned in glyph
+        /// space (the CharProc's internal CTM baked in, but pre-fontMatrix); callers apply
+        /// <c>fontMatrix × renderingMatrix × textMatrix</c> via the canvas CTM at draw time.
         /// </summary>
         private static SKPath ExtractVectorPath(IReadOnlyList<IGraphicsStateOperation> operations)
         {
             var raw = new SKPath { FillType = SKPathFillType.Winding };
+
+            // CharProc-local CTM, seeded at identity. Mirrors BaseStreamProcessor's concatenation
+            // (CTM' = cm × CTM) so the baked geometry matches the un-cached picture pipeline.
+            var ctm = TransformationMatrix.Identity;
+            Stack<TransformationMatrix>? ctmStack = null;
+
             for (int i = 0; i < operations.Count; ++i)
             {
                 switch (operations[i])
                 {
+                    case ModifyCurrentTransformationMatrix cm:
+                        ctm = TransformationMatrix.FromArray(cm.Value).Multiply(ctm);
+                        break;
+                    case Push:
+                        (ctmStack ??= new Stack<TransformationMatrix>()).Push(ctm);
+                        break;
+                    case Pop:
+                        if (ctmStack is { Count: > 0 })
+                        {
+                            ctm = ctmStack.Pop();
+                        }
+                        break;
                     case BeginNewSubpath m:
-                        raw.MoveTo((float)m.X, (float)m.Y);
+                    {
+                        var (x, y) = ctm.Transform(m.X, m.Y);
+                        raw.MoveTo((float)x, (float)y);
                         break;
+                    }
                     case AppendStraightLineSegment l:
-                        raw.LineTo((float)l.X, (float)l.Y);
+                    {
+                        var (x, y) = ctm.Transform(l.X, l.Y);
+                        raw.LineTo((float)x, (float)y);
                         break;
+                    }
                     case AppendDualControlPointBezierCurve c:
-                        raw.CubicTo((float)c.X1, (float)c.Y1, (float)c.X2, (float)c.Y2,
-                                    (float)c.X3, (float)c.Y3);
+                    {
+                        var (x1, y1) = ctm.Transform(c.X1, c.Y1);
+                        var (x2, y2) = ctm.Transform(c.X2, c.Y2);
+                        var (x3, y3) = ctm.Transform(c.X3, c.Y3);
+                        raw.CubicTo((float)x1, (float)y1, (float)x2, (float)y2, (float)x3, (float)y3);
                         break;
+                    }
                     case AppendStartControlPointBezierCurve v:
+                    {
                         // 'v' uses the current point as the first control point; SkiaSharp has
                         // no direct equivalent, so emit the cubic with current-point CP1.
                         var lp = raw.LastPoint;
-                        raw.CubicTo(lp.X, lp.Y, (float)v.X2, (float)v.Y2, (float)v.X3, (float)v.Y3);
+                        var (x2, y2) = ctm.Transform(v.X2, v.Y2);
+                        var (x3, y3) = ctm.Transform(v.X3, v.Y3);
+                        raw.CubicTo(lp.X, lp.Y, (float)x2, (float)y2, (float)x3, (float)y3);
                         break;
+                    }
                     case AppendEndControlPointBezierCurve y:
+                    {
                         // 'y' uses (x3,y3) as both the second control point and the end point.
-                        raw.CubicTo((float)y.X1, (float)y.Y1, (float)y.X3, (float)y.Y3,
-                                    (float)y.X3, (float)y.Y3);
+                        var (x1, y1) = ctm.Transform(y.X1, y.Y1);
+                        var (x3, y3) = ctm.Transform(y.X3, y.Y3);
+                        raw.CubicTo((float)x1, (float)y1, (float)x3, (float)y3, (float)x3, (float)y3);
                         break;
+                    }
                     case AppendRectangle r:
-                        raw.AddRect(SKRect.Create((float)r.LowerLeftX, (float)r.LowerLeftY,
-                                                  (float)r.Width, (float)r.Height));
+                    {
+                        // Emit as an explicit subpath so a rotated/skewed CTM is honoured (AddRect
+                        // would force an axis-aligned box).
+                        var (ax, ay) = ctm.Transform(r.LowerLeftX, r.LowerLeftY);
+                        var (bx, by) = ctm.Transform(r.LowerLeftX + r.Width, r.LowerLeftY);
+                        var (cx, cy) = ctm.Transform(r.LowerLeftX + r.Width, r.LowerLeftY + r.Height);
+                        var (dx, dy) = ctm.Transform(r.LowerLeftX, r.LowerLeftY + r.Height);
+                        raw.MoveTo((float)ax, (float)ay);
+                        raw.LineTo((float)bx, (float)by);
+                        raw.LineTo((float)cx, (float)cy);
+                        raw.LineTo((float)dx, (float)dy);
+                        raw.Close();
                         break;
+                    }
                     case CloseSubpath:
                         raw.Close();
                         break;
