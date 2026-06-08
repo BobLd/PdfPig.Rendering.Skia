@@ -763,6 +763,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "0000281_1.png",
                 "0000281.pdf", 1, 2
             },
+            new object[]
+            {
+                "0966761_1.png",
+                "0966761.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
