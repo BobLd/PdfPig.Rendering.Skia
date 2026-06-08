@@ -2355,19 +2355,36 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 // Installs the graphics state that was in effect at the beginning of the pattern’s parent content stream,
                 // with the current transformation matrix altered by the pattern matrix as described in 8.7.2, "General properties of patterns"
-                SKRect rect = SKRect.Create(Math.Abs((float)pattern.XStep), Math.Abs((float)pattern.YStep));
+                float xStep = Math.Abs((float)pattern.XStep);
+                float yStep = Math.Abs((float)pattern.YStep);
+                SKRect rect = SKRect.Create(xStep, yStep);
                 SKMatrix transformMatrix = CurrentTransformationMatrix.ToSkMatrix().Invert()
                     .PreConcat(_currentStreamOriginalTransforms.Peek())
                     .PreConcat(pattern.GetTilingPatterAdjMatrix());
 
                 using (var picture = processor.Process(PageNumber, operations))
-                using (var shader = SKShader.CreatePicture(picture, SKShaderTileMode.Repeat, SKShaderTileMode.Repeat, SKFilterMode.Linear, transformMatrix, rect))
-                using (var paint = new SKPaint())
                 {
-                    paint.IsAntialias = _antiAliasing;
-                    paint.Shader = shader;
-                    paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
-                    _canvas.DrawPath(path, paint);
+                    // Fast path for patterns that do not actually repeat within the region being
+                    // filled. Producers commonly use a very large XStep/YStep (e.g. 99999) to mean
+                    // "paint the cell once". Handing such a tile to SKShader.CreatePicture makes Skia
+                    // rasterise a gigantic, almost-empty tile that it then clamps to a maximum size,
+                    // collapsing the real content (which only occupies the BBox corner of the tile)
+                    // to a handful of pixels — the cell, typically a full-page image, renders badly
+                    // blurred. Drawing the cell picture directly, clipped to the path, keeps it at
+                    // full output resolution.
+                    if (TryDrawNonRepeatingTilingPattern(path, picture, in transformMatrix, xStep, yStep))
+                    {
+                        return;
+                    }
+
+                    using (var shader = SKShader.CreatePicture(picture, SKShaderTileMode.Repeat, SKShaderTileMode.Repeat, SKFilterMode.Linear, transformMatrix, rect))
+                    using (var paint = new SKPaint())
+                    {
+                        paint.IsAntialias = _antiAliasing;
+                        paint.Shader = shader;
+                        paint.BlendMode = GetCurrentState().BlendMode.ToSKBlendMode();
+                        _canvas.DrawPath(path, paint);
+                    }
                 }
             }
             finally
@@ -2377,6 +2394,70 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     ResourceStore.UnloadResourceDictionary();
                 }
             }
+        }
+
+        /// <summary>
+        /// Draws a tiling pattern that does not repeat within the region being filled by rendering
+        /// its cell picture a single time, clipped to <paramref name="path"/>, at full output
+        /// resolution. Returns <see langword="false"/> (drawing nothing) when the pattern does
+        /// repeat across the filled region and must therefore go through the picture shader.
+        /// </summary>
+        private bool TryDrawNonRepeatingTilingPattern(SKPath path, SKPicture picture,
+            in SKMatrix transformMatrix, float xStep, float yStep)
+        {
+            const float epsilon = 1e-3f;
+
+            // Degenerate step: cannot reason about repetition, let the shader handle it.
+            if (xStep <= epsilon || yStep <= epsilon)
+            {
+                return false;
+            }
+
+            // transformMatrix maps picture/tile space → canvas-local (page) space; invert it to
+            // express the filled region's bounds in tile space.
+            if (!transformMatrix.TryInvert(out SKMatrix inverse))
+            {
+                return false;
+            }
+
+            SKRect tileSpaceBounds = inverse.MapRect(path.Bounds);
+
+            // The cell repeats every (xStep, yStep) in tile space. Only take the direct path when
+            // the whole filled region falls inside a single period window in both axes; otherwise
+            // more than one cell could be visible and the shader must tile it.
+            double nxLeft = Math.Floor((tileSpaceBounds.Left + epsilon) / xStep);
+            double nxRight = Math.Floor((tileSpaceBounds.Right - epsilon) / xStep);
+            double nyTop = Math.Floor((tileSpaceBounds.Top + epsilon) / yStep);
+            double nyBottom = Math.Floor((tileSpaceBounds.Bottom - epsilon) / yStep);
+
+            if (nxLeft != nxRight || nyTop != nyBottom)
+            {
+                return false;
+            }
+
+            // Position the single cell into the period window the region lives in (usually 0,0).
+            SKMatrix drawMatrix = transformMatrix.PreConcat(
+                SKMatrix.CreateTranslation((float)(nxLeft * xStep), (float)(nyTop * yStep)));
+
+            SKBlendMode blendMode = GetCurrentState().BlendMode.ToSKBlendMode();
+
+            using (new SKAutoCanvasRestore(_canvas, true))
+            {
+                _canvas.ClipPath(path, SKClipOperation.Intersect, _antiAliasing);
+                _canvas.Concat(in drawMatrix);
+
+                if (blendMode == SKBlendMode.SrcOver)
+                {
+                    _canvas.DrawPicture(picture);
+                }
+                else
+                {
+                    using var paint = new SKPaint { BlendMode = blendMode };
+                    _canvas.DrawPicture(picture, paint);
+                }
+            }
+
+            return true;
         }
 
         private IColor? GetUncolouredPatternColor(bool isStroke)
