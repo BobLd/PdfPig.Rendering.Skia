@@ -158,7 +158,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         // Not supported for now
                         strokingColor = RGBColor.Black;
                     }
-
+                    
                     if (TryGetActiveSoftMask(out var softMask))
                     {
                         var innerStrokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
@@ -294,10 +294,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     strokingColor = RGBColor.Black;
                 }
 
+                // Convert LineWidth into glyph space (see 0000281.pdf for test)
+                float emToUserScale = renderingMatrix.ToSkMatrix()
+                    .PostConcat(textMatrix.ToSkMatrix())
+                    .MapRadius(1f);
+                float glyphSpaceLineWidth = emToUserScale > 0f
+                    ? (float)currentState.LineWidth / emToUserScale
+                    : (float)currentState.LineWidth;
+
                 if (TryGetActiveSoftMask(out var softMask))
                 {
                     var innerStrokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
-                        (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
+                        glyphSpaceLineWidth, currentState.JoinStyle, currentState.CapStyle,
                         currentState.LineDashPattern, BlendMode.Normal);
                     DrawWithSoftMask(softMask!, currentState.BlendMode, () =>
                     {
@@ -308,7 +316,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 else
                 {
                     var strokePaint = _paintCache.GetPaint(strokingColor, currentState.AlphaConstantStroking, true,
-                        (float)currentState.LineWidth, currentState.JoinStyle, currentState.CapStyle,
+                        glyphSpaceLineWidth, currentState.JoinStyle, currentState.CapStyle,
                         currentState.LineDashPattern, currentState.BlendMode);
 
                     using (var skFont = drawTypeface.Typeface.ToFont(1f))
