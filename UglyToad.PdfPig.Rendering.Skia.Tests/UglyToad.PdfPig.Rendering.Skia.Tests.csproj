@@ -346,6 +346,9 @@
 		<None Update="Documents\ICML03-081.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+		<None Update="Documents\issues-1176-1.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 		<None Update="Documents\JD5008.pdf">
 		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
@@ -667,6 +670,12 @@
 		<None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-698721-1-rotated_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
+		<None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-699178-0_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-699178-0_2.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
 		<None Update="ExpectedImages\pdfpig_skia\GHOSTSCRIPT-699375-5_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
@@ -726,6 +735,9 @@
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\issue-50_2.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\issues-1176-1_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\JD5008_2.png">
 		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>

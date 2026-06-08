@@ -26,7 +26,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
         private static readonly HashSet<string> _documentsToIgnore = new HashSet<string>
         {
-            "GHOSTSCRIPT-699178-0.pdf",
             "SPARC - v9 Architecture Manual.pdf",
             "TIKA-1552-0.pdf"
         };
