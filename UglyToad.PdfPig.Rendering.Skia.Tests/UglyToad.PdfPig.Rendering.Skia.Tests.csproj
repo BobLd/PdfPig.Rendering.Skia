@@ -478,6 +478,9 @@
 		<None Update="ExpectedImages\pdfpig_skia\0966761_1.png">
 		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
+		<None Update="ExpectedImages\pdfpig_skia\0000281_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
 		<None Update="ExpectedImages\pdfpig_skia\11194059_2017-11_de_s_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
