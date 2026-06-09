@@ -1024,6 +1024,76 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
         }
 
+        // A page commonly paints the same Coons/Tensor mesh many times (e.g. a chart re-invokes the
+        // `sh` operator for one shading dozens of times). The tessellated triangle list only depends
+        // on the shading data and the transform in force, so cache it as an SKPicture and replay it
+        // instead of re-tessellating ~1.4 K patches each time. Keyed on the shading instance, with
+        // the transform re-checked on hit so pattern fills under a changed CTM rebuild correctly.
+        private Dictionary<Shading, (SKMatrix Transform, SKPicture Picture)>? _meshPictureCache;
+
+        // Advisory cull hint for recording a mesh picture. The recorded geometry lives in pattern
+        // space (arbitrary range), so a tight rect could clip it — keep it effectively unbounded.
+        private static readonly SKRect MeshPictureCullRect =
+            new SKRect(-1_000_000f, -1_000_000f, 1_000_000f, 1_000_000f);
+
+        /// <summary>
+        /// Returns the cached tessellated mesh picture for <paramref name="shading"/> under
+        /// <paramref name="transform"/>, recording it via <paramref name="drawMesh"/> on first use.
+        /// The picture stores the geometry in pattern space; the caller's canvas transform (and any
+        /// clip) is applied when it is replayed, so one picture serves every invocation that shares
+        /// the same transform.
+        /// </summary>
+        private SKPicture GetOrBuildMeshPicture(Shading shading, in SKMatrix transform, Action drawMesh)
+        {
+            if (_meshPictureCache is not null
+                && _meshPictureCache.TryGetValue(shading, out var entry)
+                && entry.Transform.Equals(transform))
+            {
+                return entry.Picture;
+            }
+
+            using var recorder = new SKPictureRecorder();
+            SKCanvas saved = _canvas;
+            _canvas = recorder.BeginRecording(MeshPictureCullRect, true);
+            try
+            {
+                drawMesh();
+                _canvas.Flush();
+            }
+            finally
+            {
+                _canvas = saved;
+            }
+
+            SKPicture picture = recorder.EndRecording();
+
+            _meshPictureCache ??= new Dictionary<Shading, (SKMatrix, SKPicture)>();
+            if (_meshPictureCache.TryGetValue(shading, out var stale))
+            {
+                // Same shading, different transform: the old picture is now unreachable.
+                stale.Picture.Dispose();
+            }
+
+            _meshPictureCache[shading] = (transform, picture);
+            return picture;
+        }
+
+        /// <summary>Replays a cached mesh picture, optionally clipped to <paramref name="path"/>.</summary>
+        private void DrawCachedMesh(SKPicture mesh, SKPath? path)
+        {
+            if (path is not null)
+            {
+                _canvas.Save();
+                _canvas.ClipPath(path);
+                _canvas.DrawPicture(mesh);
+                _canvas.Restore();
+            }
+            else
+            {
+                _canvas.DrawPicture(mesh);
+            }
+        }
+
         /// <summary>
         /// Number of subdivisions per axis used when sampling the patch surface geometry
         /// for Coons / Tensor patches. Geometric accuracy only — colour accuracy comes
@@ -1032,6 +1102,51 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// well under one pixel for typical render scales while keeping triangle counts low.
         /// </summary>
         private const int PatchSubdivisions = 32;
+
+        /// <summary>
+        /// Target edge length, in pattern-space units, of a single tessellation cell. A patch is
+        /// subdivided just enough that each cell is roughly this size, so a mesh made of many tiny
+        /// patches (e.g. a 1.4 K-patch gradient banner) produces a few thousand triangles instead
+        /// of 1.4 K × 32² ≈ 1.5 M. Without this, large finely-tessellated meshes dominate both
+        /// render time and the native memory held by the recorded picture.
+        /// </summary>
+        private const float PatchCellSize = 4f;
+
+        /// <summary>
+        /// Chooses a per-patch subdivision count proportional to the patch's control-polygon
+        /// extent, clamped to [1, <see cref="PatchSubdivisions"/>]. Small patches collapse to a
+        /// handful of cells; only patches that genuinely span a large area pay the full 32×32.
+        /// </summary>
+        private static int ComputePatchSubdivisions(ReadOnlySpan<SKPoint> controlPoints)
+        {
+            float minX = float.MaxValue, minY = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue;
+            foreach (SKPoint cp in controlPoints)
+            {
+                if (cp.X < minX) minX = cp.X;
+                if (cp.X > maxX) maxX = cp.X;
+                if (cp.Y < minY) minY = cp.Y;
+                if (cp.Y > maxY) maxY = cp.Y;
+            }
+
+            float extent = Math.Max(maxX - minX, maxY - minY);
+            if (!(extent > 0f))
+            {
+                return 1;
+            }
+
+            int n = (int)Math.Ceiling(extent / PatchCellSize);
+            if (n < 1)
+            {
+                n = 1;
+            }
+            else if (n > PatchSubdivisions)
+            {
+                n = PatchSubdivisions;
+            }
+            
+            return n;
+        }
 
         /// <summary>
         /// Resolution of the per-patch colour texture used for function-based shadings.
@@ -1146,6 +1261,17 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
+            // Tessellate once into an SKPicture and replay it on repeated invocations. See
+            // RenderTensorProductPatchShading / GetOrBuildMeshPicture.
+            SKMatrix transform = patternTransformMatrix;
+            SKPicture mesh = GetOrBuildMeshPicture(shading, in transform,
+                () => DrawCoonsMeshUnclipped(shading, transform));
+            DrawCachedMesh(mesh, path);
+        }
+
+        private void DrawCoonsMeshUnclipped(CoonsPatchMeshesShading shading,
+            SKMatrix patternTransformMatrix)
+        {
             var currentState = GetCurrentState();
             int bitsPerCoordinate = shading.BitsPerCoordinate;
             int bitsPerComponent = shading.BitsPerComponent;
@@ -1166,16 +1292,20 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // and texture-coordinate mapping, getting per-pixel function output.
             bool hasFunction = shading.Functions is { Length: > 0 };
 
+            // Pre-evaluate the Function + colour-space conversion (which for a Separation/DeviceN
+            // colour space invokes a per-vertex PostScript tint transform) into a lookup table
+            // shared by every patch and texel, so the hot loops do a table lookup instead. See
+            // ShadingColorCache.
+            ShadingColorCache? colorCache = ShadingColorCache.TryBuild(shading, decode,
+                numStreamColorComponents, currentState.AlphaConstantNonStroking);
+
             // Per-shading scratch for the no-function (vertex-colour Gouraud) path. Each
             // patch tessellates into the same fixed-size triangle arrays and is submitted
             // via its own DrawVertices call, so memory stays bounded regardless of mesh size.
             const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
-            const int perPatchVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
             SKPoint[]? grid = null;
             SKColor[]? gridCol = null;
             double[]? interpBuffer = null;
-            SKPoint[]? outPositions = null;
-            SKColor[]? outColors = null;
             SKPaint? gouraudPaint = null;
 
             if (!hasFunction)
@@ -1183,20 +1313,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 grid = new SKPoint[gridCount];
                 gridCol = new SKColor[gridCount];
                 interpBuffer = new double[numStreamColorComponents];
-                outPositions = new SKPoint[perPatchVertexCount];
-                outColors = new SKColor[perPatchVertexCount];
                 gouraudPaint = new SKPaint
                 {
                     IsAntialias = shading.AntiAlias,
                     BlendMode = currentState.BlendMode.ToSKBlendMode(),
                     Color = SKColors.White,
                 };
-            }
-
-            if (path is not null)
-            {
-                _canvas.Save();
-                _canvas.ClipPath(path);
             }
 
             try
@@ -1298,12 +1420,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     if (hasFunction)
                     {
-                        DrawCoonsPatchTextured(shading, currentState, points, cornerColors);
+                        DrawCoonsPatchTextured(shading, currentState, points, cornerColors, colorCache);
                     }
                     else
                     {
                         TessellateAndDrawCoonsPatch(shading, currentState, points, cornerColors,
-                            grid!, gridCol!, interpBuffer!, outPositions!, outColors!, gouraudPaint!);
+                            grid!, gridCol!, interpBuffer!, gouraudPaint!, colorCache);
                     }
 
                     prevPts = points;
@@ -1316,10 +1438,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             finally
             {
                 gouraudPaint?.Dispose();
-                if (path is not null)
-                {
-                    _canvas.Restore();
-                }
             }
         }
 
@@ -1336,6 +1454,20 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
+            // The same mesh is frequently painted many times (e.g. a chart re-invokes the `sh`
+            // operator for one shading dozens of times). Re-tessellating ~1.4 K patches and
+            // rebuilding the colour LUT on every call is what makes such pages take tens of
+            // seconds. Tessellate once into an SKPicture and replay it — clipped to the current
+            // path — on subsequent invocations. See GetOrBuildMeshPicture.
+            SKMatrix transform = patternTransformMatrix;
+            SKPicture mesh = GetOrBuildMeshPicture(shading, in transform,
+                () => DrawTensorMeshUnclipped(shading, transform));
+            DrawCachedMesh(mesh, path);
+        }
+
+        private void DrawTensorMeshUnclipped(TensorProductPatchMeshesShading shading,
+            SKMatrix patternTransformMatrix)
+        {
             var currentState = GetCurrentState();
             int bitsPerCoordinate = shading.BitsPerCoordinate;
             int bitsPerComponent = shading.BitsPerComponent;
@@ -1351,15 +1483,17 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // See RenderCoonsPatchShading for why the function path uses textured drawing.
             bool hasFunction = shading.Functions is { Length: > 0 };
 
+            // Pre-evaluate the Function + colour-space conversion into a lookup table shared by
+            // every patch (see ShadingColorCache / RenderCoonsPatchShading).
+            ShadingColorCache? colorCache = ShadingColorCache.TryBuild(shading, decode,
+                numStreamColorComponents, currentState.AlphaConstantNonStroking);
+
             // Per-shading scratch for the no-function (vertex-colour Gouraud) path. See
             // RenderCoonsPatchShading for the per-patch-DrawVertices rationale.
             const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
-            const int perPatchVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
             SKPoint[]? grid = null;
             SKColor[]? gridCol = null;
             double[]? interpBuffer = null;
-            SKPoint[]? outPositions = null;
-            SKColor[]? outColors = null;
             SKPaint? gouraudPaint = null;
 
             if (!hasFunction)
@@ -1367,20 +1501,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 grid = new SKPoint[gridCount];
                 gridCol = new SKColor[gridCount];
                 interpBuffer = new double[numStreamColorComponents];
-                outPositions = new SKPoint[perPatchVertexCount];
-                outColors = new SKColor[perPatchVertexCount];
                 gouraudPaint = new SKPaint
                 {
                     IsAntialias = shading.AntiAlias,
                     BlendMode = currentState.BlendMode.ToSKBlendMode(),
                     Color = SKColors.White,
                 };
-            }
-
-            if (path is not null)
-            {
-                _canvas.Save();
-                _canvas.ClipPath(path);
             }
 
             try
@@ -1472,12 +1598,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     if (hasFunction)
                     {
-                        DrawTensorPatchTextured(shading, currentState, points, cornerColors);
+                        DrawTensorPatchTextured(shading, currentState, points, cornerColors, colorCache);
                     }
                     else
                     {
                         TessellateAndDrawTensorPatch(shading, currentState, points, cornerColors,
-                            grid!, gridCol!, interpBuffer!, outPositions!, outColors!, gouraudPaint!);
+                            grid!, gridCol!, interpBuffer!, gouraudPaint!, colorCache);
                     }
 
                     prevPts = points;
@@ -1489,10 +1615,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             finally
             {
                 gouraudPaint?.Dispose();
-                if (path is not null)
-                {
-                    _canvas.Restore();
-                }
             }
         }
 
@@ -1580,13 +1702,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private void TessellateAndDrawCoonsPatch(Shading shading, CurrentGraphicsState currentState,
             ReadOnlySpan<SKPoint> pts, double[][] cornerColors,
             SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
-            SKPoint[] outPositions, SKColor[] outColors, SKPaint paint)
+            SKPaint paint, ShadingColorCache? colorCache)
         {
+            // Subdivide proportionally to the patch size — a fine mesh of tiny patches needs only
+            // a cell or two each rather than the full 32×32. See ComputePatchSubdivisions.
+            int n = ComputePatchSubdivisions(pts);
+            System.Diagnostics.Debug.Assert(n <= PatchSubdivisions);
+
             // The four Coons boundary curves only depend on either u or v, not both, so
             // evaluating them once per axis turns the (n+1)² cubic-Bezier-pair workload
             // into (n+1) × 4 evaluations — a ~17× drop at n = 32. Sampled values land in
             // stackalloc Span<SKPoint> tables (≤ 132 entries each, ~1 KB total).
-            const int axisLen = PatchSubdivisions + 1;
+            int axisLen = n + 1;
             Span<SKPoint> sBottom = stackalloc SKPoint[axisLen];
             Span<SKPoint> sTop = stackalloc SKPoint[axisLen];
             Span<SKPoint> sLeft = stackalloc SKPoint[axisLen];
@@ -1596,14 +1723,14 @@ namespace UglyToad.PdfPig.Rendering.Skia
             SKPoint p4 = pts[4], p5 = pts[5], p6 = pts[6], p7 = pts[7];
             SKPoint p8 = pts[8], p9 = pts[9], p10 = pts[10], p11 = pts[11];
 
-            const float invN = 1f / PatchSubdivisions;
+            float invN = 1f / n;
             for (int i = 0; i < axisLen; i++)
             {
                 float u = i * invN;
                 sBottom[i] = CubicBezier(p0, p1, p2, p3, u);
                 sTop[i] = CubicBezier(p9, p8, p7, p6, u);
             }
-            
+
             for (int j = 0; j < axisLen; j++)
             {
                 float v = j * invN;
@@ -1643,14 +1770,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                               - u * v * p11y - oneMinusU * v * p01y;
 
                     grid[rowOffset + i] = new SKPoint(x, y);
-                    gridCol[rowOffset + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, coonsEvalBuffer);
+                    gridCol[rowOffset + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, coonsEvalBuffer, colorCache);
                 }
             }
 
-            EmitTrianglesFromGrid(grid, gridCol, PatchSubdivisions, outPositions, outColors);
-
-            _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
-                SKBlendMode.Modulate, null, paint);
+            DrawGridTriangles(grid, gridCol, n, paint);
         }
 
         /// <summary>
@@ -1663,7 +1787,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private void TessellateAndDrawTensorPatch(Shading shading, CurrentGraphicsState currentState,
             SKPoint[] tcp, double[][] cornerColors,
             SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
-            SKPoint[] outPositions, SKColor[] outColors, SKPaint paint)
+            SKPaint paint, ShadingColorCache? colorCache)
         {
             // Map the 16 stream points into a 4×4 grid stored row-major in a stackalloc
             // span. Indexing is row * 4 + col (col is u, row is v). See the comment on
@@ -1671,31 +1795,37 @@ namespace UglyToad.PdfPig.Rendering.Skia
             Span<SKPoint> p = stackalloc SKPoint[16];
             BuildTensorControlGrid(tcp, p);
 
+            // Subdivide proportionally to the patch size: a fine mesh of tiny patches needs only a
+            // cell or two each, not the full 32×32 (which would blow up triangle count and memory).
+            int n = ComputePatchSubdivisions(p);
+            System.Diagnostics.Debug.Assert(n <= PatchSubdivisions);
+            
             // Precompute Bernstein basis values for each sampled u and v into flat 4×(n+1)
             // spans so the inner sampling loop reads contiguous memory and skips the
             // jagged-array allocations the previous float[][] form required.
-            const int bCount = 4 * (PatchSubdivisions + 1);
+            int bCount = 4 * (n + 1);
             Span<float> bU = stackalloc float[bCount];
             Span<float> bV = stackalloc float[bCount];
-            for (int i = 0; i <= PatchSubdivisions; i++)
+
+            for (int i = 0; i <= n; i++)
             {
-                BernsteinCubic((float)i / PatchSubdivisions, bU.Slice(i * 4, 4));
+                BernsteinCubic((float)i / n, bU.Slice(i * 4, 4));
             }
-            for (int j = 0; j <= PatchSubdivisions; j++)
+            for (int j = 0; j <= n; j++)
             {
-                BernsteinCubic((float)j / PatchSubdivisions, bV.Slice(j * 4, 4));
+                BernsteinCubic((float)j / n, bV.Slice(j * 4, 4));
             }
 
             double alpha = currentState.AlphaConstantNonStroking;
             Span<double> tensorEvalBuffer = stackalloc double[ShadingEvalBufferSize];
 
-            for (int j = 0; j <= PatchSubdivisions; j++)
+            for (int j = 0; j <= n; j++)
             {
-                float v = (float)j / PatchSubdivisions;
+                float v = (float)j / n;
                 ReadOnlySpan<float> bv = bV.Slice(j * 4, 4);
-                for (int i = 0; i <= PatchSubdivisions; i++)
+                for (int i = 0; i <= n; i++)
                 {
-                    float u = (float)i / PatchSubdivisions;
+                    float u = (float)i / n;
                     ReadOnlySpan<float> bu = bU.Slice(i * 4, 4);
 
                     float x = 0, y = 0;
@@ -1713,14 +1843,27 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         }
                     }
 
-                    grid[j * (PatchSubdivisions + 1) + i] = new SKPoint(x, y);
-                    gridCol[j * (PatchSubdivisions + 1) + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, tensorEvalBuffer);
+                    grid[j * (n + 1) + i] = new SKPoint(x, y);
+                    gridCol[j * (n + 1) + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, tensorEvalBuffer, colorCache);
                 }
             }
 
-            EmitTrianglesFromGrid(grid, gridCol, PatchSubdivisions, outPositions, outColors);
+            DrawGridTriangles(grid, gridCol, n, paint);
+        }
 
-            _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
+        /// <summary>
+        /// Emits the n×n quad grid as a triangle list and submits it in a single DrawVertices call.
+        /// The vertex arrays are allocated at exactly n²×6 (n is the adaptive subdivision count, so
+        /// typically only a handful) — DrawVertices/SKVertices copy the whole array, so a fixed
+        /// max-size buffer would record thousands of stale triangles and bloat the picture.
+        /// </summary>
+        private void DrawGridTriangles(SKPoint[] grid, SKColor[] gridCol, int n, SKPaint paint)
+        {
+            int vertexCount = n * n * 6;
+            var positions = new SKPoint[vertexCount];
+            var colors = new SKColor[vertexCount];
+            EmitTrianglesFromGrid(grid, gridCol, n, positions, colors);
+            _canvas.DrawVertices(SKVertexMode.Triangles, positions, null, colors,
                 SKBlendMode.Modulate, null, paint);
         }
 
@@ -1736,7 +1879,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static SKColor EvaluatePatchColor(Shading shading, double alpha,
-            double[][] cornerColors, float u, float v, double[] interpBuffer, Span<double> evalBuffer)
+            double[][] cornerColors, float u, float v, double[] interpBuffer, Span<double> evalBuffer,
+            ShadingColorCache? colorCache)
         {
             // Cache the four corner arrays once per call so the inner k-loop walks four
             // contiguous double[] strides rather than re-dereferencing cornerColors[...]
@@ -1756,6 +1900,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
             for (int k = 0; k < components; k++)
             {
                 interpBuffer[k] = w00 * cc0[k] + w10 * cc1[k] + w11 * cc2[k] + w01 * cc3[k];
+            }
+
+            // The cache pre-bakes shading.Eval + colour-space conversion; this is the hot path for
+            // Separation/DeviceN meshes whose tint transform is an expensive PostScript function.
+            if (colorCache is not null)
+            {
+                return colorCache.GetColor(new ReadOnlySpan<double>(interpBuffer, 0, components));
             }
 
             int written = shading.Eval(new ReadOnlySpan<double>(interpBuffer, 0, components), evalBuffer);
@@ -1930,7 +2081,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </para>
         /// </summary>
         private static SKBitmap BuildPatchTexture(Shading shading, CurrentGraphicsState currentState,
-            double[][] cornerColors, int texSize)
+            double[][] cornerColors, int texSize, ShadingColorCache? colorCache)
         {
             var bitmap = new SKBitmap(texSize, texSize, SKColorType.Rgba8888, SKAlphaType.Unpremul);
             int components = cornerColors[0].Length;
@@ -1949,6 +2100,45 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             Span<byte> pixelBytes = bitmap.GetPixelSpan();
             int rowStride = texSize * 4;
+
+            // Fast path: the shading Function (if any) and the colour-space conversion — which for
+            // a Separation/DeviceN colour space invokes a per-texel PostScript tint transform —
+            // are pre-baked into colorCache, so this 262 K-iteration loop becomes a bilinear blend
+            // plus a table lookup instead of a full evaluation per texel. The difference between
+            // seconds and milliseconds for mesh shadings with many patches.
+            if (colorCache is not null)
+            {
+                ReadOnlySpan<double> interpSpanFast = interp;
+                for (int j = 0; j < texSize; j++)
+                {
+                    float v = j * invDen;
+                    float oneMinusV = 1f - v;
+                    int rowOffset = j * rowStride;
+                    for (int i = 0; i < texSize; i++)
+                    {
+                        float u = i * invDen;
+                        float oneMinusU = 1f - u;
+                        double w00 = oneMinusU * oneMinusV;
+                        double w10 = u * oneMinusV;
+                        double w11 = u * v;
+                        double w01 = oneMinusU * v;
+                        for (int k = 0; k < components; k++)
+                        {
+                            interp[k] = w00 * cc0[k] + w10 * cc1[k] + w11 * cc2[k] + w01 * cc3[k];
+                        }
+
+                        SKColor c = colorCache.GetColor(interpSpanFast.Slice(0, components));
+
+                        int idx = rowOffset + i * 4;
+                        pixelBytes[idx] = c.Red;
+                        pixelBytes[idx + 1] = c.Green;
+                        pixelBytes[idx + 2] = c.Blue;
+                        pixelBytes[idx + 3] = c.Alpha;
+                    }
+                }
+
+                return bitmap;
+            }
 
             // Per-pixel Eval buffer — keeps the 262 K-iteration inner loop allocation-free.
             Span<double> patchEvalOut = stackalloc double[ShadingEvalBufferSize];
@@ -1988,15 +2178,161 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <summary>
+        /// A precomputed N-D lookup table that maps a mesh-shading vertex's interpolated stream
+        /// colour components to a final <see cref="SKColor"/>, with the shading Function (if any)
+        /// and the colour-space conversion already applied.
+        /// <para>
+        /// Mesh shadings (PDF 1.7 §8.7.4.5.5–.7) evaluate, for every tessellated vertex/texel, the
+        /// shading Function and then the colour space. When the colour space is a Separation or
+        /// DeviceN with a PostScript (Type 4) tint transform, that per-vertex evaluation dominates
+        /// rendering time — a single tensor mesh can ask for tens of millions of evaluations. The
+        /// inputs are low-dimensional (1 component for the function/Separation case, 2–4 for
+        /// DeviceN), so sampling the whole pipeline once onto a grid and looking it up per vertex
+        /// turns minutes into milliseconds. Nearest-neighbour sampling is sufficient: the patch is
+        /// tessellated densely and the GPU interpolates colours between grid vertices anyway.
+        /// </para>
+        /// </summary>
+        private sealed class ShadingColorCache
+        {
+            private readonly SKColor[] _table;
+            private readonly double[] _lo;
+            private readonly double[] _scale; // per-dim (sizePerDim - 1) / (hi - lo)
+            private readonly int[] _stride;
+            private readonly int _dims;
+            private readonly int _sizePerDim;
+
+            private ShadingColorCache(SKColor[] table, double[] lo, double[] scale, int[] stride,
+                int dims, int sizePerDim)
+            {
+                _table = table;
+                _lo = lo;
+                _scale = scale;
+                _stride = stride;
+                _dims = dims;
+                _sizePerDim = sizePerDim;
+            }
+
+            /// <summary>
+            /// Builds a cache for a mesh shading, or returns <see langword="null"/> when caching is
+            /// not worthwhile/possible (unsupported component count or malformed Decode) so the
+            /// caller keeps evaluating per vertex.
+            /// </summary>
+            public static ShadingColorCache? TryBuild(Shading shading, double[] decode,
+                int numComponents, double alpha)
+            {
+                // Only worth caching — and only quantisation-safe — when per-vertex colour
+                // resolution is the bottleneck. That happens when a PostScript/stitching tint
+                // transform runs per vertex: either the shading carries its own Function, or its
+                // colour space is a Separation/DeviceN (whose conversion invokes a tint-transform
+                // function). For plain Device colour spaces the conversion is cheap arithmetic, so
+                // a table would only add visible banding. Restrict to 1–2 inputs as well, where a
+                // 1024-/256-entry-per-axis table is finer than the 8-bit output it feeds.
+                bool expensiveColorSpace = shading.ColorSpace is SeparationColorSpaceDetails
+                    or DeviceNColorSpaceDetails;
+                bool hasShadingFunction = shading.Functions is { Length: > 0 };
+                if (!expensiveColorSpace && !hasShadingFunction)
+                {
+                    return null;
+                }
+
+                if (numComponents < 1 || numComponents > 2 || decode.Length < 4 + 2 * numComponents)
+                {
+                    return null;
+                }
+
+                // Per-dimension resolution: fine enough for smooth gradients, cheap to populate
+                // once per shading (≤64 K entries).
+                int sizePerDim = numComponents == 1 ? 1024 : 256;
+
+                var lo = new double[numComponents];
+                var scale = new double[numComponents];
+                var stride = new int[numComponents];
+                int total = 1;
+                for (int d = 0; d < numComponents; d++)
+                {
+                    double cLo = decode[4 + d * 2];
+                    double cHi = decode[5 + d * 2];
+                    if (double.IsNaN(cLo) || double.IsNaN(cHi))
+                    {
+                        return null;
+                    }
+
+                    lo[d] = cLo;
+                    double span = cHi - cLo;
+                    scale[d] = Math.Abs(span) < 1e-12 ? 0.0 : (sizePerDim - 1) / span;
+                    stride[d] = total;
+                    total *= sizePerDim;
+                }
+
+                var table = new SKColor[total];
+                ColorSpaceDetails colorSpace = shading.ColorSpace;
+                Span<double> evalOut = stackalloc double[ShadingEvalBufferSize];
+                Span<double> input = stackalloc double[4];
+                Span<int> counter = stackalloc int[4];
+                counter.Clear();
+                double invDen = sizePerDim > 1 ? 1.0 / (sizePerDim - 1) : 0.0;
+
+                for (int flat = 0; flat < total; flat++)
+                {
+                    for (int d = 0; d < numComponents; d++)
+                    {
+                        double cLo = decode[4 + d * 2];
+                        double cHi = decode[5 + d * 2];
+                        input[d] = cLo + (cHi - cLo) * (counter[d] * invDen);
+                    }
+
+                    int written = shading.Eval(input.Slice(0, numComponents), evalOut);
+                    table[flat] = colorSpace.GetSKColor(evalOut.Slice(0, written), alpha);
+
+                    // Increment the mixed-radix counter (dimension 0 is the fastest-varying, matching
+                    // stride[0] == 1 so `flat` and `counter` stay in lock-step).
+                    for (int d = 0; d < numComponents; d++)
+                    {
+                        if (++counter[d] < sizePerDim)
+                        {
+                            break;
+                        }
+                        counter[d] = 0;
+                    }
+                }
+
+                return new ShadingColorCache(table, lo, scale, stride, numComponents, sizePerDim);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public SKColor GetColor(ReadOnlySpan<double> components)
+            {
+                int idx = 0;
+                int last = _sizePerDim - 1;
+                for (int d = 0; d < _dims; d++)
+                {
+                    int i = (int)((components[d] - _lo[d]) * _scale[d] + 0.5);
+                    if (i < 0)
+                    {
+                        i = 0;
+                    }
+                    else if (i > last)
+                    {
+                        i = last;
+                    }
+
+                    idx += i * _stride[d];
+                }
+
+                return _table[idx];
+            }
+        }
+
+        /// <summary>
         /// Draws a Coons patch via texture mapping: builds a per-pixel-evaluated colour bitmap,
         /// triangulates the patch surface with texture coordinates, and lets Skia sample the
         /// bitmap at every output pixel. This gives correct step-function / stitched-Type-3
         /// rendering that vertex-colour Gouraud cannot.
         /// </summary>
         private void DrawCoonsPatchTextured(Shading shading, CurrentGraphicsState currentState,
-            ReadOnlySpan<SKPoint> pts, double[][] cornerColors)
+            ReadOnlySpan<SKPoint> pts, double[][] cornerColors, ShadingColorCache? colorCache)
         {
-            using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
+            using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize, colorCache);
 
             const int gridLen = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
             const int triVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
@@ -2088,9 +2424,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// Draws a Tensor-product patch via texture mapping. See <see cref="DrawCoonsPatchTextured"/>.
         /// </summary>
         private void DrawTensorPatchTextured(Shading shading, CurrentGraphicsState currentState,
-            ReadOnlySpan<SKPoint> tcp, double[][] cornerColors)
+            ReadOnlySpan<SKPoint> tcp, double[][] cornerColors, ShadingColorCache? colorCache)
         {
-            using SKBitmap bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
+            using SKBitmap bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize, colorCache);
 
             // Row-major 4×4 control grid lives on the stack — saves the heap allocation the
             // SKPoint[,] form paid per patch.
