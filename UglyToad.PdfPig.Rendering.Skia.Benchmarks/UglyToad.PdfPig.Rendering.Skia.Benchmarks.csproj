@@ -11,6 +11,10 @@
 		<PdfPigSkiaVersion Condition="'$(PdfPigSkiaVersion)' == ''">Local</PdfPigSkiaVersion>
 	</PropertyGroup>
 
+	<PropertyGroup Condition="'$(PdfPigSkiaVersion)' == 'Local'">
+		<DefineConstants>$(DefineConstants);PDFPIGSKIA_LOCAL</DefineConstants>
+	</PropertyGroup>
+
 	<ItemGroup Condition="'$(PdfPigSkiaVersion)' == 'Local'">
 		<ProjectReference Include="..\UglyToad.PdfPig.Rendering.Skia\UglyToad.PdfPig.Rendering.Skia.csproj" />
 	</ItemGroup>

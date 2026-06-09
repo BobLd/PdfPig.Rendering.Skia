@@ -20,7 +20,15 @@ internal class Program
 {
     static void Main(string[] args)
     {
-        var summary = BenchmarkRunner.Run<ShadingBenchmarks>();
-        Console.ReadKey();
+        if (args.Length == 0)
+        {
+            // Default: the end-to-end Local-vs-Latest page-render comparison.
+            BenchmarkRunner.Run<ShadingBenchmarks>();
+            Console.ReadKey();
+            return;
+        }
+
+        // With args (e.g. --filter *ParametricFill*) pick benchmarks by name across the assembly.
+        BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
     }
 }

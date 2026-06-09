@@ -34,6 +34,7 @@ public class ShadingBenchmarks
     //   "PDFBOX-1869-4.pdf"                      -> 1 (function-based)
     //   "PDFBOX-2100-gouraud-RGB-function.pdf"   -> 4 (free-form Gouraud with Function)
 
+    /*
     [Benchmark]
     public IReadOnlyList<SKPicture> _2_shading_type1()
     {
@@ -69,13 +70,14 @@ public class ShadingBenchmarks
     {
         return Helpers.RenderAllPages("2_shading_type_6_001.pdf");
     }
+    */
 
     [Benchmark]
     public IReadOnlyList<SKPicture> P()
     {
         return Helpers.RenderAllPages("P.pdf");
     }
-
+    /*
     [Benchmark]
     public IReadOnlyList<SKPicture> PDFBOX_1869_4()
     {
@@ -99,4 +101,5 @@ public class ShadingBenchmarks
     {
         return Helpers.RenderAllPages("GWG061_Shading_x1a.pdf");
     }
+    */
 }
