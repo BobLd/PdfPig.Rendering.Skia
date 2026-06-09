@@ -436,6 +436,16 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
             _textClipPath?.Dispose();
             _textClipPath = null;
+            if (_meshPictureCache is not null)
+            {
+                foreach (var entry in _meshPictureCache.Values)
+                {
+                    entry.Picture.Dispose();
+                }
+
+                _meshPictureCache.Clear();
+                _meshPictureCache = null;
+            }
         }
     }
 }
