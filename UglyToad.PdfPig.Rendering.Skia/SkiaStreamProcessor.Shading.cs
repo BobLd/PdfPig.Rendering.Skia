@@ -1104,6 +1104,44 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private const int PatchSubdivisions = 32;
 
         /// <summary>
+        /// Target edge length, in pattern-space units, of a single tessellation cell. A patch is
+        /// subdivided just enough that each cell is roughly this size, so a mesh made of many tiny
+        /// patches (e.g. a 1.4 K-patch gradient banner) produces a few thousand triangles instead
+        /// of 1.4 K × 32² ≈ 1.5 M. Without this, large finely-tessellated meshes dominate both
+        /// render time and the native memory held by the recorded picture.
+        /// </summary>
+        private const float PatchCellSize = 4f;
+
+        /// <summary>
+        /// Chooses a per-patch subdivision count proportional to the patch's control-polygon
+        /// extent, clamped to [1, <see cref="PatchSubdivisions"/>]. Small patches collapse to a
+        /// handful of cells; only patches that genuinely span a large area pay the full 32×32.
+        /// </summary>
+        private static int ComputePatchSubdivisions(ReadOnlySpan<SKPoint> controlPoints)
+        {
+            float minX = float.MaxValue, minY = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue;
+            foreach (SKPoint cp in controlPoints)
+            {
+                if (cp.X < minX) minX = cp.X;
+                if (cp.X > maxX) maxX = cp.X;
+                if (cp.Y < minY) minY = cp.Y;
+                if (cp.Y > maxY) maxY = cp.Y;
+            }
+
+            float extent = Math.Max(maxX - minX, maxY - minY);
+            if (!(extent > 0f))
+            {
+                return 1;
+            }
+
+            int n = (int)Math.Ceiling(extent / PatchCellSize);
+            if (n < 1) n = 1;
+            else if (n > PatchSubdivisions) n = PatchSubdivisions;
+            return n;
+        }
+
+        /// <summary>
         /// Resolution of the per-patch colour texture used for function-based shadings.
         /// 512² with nearest-neighbour sampling means each texel maps to ~1 output pixel at
         /// typical chart scales — step-function transitions stay pixel-sharp while smooth
@@ -1258,12 +1296,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // patch tessellates into the same fixed-size triangle arrays and is submitted
             // via its own DrawVertices call, so memory stays bounded regardless of mesh size.
             const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
-            const int perPatchVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
             SKPoint[]? grid = null;
             SKColor[]? gridCol = null;
             double[]? interpBuffer = null;
-            SKPoint[]? outPositions = null;
-            SKColor[]? outColors = null;
             SKPaint? gouraudPaint = null;
 
             if (!hasFunction)
@@ -1271,8 +1306,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 grid = new SKPoint[gridCount];
                 gridCol = new SKColor[gridCount];
                 interpBuffer = new double[numStreamColorComponents];
-                outPositions = new SKPoint[perPatchVertexCount];
-                outColors = new SKColor[perPatchVertexCount];
                 gouraudPaint = new SKPaint
                 {
                     IsAntialias = shading.AntiAlias,
@@ -1385,7 +1418,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     else
                     {
                         TessellateAndDrawCoonsPatch(shading, currentState, points, cornerColors,
-                            grid!, gridCol!, interpBuffer!, outPositions!, outColors!, gouraudPaint!, colorCache);
+                            grid!, gridCol!, interpBuffer!, gouraudPaint!, colorCache);
                     }
 
                     prevPts = points;
@@ -1451,12 +1484,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // Per-shading scratch for the no-function (vertex-colour Gouraud) path. See
             // RenderCoonsPatchShading for the per-patch-DrawVertices rationale.
             const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
-            const int perPatchVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
             SKPoint[]? grid = null;
             SKColor[]? gridCol = null;
             double[]? interpBuffer = null;
-            SKPoint[]? outPositions = null;
-            SKColor[]? outColors = null;
             SKPaint? gouraudPaint = null;
 
             if (!hasFunction)
@@ -1464,8 +1494,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 grid = new SKPoint[gridCount];
                 gridCol = new SKColor[gridCount];
                 interpBuffer = new double[numStreamColorComponents];
-                outPositions = new SKPoint[perPatchVertexCount];
-                outColors = new SKColor[perPatchVertexCount];
                 gouraudPaint = new SKPaint
                 {
                     IsAntialias = shading.AntiAlias,
@@ -1568,7 +1596,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     else
                     {
                         TessellateAndDrawTensorPatch(shading, currentState, points, cornerColors,
-                            grid!, gridCol!, interpBuffer!, outPositions!, outColors!, gouraudPaint!, colorCache);
+                            grid!, gridCol!, interpBuffer!, gouraudPaint!, colorCache);
                     }
 
                     prevPts = points;
@@ -1667,30 +1695,38 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private void TessellateAndDrawCoonsPatch(Shading shading, CurrentGraphicsState currentState,
             ReadOnlySpan<SKPoint> pts, double[][] cornerColors,
             SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
-            SKPoint[] outPositions, SKColor[] outColors, SKPaint paint, ShadingColorCache? colorCache)
+            SKPaint paint, ShadingColorCache? colorCache)
         {
+            // Subdivide proportionally to the patch size — a fine mesh of tiny patches needs only
+            // a cell or two each rather than the full 32×32. See ComputePatchSubdivisions.
+            int n = ComputePatchSubdivisions(pts);
+
             // The four Coons boundary curves only depend on either u or v, not both, so
             // evaluating them once per axis turns the (n+1)² cubic-Bezier-pair workload
             // into (n+1) × 4 evaluations — a ~17× drop at n = 32. Sampled values land in
             // stackalloc Span<SKPoint> tables (≤ 132 entries each, ~1 KB total).
-            const int axisLen = PatchSubdivisions + 1;
-            Span<SKPoint> sBottom = stackalloc SKPoint[axisLen];
-            Span<SKPoint> sTop = stackalloc SKPoint[axisLen];
-            Span<SKPoint> sLeft = stackalloc SKPoint[axisLen];
-            Span<SKPoint> sRight = stackalloc SKPoint[axisLen];
+            int axisLen = n + 1;
+            Span<SKPoint> sBottom = stackalloc SKPoint[PatchSubdivisions + 1];
+            Span<SKPoint> sTop = stackalloc SKPoint[PatchSubdivisions + 1];
+            Span<SKPoint> sLeft = stackalloc SKPoint[PatchSubdivisions + 1];
+            Span<SKPoint> sRight = stackalloc SKPoint[PatchSubdivisions + 1];
+            sBottom = sBottom.Slice(0, axisLen);
+            sTop = sTop.Slice(0, axisLen);
+            sLeft = sLeft.Slice(0, axisLen);
+            sRight = sRight.Slice(0, axisLen);
 
             SKPoint p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
             SKPoint p4 = pts[4], p5 = pts[5], p6 = pts[6], p7 = pts[7];
             SKPoint p8 = pts[8], p9 = pts[9], p10 = pts[10], p11 = pts[11];
 
-            const float invN = 1f / PatchSubdivisions;
+            float invN = 1f / n;
             for (int i = 0; i < axisLen; i++)
             {
                 float u = i * invN;
                 sBottom[i] = CubicBezier(p0, p1, p2, p3, u);
                 sTop[i] = CubicBezier(p9, p8, p7, p6, u);
             }
-            
+
             for (int j = 0; j < axisLen; j++)
             {
                 float v = j * invN;
@@ -1734,10 +1770,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 }
             }
 
-            EmitTrianglesFromGrid(grid, gridCol, PatchSubdivisions, outPositions, outColors);
-
-            _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
-                SKBlendMode.Modulate, null, paint);
+            DrawGridTriangles(grid, gridCol, n, paint);
         }
 
         /// <summary>
@@ -1750,7 +1783,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private void TessellateAndDrawTensorPatch(Shading shading, CurrentGraphicsState currentState,
             SKPoint[] tcp, double[][] cornerColors,
             SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
-            SKPoint[] outPositions, SKColor[] outColors, SKPaint paint, ShadingColorCache? colorCache)
+            SKPaint paint, ShadingColorCache? colorCache)
         {
             // Map the 16 stream points into a 4×4 grid stored row-major in a stackalloc
             // span. Indexing is row * 4 + col (col is u, row is v). See the comment on
@@ -1758,31 +1791,37 @@ namespace UglyToad.PdfPig.Rendering.Skia
             Span<SKPoint> p = stackalloc SKPoint[16];
             BuildTensorControlGrid(tcp, p);
 
+            // Subdivide proportionally to the patch size: a fine mesh of tiny patches needs only a
+            // cell or two each, not the full 32×32 (which would blow up triangle count and memory).
+            int n = ComputePatchSubdivisions(p);
+
             // Precompute Bernstein basis values for each sampled u and v into flat 4×(n+1)
             // spans so the inner sampling loop reads contiguous memory and skips the
             // jagged-array allocations the previous float[][] form required.
-            const int bCount = 4 * (PatchSubdivisions + 1);
-            Span<float> bU = stackalloc float[bCount];
-            Span<float> bV = stackalloc float[bCount];
-            for (int i = 0; i <= PatchSubdivisions; i++)
+            int bCount = 4 * (n + 1);
+            Span<float> bU = stackalloc float[4 * (PatchSubdivisions + 1)];
+            Span<float> bV = stackalloc float[4 * (PatchSubdivisions + 1)];
+            bU = bU.Slice(0, bCount);
+            bV = bV.Slice(0, bCount);
+            for (int i = 0; i <= n; i++)
             {
-                BernsteinCubic((float)i / PatchSubdivisions, bU.Slice(i * 4, 4));
+                BernsteinCubic((float)i / n, bU.Slice(i * 4, 4));
             }
-            for (int j = 0; j <= PatchSubdivisions; j++)
+            for (int j = 0; j <= n; j++)
             {
-                BernsteinCubic((float)j / PatchSubdivisions, bV.Slice(j * 4, 4));
+                BernsteinCubic((float)j / n, bV.Slice(j * 4, 4));
             }
 
             double alpha = currentState.AlphaConstantNonStroking;
             Span<double> tensorEvalBuffer = stackalloc double[ShadingEvalBufferSize];
 
-            for (int j = 0; j <= PatchSubdivisions; j++)
+            for (int j = 0; j <= n; j++)
             {
-                float v = (float)j / PatchSubdivisions;
+                float v = (float)j / n;
                 ReadOnlySpan<float> bv = bV.Slice(j * 4, 4);
-                for (int i = 0; i <= PatchSubdivisions; i++)
+                for (int i = 0; i <= n; i++)
                 {
-                    float u = (float)i / PatchSubdivisions;
+                    float u = (float)i / n;
                     ReadOnlySpan<float> bu = bU.Slice(i * 4, 4);
 
                     float x = 0, y = 0;
@@ -1800,14 +1839,27 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         }
                     }
 
-                    grid[j * (PatchSubdivisions + 1) + i] = new SKPoint(x, y);
-                    gridCol[j * (PatchSubdivisions + 1) + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, tensorEvalBuffer, colorCache);
+                    grid[j * (n + 1) + i] = new SKPoint(x, y);
+                    gridCol[j * (n + 1) + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, tensorEvalBuffer, colorCache);
                 }
             }
 
-            EmitTrianglesFromGrid(grid, gridCol, PatchSubdivisions, outPositions, outColors);
+            DrawGridTriangles(grid, gridCol, n, paint);
+        }
 
-            _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
+        /// <summary>
+        /// Emits the n×n quad grid as a triangle list and submits it in a single DrawVertices call.
+        /// The vertex arrays are allocated at exactly n²×6 (n is the adaptive subdivision count, so
+        /// typically only a handful) — DrawVertices/SKVertices copy the whole array, so a fixed
+        /// max-size buffer would record thousands of stale triangles and bloat the picture.
+        /// </summary>
+        private void DrawGridTriangles(SKPoint[] grid, SKColor[] gridCol, int n, SKPaint paint)
+        {
+            int vertexCount = n * n * 6;
+            var positions = new SKPoint[vertexCount];
+            var colors = new SKColor[vertexCount];
+            EmitTrianglesFromGrid(grid, gridCol, n, positions, colors);
+            _canvas.DrawVertices(SKVertexMode.Triangles, positions, null, colors,
                 SKBlendMode.Modulate, null, paint);
         }
 
