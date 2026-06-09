@@ -420,11 +420,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // no-function path packs 3-vertex triangles into the buffer and flushes when full
             // or when the patch loop ends. Sub-vertex scratch and the bilinear scratch buffer
             // are likewise hoisted out of the per-emit hot path.
-            const int functionPerParentVerts = GouraudFunctionSubdivisions * GouraudFunctionSubdivisions * 3;
+            // The function path allocates its own exact-size triangle arrays per parent triangle
+            // (sized to the adaptive subdivision count), so only the no-function path needs this
+            // batch buffer.
             const int gouraudNoFunctionBatchVerts = 4096 * 3;
-            int outCapacity = hasFunction ? functionPerParentVerts : gouraudNoFunctionBatchVerts;
-            var outPositions = new SKPoint[outCapacity];
-            var outColors = new SKColor[outCapacity];
+            var outPositions = hasFunction ? Array.Empty<SKPoint>() : new SKPoint[gouraudNoFunctionBatchVerts];
+            var outColors = hasFunction ? Array.Empty<SKColor>() : new SKColor[gouraudNoFunctionBatchVerts];
             int outCount = 0;
 
             // Barycentric sub-vertex grid for the function path; reused across all parent
@@ -637,6 +638,43 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private const int GouraudFunctionSubdivisions = 128;
 
         /// <summary>
+        /// Target edge length, in pattern-space units, of a Gouraud function-path sub-cell. At ~1
+        /// unit the result matches the old fixed 128 for a typical Type-4 patch (≈1–2 output pixels
+        /// per cell) while a mesh of many tiny triangles collapses to a few sub-cells each instead
+        /// of 128² ≈ 16 K sub-triangles apiece.
+        /// </summary>
+        private const float GouraudFunctionCellSize = 1f;
+
+        /// <summary>
+        /// Per-triangle subdivision count for the Gouraud function path, proportional to the
+        /// triangle's screen extent and clamped to [1, <see cref="GouraudFunctionSubdivisions"/>].
+        /// </summary>
+        private static int ComputeGouraudSubdivisions(in GouraudVertex a, in GouraudVertex b, in GouraudVertex c)
+        {
+            float minX = Math.Min(a.Pt.X, Math.Min(b.Pt.X, c.Pt.X));
+            float maxX = Math.Max(a.Pt.X, Math.Max(b.Pt.X, c.Pt.X));
+            float minY = Math.Min(a.Pt.Y, Math.Min(b.Pt.Y, c.Pt.Y));
+            float maxY = Math.Max(a.Pt.Y, Math.Max(b.Pt.Y, c.Pt.Y));
+            float extent = Math.Max(maxX - minX, maxY - minY);
+            if (!(extent > 0f))
+            {
+                return 1;
+            }
+
+            int n = (int)Math.Ceiling(extent / GouraudFunctionCellSize);
+            if (n < 1)
+            {
+                n = 1;
+            }
+            else if (n > GouraudFunctionSubdivisions)
+            {
+                n = GouraudFunctionSubdivisions;
+            }
+
+            return n;
+        }
+
+        /// <summary>
         /// Emits one parent Gouraud triangle. When <paramref name="hasFunction"/> is false
         /// the three vertices are appended to <paramref name="outPositions"/> / <paramref name="outColors"/>;
         /// when the next 3-vertex append would overflow the buffer it is first flushed via
@@ -684,21 +722,25 @@ namespace UglyToad.PdfPig.Rendering.Skia
             float bx = b.Pt.X, by = b.Pt.Y;
             float cx = c.Pt.X, cy = c.Pt.Y;
 
-            const float invN = 1f / GouraudFunctionSubdivisions;
+            // Subdivide proportionally to the triangle's screen size: a fine mesh of tiny
+            // triangles needs only a few sub-cells each, not the full 128×128 (which would
+            // produce ~16 K sub-triangles per parent regardless of size).
+            int n = ComputeGouraudSubdivisions(a, b, c);
+            float invN = 1f / n;
 
-            // Per-sub-vertex Eval output lives in a single stackalloc buffer so the n²
-            // (~16 K iters at default subdivisions) inner loop runs allocation-free.
+            // Per-sub-vertex Eval output lives in a single stackalloc buffer so the n² inner
+            // loop runs allocation-free.
             Span<double> subEvalOut = stackalloc double[ShadingEvalBufferSize];
 
             // Fill the (n+1)(n+2)/2 barycentric sub-vertex grid for this parent triangle.
-            // subPts/subCols are caller-owned, reused across all parent triangles in the
-            // current Render call so the ~100 KB grid scratch is allocated once.
-            for (int i = 0; i <= GouraudFunctionSubdivisions; i++)
+            // subPts/subCols are caller-owned (sized for the 128 max), reused across all parent
+            // triangles in the current Render call.
+            for (int i = 0; i <= n; i++)
             {
-                int rowOffset = i * (GouraudFunctionSubdivisions + 1) - i * (i - 1) / 2;
-                for (int j = 0; j <= GouraudFunctionSubdivisions - i; j++)
+                int rowOffset = i * (n + 1) - i * (i - 1) / 2;
+                for (int j = 0; j <= n - i; j++)
                 {
-                    int k = GouraudFunctionSubdivisions - i - j;
+                    int k = n - i - j;
                     float wa = i * invN;
                     float wb = j * invN;
                     float wc = k * invN;
@@ -725,34 +767,36 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // triangles along the diagonal. For each row i (0..n-1), column j (0..n-1-i):
             //   upper-tri: (i,j), (i+1,j), (i,j+1)
             //   lower-tri: (i+1,j), (i+1,j+1), (i,j+1) — only when i+j < n-1
-            // The writes fill outPositions/outColors exactly (length = n² × 3).
+            // Exact-size arrays (n² triangles): DrawVertices/SKVertices use the whole array, so a
+            // shared max-size buffer would record stale triangles and bloat the recorded picture.
+            var funcPositions = new SKPoint[n * n * 3];
+            var funcColors = new SKColor[n * n * 3];
             int w = 0;
-            for (int i = 0; i < GouraudFunctionSubdivisions; i++)
+            for (int i = 0; i < n; i++)
             {
-                int rowOffset = i * (GouraudFunctionSubdivisions + 1) - i * (i - 1) / 2;
-                int nextRowOffset = (i + 1) * (GouraudFunctionSubdivisions + 1) - (i + 1) * i / 2;
-                for (int j = 0; j < GouraudFunctionSubdivisions - i; j++)
+                int rowOffset = i * (n + 1) - i * (i - 1) / 2;
+                int nextRowOffset = (i + 1) * (n + 1) - (i + 1) * i / 2;
+                for (int j = 0; j < n - i; j++)
                 {
                     int v0 = rowOffset + j;
                     int v1 = nextRowOffset + j;
                     int v2 = rowOffset + j + 1;
-                    outPositions[w] = subPts![v0]; outColors[w] = subCols![v0]; w++;
-                    outPositions[w] = subPts[v1]; outColors[w] = subCols[v1]; w++;
-                    outPositions[w] = subPts[v2]; outColors[w] = subCols[v2]; w++;
+                    funcPositions[w] = subPts![v0]; funcColors[w] = subCols![v0]; w++;
+                    funcPositions[w] = subPts[v1]; funcColors[w] = subCols[v1]; w++;
+                    funcPositions[w] = subPts[v2]; funcColors[w] = subCols[v2]; w++;
 
-                    if (i + j < GouraudFunctionSubdivisions - 1)
+                    if (i + j < n - 1)
                     {
                         int v3 = nextRowOffset + j + 1;
-                        outPositions[w] = subPts[v1]; outColors[w] = subCols[v1]; w++;
-                        outPositions[w] = subPts[v3]; outColors[w] = subCols[v3]; w++;
-                        outPositions[w] = subPts[v2]; outColors[w] = subCols[v2]; w++;
+                        funcPositions[w] = subPts[v1]; funcColors[w] = subCols[v1]; w++;
+                        funcPositions[w] = subPts[v3]; funcColors[w] = subCols[v3]; w++;
+                        funcPositions[w] = subPts[v2]; funcColors[w] = subCols[v2]; w++;
                     }
                 }
             }
 
-            _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
+            _canvas.DrawVertices(SKVertexMode.Triangles, funcPositions, null, funcColors,
                 SKBlendMode.Modulate, null, paint);
-            outCount = 0;
         }
 
         /// <summary>
@@ -1119,17 +1163,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </summary>
         private static int ComputePatchSubdivisions(ReadOnlySpan<SKPoint> controlPoints)
         {
-            float minX = float.MaxValue, minY = float.MaxValue;
-            float maxX = float.MinValue, maxY = float.MinValue;
-            foreach (SKPoint cp in controlPoints)
-            {
-                if (cp.X < minX) minX = cp.X;
-                if (cp.X > maxX) maxX = cp.X;
-                if (cp.Y < minY) minY = cp.Y;
-                if (cp.Y > maxY) maxY = cp.Y;
-            }
-
-            float extent = Math.Max(maxX - minX, maxY - minY);
+            float extent = PatchControlExtent(controlPoints);
             if (!(extent > 0f))
             {
                 return 1;
@@ -1144,8 +1178,58 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 n = PatchSubdivisions;
             }
-            
+
             return n;
+        }
+
+        /// <summary>Largest of the control-polygon's width and height, in pattern-space units.</summary>
+        private static float PatchControlExtent(ReadOnlySpan<SKPoint> controlPoints)
+        {
+            float minX = float.MaxValue, minY = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue;
+            foreach (SKPoint cp in controlPoints)
+            {
+                if (cp.X < minX) minX = cp.X;
+                if (cp.X > maxX) maxX = cp.X;
+                if (cp.Y < minY) minY = cp.Y;
+                if (cp.Y > maxY) maxY = cp.Y;
+            }
+
+            return Math.Max(maxX - minX, maxY - minY);
+        }
+
+        /// <summary>Minimum size of the per-patch colour texture (see <see cref="ComputePatchTextureSize"/>).</summary>
+        private const int MinPatchTextureSize = 16;
+
+        /// <summary>Texels per pattern-space unit used to size the per-patch colour texture.</summary>
+        private const float PatchTextureTexelsPerUnit = 2f;
+
+        /// <summary>
+        /// Chooses the per-patch colour-texture resolution (Function path) from the patch's
+        /// control-polygon extent, clamped to [<see cref="MinPatchTextureSize"/>,
+        /// <see cref="PatchTextureSize"/>]. A fixed 512² texture is ~1 MB per patch; a fine mesh of
+        /// many small patches only needs a small texture each, mirroring the adaptive geometry
+        /// subdivision (and what RenderFunctionBasedShading already does for Type 1 shadings).
+        /// </summary>
+        private static int ComputePatchTextureSize(ReadOnlySpan<SKPoint> controlPoints)
+        {
+            float extent = PatchControlExtent(controlPoints);
+            if (!(extent > 0f))
+            {
+                return MinPatchTextureSize;
+            }
+
+            int size = (int)Math.Ceiling(extent * PatchTextureTexelsPerUnit);
+            if (size < MinPatchTextureSize)
+            {
+                size = MinPatchTextureSize;
+            }
+            else if (size > PatchTextureSize)
+            {
+                size = PatchTextureSize;
+            }
+
+            return size;
         }
 
         /// <summary>
@@ -2332,10 +2416,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private void DrawCoonsPatchTextured(Shading shading, CurrentGraphicsState currentState,
             ReadOnlySpan<SKPoint> pts, double[][] cornerColors, ShadingColorCache? colorCache)
         {
-            using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize, colorCache);
+            // Size both the colour texture and the geometry grid to the patch. See
+            // ComputePatchTextureSize / ComputePatchSubdivisions.
+            int texSize = ComputePatchTextureSize(pts);
+            int n = ComputePatchSubdivisions(pts);
+            System.Diagnostics.Debug.Assert(n <= PatchSubdivisions);
+            
+            using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, texSize, colorCache);
 
-            const int gridLen = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
-            const int triVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
+            int gridLen = (n + 1) * (n + 1);
 
             // The (n+1)² grid arrays are scratch — rent from the shared pool to avoid the
             // ~17 KB heap allocation per patch. Triangle arrays are passed straight to
@@ -2346,11 +2435,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
             SKPoint[] texCoords = pool.Rent(gridLen);
             try
             {
-                const int stride = PatchSubdivisions + 1;
-                const float texScale = PatchTextureSize - 1;
+                int stride = n + 1;
+                float texScale = texSize - 1;
 
                 // See TessellateAndDrawCoonsPatch for the per-axis Bezier precompute rationale.
-                const int axisLen = PatchSubdivisions + 1;
+                int axisLen = n + 1;
                 Span<SKPoint> sBottom = stackalloc SKPoint[axisLen];
                 Span<SKPoint> sTop = stackalloc SKPoint[axisLen];
                 Span<SKPoint> sLeft = stackalloc SKPoint[axisLen];
@@ -2360,7 +2449,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 SKPoint p4 = pts[4], p5 = pts[5], p6 = pts[6], p7 = pts[7];
                 SKPoint p8 = pts[8], p9 = pts[9], p10 = pts[10], p11 = pts[11];
 
-                const float invN = 1f / PatchSubdivisions;
+                float invN = 1f / n;
                 for (int i2 = 0; i2 < axisLen; i2++)
                 {
                     float u = i2 * invN;
@@ -2408,9 +2497,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
                 }
 
-                var posArray = new SKPoint[triVertexCount];
-                var texArray = new SKPoint[triVertexCount];
-                BuildPatchTriangleArrays(positions, texCoords, PatchSubdivisions, posArray, texArray);
+                var posArray = new SKPoint[n * n * 6];
+                var texArray = new SKPoint[n * n * 6];
+                BuildPatchTriangleArrays(positions, texCoords, n, posArray, texArray);
                 DrawTexturedPatchVertices(shading, currentState, bitmap, posArray, texArray);
             }
             finally
@@ -2426,15 +2515,21 @@ namespace UglyToad.PdfPig.Rendering.Skia
         private void DrawTensorPatchTextured(Shading shading, CurrentGraphicsState currentState,
             ReadOnlySpan<SKPoint> tcp, double[][] cornerColors, ShadingColorCache? colorCache)
         {
-            using SKBitmap bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize, colorCache);
+            // Size both the colour texture and the geometry grid to the patch — a fine mesh of
+            // tiny patches needs neither a 512² texture nor a 32×32 grid each. See
+            // ComputePatchTextureSize / ComputePatchSubdivisions.
+            int texSize = ComputePatchTextureSize(tcp);
+            int n = ComputePatchSubdivisions(tcp);
+            System.Diagnostics.Debug.Assert(n <= PatchSubdivisions);
+            
+            using SKBitmap bitmap = BuildPatchTexture(shading, currentState, cornerColors, texSize, colorCache);
 
             // Row-major 4×4 control grid lives on the stack — saves the heap allocation the
             // SKPoint[,] form paid per patch.
             Span<SKPoint> p = stackalloc SKPoint[16];
             BuildTensorControlGrid(tcp, p);
 
-            const int gridLen = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
-            const int triVertexCount = PatchSubdivisions * PatchSubdivisions * 6;
+            int gridLen = (n + 1) * (n + 1);
 
             var pool = ArrayPool<SKPoint>.Shared;
             SKPoint[] positions = pool.Rent(gridLen);
@@ -2442,32 +2537,31 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             try
             {
-                const int stride = PatchSubdivisions + 1;
-                const float texScale = PatchTextureSize - 1;
+                int stride = n + 1;
+                float texScale = texSize - 1;
 
-                // Flat 4×(n+1) Bernstein tables stack-allocated — no per-row jagged-array
-                // allocations the previous float[][] form required.
-                const int bCount = 4 * (PatchSubdivisions + 1);
-                Span<float> bU = stackalloc float[bCount];
-                Span<float> bV = stackalloc float[bCount];
+                // Flat 4×(n+1) Bernstein tables stack-allocated (max size; sliced to n) — no
+                // per-row jagged-array allocations the previous float[][] form required.
+                Span<float> bU = stackalloc float[4 * (n + 1)];
+                Span<float> bV = stackalloc float[4 * (n + 1)];
 
-                for (int i = 0; i <= PatchSubdivisions; i++)
+                for (int i = 0; i <= n; i++)
                 {
-                    BernsteinCubic((float)i / PatchSubdivisions, bU.Slice(i * 4, 4));
+                    BernsteinCubic((float)i / n, bU.Slice(i * 4, 4));
                 }
 
-                for (int j = 0; j <= PatchSubdivisions; j++)
+                for (int j = 0; j <= n; j++)
                 {
-                    BernsteinCubic((float)j / PatchSubdivisions, bV.Slice(j * 4, 4));
+                    BernsteinCubic((float)j / n, bV.Slice(j * 4, 4));
                 }
 
-                for (int j = 0; j <= PatchSubdivisions; j++)
+                for (int j = 0; j <= n; j++)
                 {
-                    float v = (float)j / PatchSubdivisions;
+                    float v = (float)j / n;
                     ReadOnlySpan<float> bv = bV.Slice(j * 4, 4);
-                    for (int i = 0; i <= PatchSubdivisions; i++)
+                    for (int i = 0; i <= n; i++)
                     {
-                        float u = (float)i / PatchSubdivisions;
+                        float u = (float)i / n;
                         ReadOnlySpan<float> bu = bU.Slice(i * 4, 4);
                         int idx = j * stride + i;
                         positions[idx] = EvaluateTensorSurface(p, bu, bv);
@@ -2475,9 +2569,9 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
                 }
 
-                var posArray = new SKPoint[triVertexCount];
-                var texArray = new SKPoint[triVertexCount];
-                BuildPatchTriangleArrays(positions, texCoords, PatchSubdivisions, posArray, texArray);
+                var posArray = new SKPoint[n * n * 6];
+                var texArray = new SKPoint[n * n * 6];
+                BuildPatchTriangleArrays(positions, texCoords, n, posArray, texArray);
                 DrawTexturedPatchVertices(shading, currentState, bitmap, posArray, texArray);
             }
             finally
