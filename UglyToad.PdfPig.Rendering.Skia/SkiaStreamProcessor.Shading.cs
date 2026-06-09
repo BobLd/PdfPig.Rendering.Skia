@@ -1136,8 +1136,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
             }
 
             int n = (int)Math.Ceiling(extent / PatchCellSize);
-            if (n < 1) n = 1;
-            else if (n > PatchSubdivisions) n = PatchSubdivisions;
+            if (n < 1)
+            {
+                n = 1;
+            }
+            else if (n > PatchSubdivisions)
+            {
+                n = PatchSubdivisions;
+            }
+            
             return n;
         }
 
@@ -1700,20 +1707,17 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // Subdivide proportionally to the patch size — a fine mesh of tiny patches needs only
             // a cell or two each rather than the full 32×32. See ComputePatchSubdivisions.
             int n = ComputePatchSubdivisions(pts);
+            System.Diagnostics.Debug.Assert(n <= PatchSubdivisions);
 
             // The four Coons boundary curves only depend on either u or v, not both, so
             // evaluating them once per axis turns the (n+1)² cubic-Bezier-pair workload
             // into (n+1) × 4 evaluations — a ~17× drop at n = 32. Sampled values land in
             // stackalloc Span<SKPoint> tables (≤ 132 entries each, ~1 KB total).
             int axisLen = n + 1;
-            Span<SKPoint> sBottom = stackalloc SKPoint[PatchSubdivisions + 1];
-            Span<SKPoint> sTop = stackalloc SKPoint[PatchSubdivisions + 1];
-            Span<SKPoint> sLeft = stackalloc SKPoint[PatchSubdivisions + 1];
-            Span<SKPoint> sRight = stackalloc SKPoint[PatchSubdivisions + 1];
-            sBottom = sBottom.Slice(0, axisLen);
-            sTop = sTop.Slice(0, axisLen);
-            sLeft = sLeft.Slice(0, axisLen);
-            sRight = sRight.Slice(0, axisLen);
+            Span<SKPoint> sBottom = stackalloc SKPoint[axisLen];
+            Span<SKPoint> sTop = stackalloc SKPoint[axisLen];
+            Span<SKPoint> sLeft = stackalloc SKPoint[axisLen];
+            Span<SKPoint> sRight = stackalloc SKPoint[axisLen];
 
             SKPoint p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
             SKPoint p4 = pts[4], p5 = pts[5], p6 = pts[6], p7 = pts[7];
@@ -1794,15 +1798,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // Subdivide proportionally to the patch size: a fine mesh of tiny patches needs only a
             // cell or two each, not the full 32×32 (which would blow up triangle count and memory).
             int n = ComputePatchSubdivisions(p);
-
+            System.Diagnostics.Debug.Assert(n <= PatchSubdivisions);
+            
             // Precompute Bernstein basis values for each sampled u and v into flat 4×(n+1)
             // spans so the inner sampling loop reads contiguous memory and skips the
             // jagged-array allocations the previous float[][] form required.
             int bCount = 4 * (n + 1);
-            Span<float> bU = stackalloc float[4 * (PatchSubdivisions + 1)];
-            Span<float> bV = stackalloc float[4 * (PatchSubdivisions + 1)];
-            bU = bU.Slice(0, bCount);
-            bV = bV.Slice(0, bCount);
+            Span<float> bU = stackalloc float[bCount];
+            Span<float> bV = stackalloc float[bCount];
+
             for (int i = 0; i <= n; i++)
             {
                 BernsteinCubic((float)i / n, bU.Slice(i * 4, 4));
