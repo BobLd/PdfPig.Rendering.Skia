@@ -88,6 +88,18 @@ internal partial class SkiaStreamProcessor
             };
         }
 
+        // Function path: the per-vertex stream carries a single parametric value, so the colour is
+        // a 1-D function of it. Pre-evaluate that mapping once into a shading-global LUT and reuse
+        // it for every patch texture instead of calling the Function per texel. See BuildPatchTexture.
+        uint[]? patchLut = null;
+        double domainLo = 0d, domainHi = 0d;
+        if (hasFunction && numStreamColorComponents == 1)
+        {
+            domainLo = decode[4];
+            domainHi = decode[5];
+            patchLut = BuildParametricColorLut(shading, currentState, domainLo, domainHi);
+        }
+
         try
         {
             // Patch buffers are alternated between the current and previous patch via a
@@ -187,7 +199,7 @@ internal partial class SkiaStreamProcessor
 
                 if (hasFunction)
                 {
-                    DrawCoonsPatchTextured(shading, currentState, points, cornerColors);
+                    DrawCoonsPatchTextured(shading, currentState, points, cornerColors, patchLut, domainLo, domainHi);
                 }
                 else
                 {
@@ -305,9 +317,9 @@ internal partial class SkiaStreamProcessor
     /// rendering that vertex-colour Gouraud cannot.
     /// </summary>
     private void DrawCoonsPatchTextured(Shading shading, CurrentGraphicsState currentState,
-        ReadOnlySpan<SKPoint> pts, double[][] cornerColors)
+        ReadOnlySpan<SKPoint> pts, double[][] cornerColors, uint[]? lut, double domainLo, double domainHi)
     {
-        using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
+        using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize, lut, domainLo, domainHi);
 
         const int gridLen = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
         const int triVertexCount = PatchSubdivisions * PatchSubdivisions * 6;

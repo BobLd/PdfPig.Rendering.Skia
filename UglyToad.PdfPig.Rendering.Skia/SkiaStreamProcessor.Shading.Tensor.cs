@@ -87,6 +87,17 @@ internal partial class SkiaStreamProcessor
             };
         }
 
+        // See RenderCoonsPatchShading: pre-evaluate the 1-D parametric colour mapping once into a
+        // shading-global LUT instead of calling the Function per texel of every patch texture.
+        uint[]? patchLut = null;
+        double domainLo = 0d, domainHi = 0d;
+        if (hasFunction && numStreamColorComponents == 1)
+        {
+            domainLo = decode[4];
+            domainHi = decode[5];
+            patchLut = BuildParametricColorLut(shading, currentState, domainLo, domainHi);
+        }
+
         try
         {
             // See RenderCoonsPatchShading for the two-slot ring-buffer rationale.
@@ -176,7 +187,7 @@ internal partial class SkiaStreamProcessor
 
                 if (hasFunction)
                 {
-                    DrawTensorPatchTextured(shading, currentState, points, cornerColors);
+                    DrawTensorPatchTextured(shading, currentState, points, cornerColors, patchLut, domainLo, domainHi);
                 }
                 else
                 {
@@ -274,9 +285,9 @@ internal partial class SkiaStreamProcessor
     /// Draws a Tensor-product patch via texture mapping. See <see cref="DrawCoonsPatchTextured"/>.
     /// </summary>
     private void DrawTensorPatchTextured(Shading shading, CurrentGraphicsState currentState,
-        ReadOnlySpan<SKPoint> tcp, double[][] cornerColors)
+        ReadOnlySpan<SKPoint> tcp, double[][] cornerColors, uint[]? lut, double domainLo, double domainHi)
     {
-        using SKBitmap bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
+        using SKBitmap bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize, lut, domainLo, domainHi);
 
         // Row-major 4×4 control grid lives on the stack — saves the heap allocation the
         // SKPoint[,] form paid per patch.

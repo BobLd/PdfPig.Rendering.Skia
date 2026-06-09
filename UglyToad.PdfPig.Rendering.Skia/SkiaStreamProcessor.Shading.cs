@@ -61,6 +61,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </summary>
         private const int PatchTextureSize = 512;
 
+        /// <summary>
+        /// Number of entries in the parametric colour LUT used by function-based Coons/Tensor
+        /// patches. Two per texture texel so a patch whose parametric range spans the full domain
+        /// across the whole texture still quantises each texel's colour to strictly sub-texel
+        /// precision — preserving the pixel-sharp step-function transitions the texture path exists
+        /// to capture. See <see cref="Helpers.ParametricShadingTexture"/>.
+        /// </summary>
+        private const int PatchTextureLutSize = 2 * PatchTextureSize;
+
         // Advisory cull hint for recording a mesh picture. The recorded geometry lives in pattern
         // space (arbitrary range), so a tight rect could clip it — keep it effectively unbounded.
         private static readonly SKRect MeshPictureCullRect = new SKRect(-1_000_000f, -1_000_000f, 1_000_000f, 1_000_000f);
@@ -446,11 +455,51 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// staging array. The bilinear blend buffer is allocated once for the whole texture.
         /// </para>
         /// </summary>
+        /// <summary>
+        /// Builds the shading-global parametric colour LUT for a function-based mesh shading.
+        /// The Function + colour-space conversion depend only on the single parametric value, so
+        /// the mapping is identical for every patch and texel — evaluate it once over the domain
+        /// <c>[<paramref name="domainLo"/>, <paramref name="domainHi"/>]</c> and reuse it.
+        /// </summary>
+        private static uint[] BuildParametricColorLut(Shading shading, CurrentGraphicsState currentState,
+            double domainLo, double domainHi)
+        {
+            ColorSpaceDetails colorSpace = shading.ColorSpace;
+            double alpha = currentState.AlphaConstantNonStroking;
+
+            // Heap scratch captured by the evaluator; only touched PatchTextureLutSize times total.
+            double[] evalIn = new double[1];
+            double[] evalOut = new double[ShadingEvalBufferSize];
+
+            SKColor Eval(double t)
+            {
+                evalIn[0] = t;
+                int written = shading.Eval(evalIn, evalOut);
+                return colorSpace.GetSKColor(new ReadOnlySpan<double>(evalOut, 0, written), alpha);
+            }
+
+            var lut = new uint[PatchTextureLutSize];
+            ParametricShadingTexture.BuildLut(Eval, domainLo, domainHi, lut);
+            return lut;
+        }
+
         private static SKBitmap BuildPatchTexture(Shading shading, CurrentGraphicsState currentState,
-            double[][] cornerColors, int texSize)
+            double[][] cornerColors, int texSize, uint[]? lut, double domainLo, double domainHi)
         {
             var bitmap = new SKBitmap(texSize, texSize, SKColorType.Rgba8888, SKAlphaType.Unpremul);
             int components = cornerColors[0].Length;
+
+            // Fast path: when a Function is present the stream carries a single parametric value,
+            // so the colour is a 1-D function of the bilinear-blended corner scalars. Look it up in
+            // the shading-global LUT instead of evaluating the Function + colour space per texel.
+            if (lut is not null && components == 1)
+            {
+                ParametricShadingTexture.Fill(bitmap.GetPixelSpan(), texSize,
+                    cornerColors[0][0], cornerColors[1][0], cornerColors[2][0], cornerColors[3][0],
+                    lut, domainLo, domainHi);
+                return bitmap;
+            }
+
             double[] interp = new double[components];
             float invDen = 1f / (texSize - 1);
             double alpha = currentState.AlphaConstantNonStroking;
