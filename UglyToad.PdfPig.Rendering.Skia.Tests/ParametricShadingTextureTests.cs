@@ -84,6 +84,43 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             }
         }
 
+        [Theory]
+        [InlineData(8)]   // exactly one AVX2 vector, no tail
+        [InlineData(16)]  // two vectors, no tail
+        [InlineData(21)]  // two vectors + 5-wide tail
+        [InlineData(63)]  // seven vectors + 7-wide tail
+        [InlineData(120)] // fifteen vectors, no tail
+        public void Fill_LinearEvaluator_MatchesDirectAcrossWidthsIncludingTails(int texSize)
+        {
+            const int n = 1024;
+            const double cc0 = 0.1, cc1 = 0.9, cc2 = 0.7, cc3 = 0.3;
+            const double lo = 0.0, hi = 1.0;
+
+            uint[] lut = new uint[n];
+            ParametricShadingTexture.BuildLut(Grey, lo, hi, lut);
+
+            byte[] pixels = new byte[texSize * texSize * 4];
+            ParametricShadingTexture.Fill(pixels, texSize, cc0, cc1, cc2, cc3, lut, lo, hi);
+
+            double invDen = 1.0 / (texSize - 1);
+            for (int j = 0; j < texSize; j++)
+            {
+                double v = j * invDen;
+                for (int i = 0; i < texSize; i++)
+                {
+                    double u = i * invDen;
+                    double t = (1 - u) * (1 - v) * cc0 + u * (1 - v) * cc1 + u * v * cc2 + (1 - u) * v * cc3;
+                    SKColor expected = Grey(t);
+
+                    int idx = (j * texSize + i) * 4;
+                    Assert.True(Math.Abs(pixels[idx] - expected.Red) <= 1, $"R mismatch at ({i},{j}) w={texSize}");
+                    Assert.True(Math.Abs(pixels[idx + 1] - expected.Green) <= 1, $"G mismatch at ({i},{j}) w={texSize}");
+                    Assert.True(Math.Abs(pixels[idx + 2] - expected.Blue) <= 1, $"B mismatch at ({i},{j}) w={texSize}");
+                    Assert.Equal(expected.Alpha, pixels[idx + 3]);
+                }
+            }
+        }
+
         [Fact]
         public void Fill_StepEvaluator_KeepsBoundaryWithinOneTexel()
         {
