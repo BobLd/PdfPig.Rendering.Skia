@@ -66,13 +66,6 @@ internal partial class SkiaStreamProcessor
         // and texture-coordinate mapping, getting per-pixel function output.
         bool hasFunction = shading.Functions is { Length: > 0 };
 
-        // Pre-evaluate the Function + colour-space conversion (which for a Separation/DeviceN
-        // colour space invokes a per-vertex PostScript tint transform) into a lookup table
-        // shared by every patch and texel, so the hot loops do a table lookup instead. See
-        // ShadingColorCache.
-        ShadingColorCache? colorCache = ShadingColorCache.TryBuild(shading, decode,
-            numStreamColorComponents, currentState.AlphaConstantNonStroking);
-
         // Per-shading scratch for the no-function (vertex-colour Gouraud) path. Each
         // patch tessellates into the same fixed-size triangle arrays and is submitted
         // via its own DrawVertices call, so memory stays bounded regardless of mesh size.
@@ -194,12 +187,12 @@ internal partial class SkiaStreamProcessor
 
                 if (hasFunction)
                 {
-                    DrawCoonsPatchTextured(shading, currentState, points, cornerColors, colorCache);
+                    DrawCoonsPatchTextured(shading, currentState, points, cornerColors);
                 }
                 else
                 {
                     TessellateAndDrawCoonsPatch(shading, currentState, points, cornerColors,
-                        grid!, gridCol!, interpBuffer!, gouraudPaint!, colorCache);
+                        grid!, gridCol!, interpBuffer!, gouraudPaint!);
                 }
 
                 prevPts = points;
@@ -230,7 +223,7 @@ internal partial class SkiaStreamProcessor
     private void TessellateAndDrawCoonsPatch(Shading shading, CurrentGraphicsState currentState,
         ReadOnlySpan<SKPoint> pts, double[][] cornerColors,
         SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
-        SKPaint paint, ShadingColorCache? colorCache)
+        SKPaint paint)
     {
         // Subdivide proportionally to the patch size — a fine mesh of tiny patches needs only
         // a cell or two each rather than the full 32×32. See ComputePatchSubdivisions.
@@ -298,7 +291,7 @@ internal partial class SkiaStreamProcessor
                           - u * v * p11y - oneMinusU * v * p01y;
 
                 grid[rowOffset + i] = new SKPoint(x, y);
-                gridCol[rowOffset + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, coonsEvalBuffer, colorCache);
+                gridCol[rowOffset + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, coonsEvalBuffer);
             }
         }
 
@@ -312,9 +305,9 @@ internal partial class SkiaStreamProcessor
     /// rendering that vertex-colour Gouraud cannot.
     /// </summary>
     private void DrawCoonsPatchTextured(Shading shading, CurrentGraphicsState currentState,
-        ReadOnlySpan<SKPoint> pts, double[][] cornerColors, ShadingColorCache? colorCache)
+        ReadOnlySpan<SKPoint> pts, double[][] cornerColors)
     {
-        using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize, colorCache);
+        using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
 
         const int gridLen = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
         const int triVertexCount = PatchSubdivisions * PatchSubdivisions * 6;

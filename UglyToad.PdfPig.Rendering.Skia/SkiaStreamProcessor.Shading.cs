@@ -378,8 +378,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static SKColor EvaluatePatchColor(Shading shading, double alpha,
-            double[][] cornerColors, float u, float v, double[] interpBuffer, Span<double> evalBuffer,
-            ShadingColorCache? colorCache)
+            double[][] cornerColors, float u, float v, double[] interpBuffer, Span<double> evalBuffer)
         {
             // Cache the four corner arrays once per call so the inner k-loop walks four
             // contiguous double[] strides rather than re-dereferencing cornerColors[...]
@@ -399,13 +398,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             for (int k = 0; k < components; k++)
             {
                 interpBuffer[k] = w00 * cc0[k] + w10 * cc1[k] + w11 * cc2[k] + w01 * cc3[k];
-            }
-
-            // The cache pre-bakes shading.Eval + colour-space conversion; this is the hot path for
-            // Separation/DeviceN meshes whose tint transform is an expensive PostScript function.
-            if (colorCache is not null)
-            {
-                return colorCache.GetColor(new ReadOnlySpan<double>(interpBuffer, 0, components));
             }
 
             int written = shading.Eval(new ReadOnlySpan<double>(interpBuffer, 0, components), evalBuffer);
@@ -455,7 +447,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </para>
         /// </summary>
         private static SKBitmap BuildPatchTexture(Shading shading, CurrentGraphicsState currentState,
-            double[][] cornerColors, int texSize, ShadingColorCache? colorCache)
+            double[][] cornerColors, int texSize)
         {
             var bitmap = new SKBitmap(texSize, texSize, SKColorType.Rgba8888, SKAlphaType.Unpremul);
             int components = cornerColors[0].Length;
@@ -474,45 +466,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             Span<byte> pixelBytes = bitmap.GetPixelSpan();
             int rowStride = texSize * 4;
-
-            // Fast path: the shading Function (if any) and the colour-space conversion — which for
-            // a Separation/DeviceN colour space invokes a per-texel PostScript tint transform —
-            // are pre-baked into colorCache, so this 262 K-iteration loop becomes a bilinear blend
-            // plus a table lookup instead of a full evaluation per texel. The difference between
-            // seconds and milliseconds for mesh shadings with many patches.
-            if (colorCache is not null)
-            {
-                ReadOnlySpan<double> interpSpanFast = interp;
-                for (int j = 0; j < texSize; j++)
-                {
-                    float v = j * invDen;
-                    float oneMinusV = 1f - v;
-                    int rowOffset = j * rowStride;
-                    for (int i = 0; i < texSize; i++)
-                    {
-                        float u = i * invDen;
-                        float oneMinusU = 1f - u;
-                        double w00 = oneMinusU * oneMinusV;
-                        double w10 = u * oneMinusV;
-                        double w11 = u * v;
-                        double w01 = oneMinusU * v;
-                        for (int k = 0; k < components; k++)
-                        {
-                            interp[k] = w00 * cc0[k] + w10 * cc1[k] + w11 * cc2[k] + w01 * cc3[k];
-                        }
-
-                        SKColor c = colorCache.GetColor(interpSpanFast.Slice(0, components));
-
-                        int idx = rowOffset + i * 4;
-                        pixelBytes[idx] = c.Red;
-                        pixelBytes[idx + 1] = c.Green;
-                        pixelBytes[idx + 2] = c.Blue;
-                        pixelBytes[idx + 3] = c.Alpha;
-                    }
-                }
-
-                return bitmap;
-            }
 
             // Per-pixel Eval buffer — keeps the 262 K-iteration inner loop allocation-free.
             Span<double> patchEvalOut = stackalloc double[ShadingEvalBufferSize];
@@ -551,152 +504,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             return bitmap;
         }
 
-        /// <summary>
-        /// A precomputed N-D lookup table that maps a mesh-shading vertex's interpolated stream
-        /// colour components to a final <see cref="SKColor"/>, with the shading Function (if any)
-        /// and the colour-space conversion already applied.
-        /// <para>
-        /// Mesh shadings (PDF 1.7 §8.7.4.5.5–.7) evaluate, for every tessellated vertex/texel, the
-        /// shading Function and then the colour space. When the colour space is a Separation or
-        /// DeviceN with a PostScript (Type 4) tint transform, that per-vertex evaluation dominates
-        /// rendering time — a single tensor mesh can ask for tens of millions of evaluations. The
-        /// inputs are low-dimensional (1 component for the function/Separation case, 2–4 for
-        /// DeviceN), so sampling the whole pipeline once onto a grid and looking it up per vertex
-        /// turns minutes into milliseconds. Nearest-neighbour sampling is sufficient: the patch is
-        /// tessellated densely and the GPU interpolates colours between grid vertices anyway.
-        /// </para>
-        /// </summary>
-        private sealed class ShadingColorCache
-        {
-            private readonly SKColor[] _table;
-            private readonly double[] _lo;
-            private readonly double[] _scale; // per-dim (sizePerDim - 1) / (hi - lo)
-            private readonly int[] _stride;
-            private readonly int _dims;
-            private readonly int _sizePerDim;
-
-            private ShadingColorCache(SKColor[] table, double[] lo, double[] scale, int[] stride,
-                int dims, int sizePerDim)
-            {
-                _table = table;
-                _lo = lo;
-                _scale = scale;
-                _stride = stride;
-                _dims = dims;
-                _sizePerDim = sizePerDim;
-            }
-
-            /// <summary>
-            /// Builds a cache for a mesh shading, or returns <see langword="null"/> when caching is
-            /// not worthwhile/possible (unsupported component count or malformed Decode) so the
-            /// caller keeps evaluating per vertex.
-            /// </summary>
-            public static ShadingColorCache? TryBuild(Shading shading, double[] decode,
-                int numComponents, double alpha)
-            {
-                // Only worth caching — and only quantisation-safe — when per-vertex colour
-                // resolution is the bottleneck. That happens when a PostScript/stitching tint
-                // transform runs per vertex: either the shading carries its own Function, or its
-                // colour space is a Separation/DeviceN (whose conversion invokes a tint-transform
-                // function). For plain Device colour spaces the conversion is cheap arithmetic, so
-                // a table would only add visible banding. Restrict to 1–2 inputs as well, where a
-                // 1024-/256-entry-per-axis table is finer than the 8-bit output it feeds.
-                bool expensiveColorSpace = shading.ColorSpace is SeparationColorSpaceDetails
-                    or DeviceNColorSpaceDetails;
-                bool hasShadingFunction = shading.Functions is { Length: > 0 };
-                if (!expensiveColorSpace && !hasShadingFunction)
-                {
-                    return null;
-                }
-
-                if (numComponents < 1 || numComponents > 2 || decode.Length < 4 + 2 * numComponents)
-                {
-                    return null;
-                }
-
-                // Per-dimension resolution: fine enough for smooth gradients, cheap to populate
-                // once per shading (≤64 K entries).
-                int sizePerDim = numComponents == 1 ? 1024 : 256;
-
-                var lo = new double[numComponents];
-                var scale = new double[numComponents];
-                var stride = new int[numComponents];
-                int total = 1;
-                for (int d = 0; d < numComponents; d++)
-                {
-                    double cLo = decode[4 + d * 2];
-                    double cHi = decode[5 + d * 2];
-                    if (double.IsNaN(cLo) || double.IsNaN(cHi))
-                    {
-                        return null;
-                    }
-
-                    lo[d] = cLo;
-                    double span = cHi - cLo;
-                    scale[d] = Math.Abs(span) < 1e-12 ? 0.0 : (sizePerDim - 1) / span;
-                    stride[d] = total;
-                    total *= sizePerDim;
-                }
-
-                var table = new SKColor[total];
-                ColorSpaceDetails colorSpace = shading.ColorSpace;
-                Span<double> evalOut = stackalloc double[ShadingEvalBufferSize];
-                Span<double> input = stackalloc double[4];
-                Span<int> counter = stackalloc int[4];
-                counter.Clear();
-                double invDen = sizePerDim > 1 ? 1.0 / (sizePerDim - 1) : 0.0;
-
-                for (int flat = 0; flat < total; flat++)
-                {
-                    for (int d = 0; d < numComponents; d++)
-                    {
-                        double cLo = decode[4 + d * 2];
-                        double cHi = decode[5 + d * 2];
-                        input[d] = cLo + (cHi - cLo) * (counter[d] * invDen);
-                    }
-
-                    int written = shading.Eval(input.Slice(0, numComponents), evalOut);
-                    table[flat] = colorSpace.GetSKColor(evalOut.Slice(0, written), alpha);
-
-                    // Increment the mixed-radix counter (dimension 0 is the fastest-varying, matching
-                    // stride[0] == 1 so `flat` and `counter` stay in lock-step).
-                    for (int d = 0; d < numComponents; d++)
-                    {
-                        if (++counter[d] < sizePerDim)
-                        {
-                            break;
-                        }
-                        counter[d] = 0;
-                    }
-                }
-
-                return new ShadingColorCache(table, lo, scale, stride, numComponents, sizePerDim);
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public SKColor GetColor(ReadOnlySpan<double> components)
-            {
-                int idx = 0;
-                int last = _sizePerDim - 1;
-                for (int d = 0; d < _dims; d++)
-                {
-                    int i = (int)((components[d] - _lo[d]) * _scale[d] + 0.5);
-                    if (i < 0)
-                    {
-                        i = 0;
-                    }
-                    else if (i > last)
-                    {
-                        i = last;
-                    }
-
-                    idx += i * _stride[d];
-                }
-
-                return _table[idx];
-            }
-        }
-        
         /// <summary>
         /// Expands the (n+1)² grid of <paramref name="positions"/> / <paramref name="texCoords"/>
         /// into flat triangle vertex arrays — two triangles per cell, three vertices each.

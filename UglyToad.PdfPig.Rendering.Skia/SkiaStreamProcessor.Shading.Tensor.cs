@@ -66,11 +66,6 @@ internal partial class SkiaStreamProcessor
         // See RenderCoonsPatchShading for why the function path uses textured drawing.
         bool hasFunction = shading.Functions is { Length: > 0 };
 
-        // Pre-evaluate the Function + colour-space conversion into a lookup table shared by
-        // every patch (see ShadingColorCache / RenderCoonsPatchShading).
-        ShadingColorCache? colorCache = ShadingColorCache.TryBuild(shading, decode,
-            numStreamColorComponents, currentState.AlphaConstantNonStroking);
-
         // Per-shading scratch for the no-function (vertex-colour Gouraud) path. See
         // RenderCoonsPatchShading for the per-patch-DrawVertices rationale.
         const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
@@ -181,12 +176,12 @@ internal partial class SkiaStreamProcessor
 
                 if (hasFunction)
                 {
-                    DrawTensorPatchTextured(shading, currentState, points, cornerColors, colorCache);
+                    DrawTensorPatchTextured(shading, currentState, points, cornerColors);
                 }
                 else
                 {
                     TessellateAndDrawTensorPatch(shading, currentState, points, cornerColors,
-                        grid!, gridCol!, interpBuffer!, gouraudPaint!, colorCache);
+                        grid!, gridCol!, interpBuffer!, gouraudPaint!);
                 }
 
                 prevPts = points;
@@ -211,7 +206,7 @@ internal partial class SkiaStreamProcessor
     private void TessellateAndDrawTensorPatch(Shading shading, CurrentGraphicsState currentState,
         SKPoint[] tcp, double[][] cornerColors,
         SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
-        SKPaint paint, ShadingColorCache? colorCache)
+        SKPaint paint)
     {
         // Map the 16 stream points into a 4×4 grid stored row-major in a stackalloc
         // span. Indexing is row * 4 + col (col is u, row is v). See the comment on
@@ -268,7 +263,7 @@ internal partial class SkiaStreamProcessor
                 }
 
                 grid[j * (n + 1) + i] = new SKPoint(x, y);
-                gridCol[j * (n + 1) + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, tensorEvalBuffer, colorCache);
+                gridCol[j * (n + 1) + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, tensorEvalBuffer);
             }
         }
 
@@ -279,9 +274,9 @@ internal partial class SkiaStreamProcessor
     /// Draws a Tensor-product patch via texture mapping. See <see cref="DrawCoonsPatchTextured"/>.
     /// </summary>
     private void DrawTensorPatchTextured(Shading shading, CurrentGraphicsState currentState,
-        ReadOnlySpan<SKPoint> tcp, double[][] cornerColors, ShadingColorCache? colorCache)
+        ReadOnlySpan<SKPoint> tcp, double[][] cornerColors)
     {
-        using SKBitmap bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize, colorCache);
+        using SKBitmap bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize);
 
         // Row-major 4×4 control grid lives on the stack — saves the heap allocation the
         // SKPoint[,] form paid per patch.
