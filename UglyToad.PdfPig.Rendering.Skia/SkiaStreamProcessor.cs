@@ -264,8 +264,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 _transparencyLayerPaints.Push(null);
                 _pendingMasks.Push(null);
             }
-
-            EndPath();
         }
 
         public override void ModifyClippingIntersect(FillingRule clippingRule)
