@@ -58,6 +58,9 @@
 		<None Update="Documents\0000851.pdf">
 		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+		<None Update="Documents\0966203.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 		<None Update="Documents\0966681.pdf">
 		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
@@ -483,6 +486,9 @@
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\0000190_cropped_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\0966203_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\0966761_1.png">
 		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
