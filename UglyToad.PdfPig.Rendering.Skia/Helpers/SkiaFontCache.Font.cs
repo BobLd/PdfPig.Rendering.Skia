@@ -27,6 +27,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
     internal sealed partial class SkiaFontCache : IDisposable
     {
+        /// <summary>
+        /// The "Noto" families are tried first. They're purpose-built as the universal "no tofu" fallback
+        /// and are present across the Linux/macOS runners, so the choice is both good quality and consistent.
+        /// </summary>
+        private const string NotoFont = "Noto";
+
         private readonly Lazy<SkiaFontCacheItem> DefaultSkiaFontCacheItem = new(() => new SkiaFontCacheItem(SKTypeface.Default)); // Do not make static
 
         private readonly ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath?>>> _cache = new();
@@ -94,6 +100,24 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             fallback.Dispose();
                         }
                     }
+
+                    // Some native SkiaSharp builds — notably SkiaSharp.NativeAssets.Linux.NoDependencies,
+                    // which the test/CI runners use to avoid the libfontconfig/libfreetype/libuuid native
+                    // dependencies of the full build — don't implement codepoint-based MatchCharacter and
+                    // return null. Without this, glyphs from non-embedded fonts (e.g. CJK text referencing
+                    // "SimSun" by name) silently vanish on Linux while rendering fine on Windows/macOS.
+                    // The font families ARE enumerable, so scan them for one that can render the character.
+                    // Ordinal-first selection keeps the choice deterministic across runs and architectures.
+                    if (!string.IsNullOrWhiteSpace(unicode) &&
+                        (currentTypeface is null || !currentTypeface.ContainsGlyph(codepoint)))
+                    {
+                        SKTypeface? enumerated = MatchCharacterByEnumeration(codepoint, style);
+                        if (enumerated is not null)
+                        {
+                            currentTypeface?.Dispose();
+                            currentTypeface = enumerated;
+                        }
+                    }
                 }
                 
                 // MOZILLA-LINK-625-0 ("BVNSKD+wasy10|0|0") ;
@@ -112,6 +136,59 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     _lock.ExitReadLock();
                 }
             }
+        }
+
+        // Font family names known to the font manager, sorted ordinally so character-coverage
+        // scanning is deterministic. Built lazily because the installed font set is stable for
+        // the lifetime of the (document-scoped) cache.
+        private string[]? _sortedFontFamilies;
+
+        /// <summary>
+        /// Last-resort fallback used when <see cref="SKFontManager.MatchCharacter(int)"/> cannot supply a
+        /// typeface for <paramref name="codepoint"/> (e.g. the NoDependencies native build). Scans the
+        /// installed font families and returns the first whose typeface contains the glyph, or <c>null</c>
+        /// if none can render it. The Noto fonts are prioritised. Within each pass families are visited in
+        /// stable ordinal order so the result is deterministic across runs and architectures.
+        /// </summary>
+        private SKTypeface? MatchCharacterByEnumeration(int codepoint, SKFontStyle style)
+        {
+            string[] families = _sortedFontFamilies ??= BuildSortedFontFamilies();
+
+            return FindCoveringTypeface(families, codepoint, style, notoOnly: true)
+                   ?? FindCoveringTypeface(families, codepoint, style, notoOnly: false);
+        }
+
+        private SKTypeface? FindCoveringTypeface(string[] families, int codepoint, SKFontStyle style, bool notoOnly)
+        {
+            foreach (string family in families)
+            {
+                if (notoOnly && !family.StartsWith(NotoFont, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                SKTypeface? candidate = _skFontManager.MatchFamily(family, style);
+                if (candidate is null)
+                {
+                    continue;
+                }
+
+                if (candidate.ContainsGlyph(codepoint))
+                {
+                    return candidate;
+                }
+
+                candidate.Dispose();
+            }
+
+            return null;
+        }
+
+        private string[] BuildSortedFontFamilies()
+        {
+            string[] families = _skFontManager.GetFontFamilies();
+            Array.Sort(families, StringComparer.Ordinal);
+            return families;
         }
 
         private bool TryGetFontCacheItem(string fontKey,string unicode, int codepoint, out SkiaFontCacheItem? item)
