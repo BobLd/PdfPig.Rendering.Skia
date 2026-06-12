@@ -421,6 +421,9 @@
 		<None Update="Documents\Rotated Text Libre Office.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+		<None Update="Documents\Rotation 45.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 		<None Update="Documents\smallest.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
@@ -879,6 +882,9 @@
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\Rotated Text Libre Office_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\Rotation 45_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\SPARC - v9 Architecture Manual_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
