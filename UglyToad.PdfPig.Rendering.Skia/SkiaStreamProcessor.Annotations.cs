@@ -79,13 +79,20 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     continue;
                 }
 
-                if (!annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Rect, PdfScanner, out var rectToken))
+                // Most annotations are placed using their declared /Rect. Text (sticky note) icons are
+                // the exception: their generated appearance is anchored to a fixed size and writes the
+                // adjusted /Rect onto the appearance stream dictionary (DictionaryToken.With returns a new
+                // dictionary and so does not mutate the annotation), so for Text we read it back from there.
+                DictionaryToken rectSource = annotation.Type == AnnotationType.Text
+                    ? appearance.StreamDictionary
+                    : annotation.AnnotationDictionary;
+
+                if (!rectSource.TryGet<ArrayToken>(NameToken.Rect, PdfScanner, out var rectToken))
                 {
                     // TODO - log
                     continue; // Should never happen
                 }
 
-                // Don't use annotation.Rectangle, we might have updated it in GetNormalAppearanceAsStream()
                 var rectPoints = rectToken.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
                 PdfRectangle rect = new PdfRectangle(rectPoints[0], rectPoints[1], rectPoints[2], rectPoints[3]);
 
@@ -396,6 +403,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             return annotation.Type switch
             {
+                AnnotationType.Text => GenerateTextNormalAppearanceAsStream(annotation),
                 AnnotationType.StrikeOut => GenerateStrikeOutNormalAppearanceAsStream(annotation),
                 AnnotationType.Highlight => GenerateHighlightNormalAppearanceAsStream(annotation),
                 AnnotationType.Underline => GenerateUnderlineNormalAppearanceAsStream(annotation),

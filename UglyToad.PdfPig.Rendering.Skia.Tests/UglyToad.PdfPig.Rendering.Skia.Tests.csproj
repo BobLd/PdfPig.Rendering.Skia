@@ -94,7 +94,13 @@
 		<None Update="Documents\2_uncolor_tiling.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+		<None Update="Documents\annotation-colors-2.pdf">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 		<None Update="Documents\annots_rotated.pdf">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="Documents\text-icons-all.pdf">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 		<None Update="Documents\Apitron.PDF.Kit.Samples_patternFill-rotated.pdf">
@@ -556,6 +562,9 @@
 		<None Update="ExpectedImages\pdfpig_skia\2_uncolor_tiling_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
+		<None Update="ExpectedImages\pdfpig_skia\annotation-colors-2_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
 		<None Update="ExpectedImages\pdfpig_skia\annots_rotated_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
@@ -888,6 +897,9 @@
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\SPARC - v9 Architecture Manual_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\text-icons-all_1.png">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\TIKA-1552-0_1.png">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
