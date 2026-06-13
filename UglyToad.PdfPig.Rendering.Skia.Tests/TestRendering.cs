@@ -804,6 +804,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "Rotation 45_1.png",
                 "Rotation 45.pdf", 1, 2
             },
+            new object[]
+            {
+                "text-icons-all_1.png",
+                "text-icons-all.pdf", 1, 2
+            },
+            new object[]
+            {
+                "annotation-colors-2_1.png",
+                "annotation-colors-2.pdf", 1, 2
+            },
         };
 
         [Theory(Skip = "for debugging purpose.")]
