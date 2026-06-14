@@ -79,15 +79,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     continue;
                 }
 
-                // Most annotations are placed using their declared /Rect. Text (sticky note) icons are
-                // the exception: their generated appearance is anchored to a fixed size and writes the
-                // adjusted /Rect onto the appearance stream dictionary (DictionaryToken.With returns a new
-                // dictionary and so does not mutate the annotation), so for Text we read it back from there.
-                DictionaryToken rectSource = annotation.Type == AnnotationType.Text
-                    ? appearance.StreamDictionary
-                    : annotation.AnnotationDictionary;
-
-                if (!rectSource.TryGet<ArrayToken>(NameToken.Rect, PdfScanner, out var rectToken))
+                if (!appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Rect, PdfScanner, out var rectToken))
                 {
                     // TODO - log
                     continue; // Should never happen
@@ -270,8 +262,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 normalAppearance = SetAppearanceContent(annotation, normalAppearance);
             }
 
-            var dict = normalAppearance.StreamDictionary
-                .With(NameToken.Rect, annotation.Rectangle.ToArrayToken());
+            // The form XObject's dictionary has no /Rect, so carry the annotation's declared /Rect onto it
+            // for DrawAnnotations. Use the raw array (unrotated page space) rather than annotation.Rectangle,
+            // which initialMatrix has already rotated/translated - the canvas CTM re-applies that matrix.
+            IToken rectToken = annotation.AnnotationDictionary.TryGet<ArrayToken>(NameToken.Rect, PdfScanner, out var rawRect)
+                ? rawRect
+                : annotation.Rectangle.ToArrayToken();
+            var dict = normalAppearance.StreamDictionary.With(NameToken.Rect, rectToken);
 
             return new StreamToken(dict, normalAppearance.Data);
         }
@@ -521,9 +518,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     Graphics.Operations.PathPainting.StrokePath.Value.Write(ms);
 
-                    var dict = annotation.AnnotationDictionary
-                        .With(NameToken.Rect, rect.ToArrayToken());
-                    dict = setTransformationMatrix(dict, annotation.Rectangle);
+                    var dict = setTransformationMatrix(annotation.AnnotationDictionary, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -711,9 +706,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         of += 8;
                     }
 
-                    var dict = annotation.AnnotationDictionary
-                        .With(NameToken.Rect, rect.ToArrayToken());
-                    dict = setTransformationMatrix(dict, annotation.Rectangle);
+                    var dict = setTransformationMatrix(annotation.AnnotationDictionary, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -830,9 +823,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     Graphics.Operations.PathPainting.StrokePath.Value.Write(ms);
 
-                    var dict = annotation.AnnotationDictionary
-                        .With(NameToken.Rect, rect.ToArrayToken());
-                    dict = setTransformationMatrix(dict, annotation.Rectangle);
+                    var dict = setTransformationMatrix(annotation.AnnotationDictionary, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -974,11 +965,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                         Graphics.Operations.PathPainting.StrokePath.Value.Write(ms);
                     }
-                    //contentStream.drawShape(lineWidth, hasStroke, false);
-
-                    var dict = annotation.AnnotationDictionary
-                        .With(NameToken.Rect, rect.ToArrayToken());
-                    dict = setTransformationMatrix(dict, annotation.Rectangle);
+                    
+                    var dict = setTransformationMatrix(annotation.AnnotationDictionary, annotation.Rectangle);
 
                     return new StreamToken(dict, ms.ToArray());
                 }
@@ -1055,9 +1043,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Write(ms);
 
-                var dict = annotation.AnnotationDictionary
-                    .With(NameToken.Rect, rect.ToArrayToken());
-                dict = setTransformationMatrix(dict, annotation.Rectangle);
+                var dict = setTransformationMatrix(annotation.AnnotationDictionary, annotation.Rectangle);
 
                 return new StreamToken(dict, ms.ToArray());
             }
