@@ -169,28 +169,20 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 var info = new SKImageInfo(width, height, colorSpace, alphaType);
 
-                ReadOnlySpan<byte> maskSpan = ReadOnlySpan<byte>.Empty;
                 byte rMin = 0, gMin = 0, bMin = 0, rMax = 0, gMax = 0, bMax = 0;
                 ImageAlphaType alphaMode = ImageAlphaType.Opaque;
 
+                // A soft mask (/SMask) or stencil mask (/Mask) supplied as a separate image is kept at
+                // its own resolution here and composited once the colour has been generated (see the
+                // CompositeMaskImage call below). Compositing at the higher of the two resolutions
+                // avoids destroying a high-resolution mask by collapsing it down to the base image size.
+                bool compositeMaskImage = false;
                 if (pdfImage.MaskImage is not null)
                 {
-                    if (pdfImage.MaskImage.TryGenerate(out mask!, log))
+                    if (pdfImage.MaskImage.TryGenerate(out mask!, log) && !mask.IsEmpty)
                     {
-                        if (!info.Rect.Equals(mask.Info.Rect))
-                        {
-                            var maskInfo = new SKImageInfo(info.Width, info.Height, mask.Info.ColorType, mask.Info.AlphaType);
-                            SKBitmap resized = mask.Resize(maskInfo, pdfImage.MaskImage.GetSamplingOption());
-                            resized.SetImmutable();
-                            mask.Dispose();
-                            mask = resized;
-                        }
-
-                        if (!mask.IsEmpty)
-                        {
-                            maskSpan = mask.GetPixelSpan();
-                            alphaMode = pdfImage.MaskImage.IsImageMask ? ImageAlphaType.MaskInv : ImageAlphaType.Mask;
-                        }
+                        alphaMode = pdfImage.MaskImage.IsImageMask ? ImageAlphaType.MaskInv : ImageAlphaType.Mask;
+                        compositeMaskImage = true;
                     }
                 }
                 else if (pdfImage.ImageDictionary.TryGet(NameToken.Mask, out ArrayToken maskArr))
@@ -237,7 +229,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     alphaMode = ImageAlphaType.ColourKey;
                 }
 
-                ImageAlphaResolver getImageAlphaChannel = ResolveAlpha(alphaMode, rMin, gMin, bMin, rMax, gMax, bMax);
+                // The external mask image (if any) is applied after this colour pass, at the composite
+                // resolution, so here we only resolve the inline colour-key alpha (or leave opaque).
+                ImageAlphaResolver getImageAlphaChannel = ResolveAlpha(
+                    alphaMode == ImageAlphaType.ColourKey ? ImageAlphaType.ColourKey : ImageAlphaType.Opaque,
+                    rMin, gMin, bMin, rMax, gMax, bMax);
+                ReadOnlySpan<byte> maskSpan = ReadOnlySpan<byte>.Empty;
+
                 skBitmap = new SKBitmap(info);
                 Span<byte> rasterSpan = skBitmap.GetPixelSpan();
                 int pixelCount = width * height;
@@ -260,11 +258,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         rasterSpan[dstIdx + 3] = getImageAlphaChannel(p, maskSpan, r, g, b);
                         dstIdx += 4;
                     }
-
-                    return true;
                 }
-
-                if (numberOfComponents == 3)
+                else if (numberOfComponents == 3)
                 {
                     int srcIdx = 0;
                     int dstIdx = 0;
@@ -281,11 +276,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         rasterSpan[dstIdx + 3] = getImageAlphaChannel(p, maskSpan, r, g, b);
                         dstIdx += 4;
                     }
-
-                    return true;
                 }
-
-                if (numberOfComponents == 1)
+                else if (numberOfComponents == 1)
                 {
                     if (isRgba)
                     {
@@ -300,16 +292,29 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                             rasterSpan[dstIdx + 3] = getImageAlphaChannel(p, maskSpan, gv, gv, gv);
                             dstIdx += 4;
                         }
-
+                    }
+                    else
+                    {
+                        // Gray8, no alpha channel: no separate mask image is possible here.
+                        imageSpan.CopyTo(rasterSpan);
                         return true;
                     }
-
-                    imageSpan.CopyTo(rasterSpan);
-
-                    return true;
+                }
+                else
+                {
+                    throw new Exception($"Could not process image with ColorSpace={pdfImage.ColorSpaceDetails.BaseType}, numberOfComponents={numberOfComponents}.");
                 }
 
-                throw new Exception($"Could not process image with ColorSpace={pdfImage.ColorSpaceDetails.BaseType}, numberOfComponents={numberOfComponents}.");
+                // Composite the separate mask image (SMask / stencil) at the higher of the colour and
+                // mask resolutions so the mask's detail is preserved (we upscale the - often tiny -
+                // base colour rather than downsampling the mask onto it).
+                if (compositeMaskImage)
+                {
+                    skBitmap = CompositeMaskImage(skBitmap, mask!, alphaMode == ImageAlphaType.MaskInv,
+                        pdfImage.GetSamplingOption(), pdfImage.MaskImage!.GetSamplingOption());
+                }
+
+                return true;
             }
             catch (Exception ex)
             {
@@ -322,6 +327,66 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             skBitmap?.Dispose();
             return false;
+        }
+
+        /// <summary>
+        /// Composites a separate mask image (a <c>/SMask</c> soft mask or a <c>/Mask</c> stencil) onto
+        /// the generated colour bitmap. The two images may have different resolutions; per the PDF
+        /// specification each is sampled independently over the same unit square. We therefore
+        /// composite at the higher of the two resolutions - upscaling the colour when necessary - so a
+        /// high-resolution mask is never collapsed onto a tiny base colour image (which would discard
+        /// all of its detail and leave a flat block of colour).
+        /// </summary>
+        /// <param name="colour">The opaque colour bitmap (RGBA, <see cref="SKAlphaType.Unpremul"/>). Disposed if replaced.</param>
+        /// <param name="mask">The mask bitmap (single byte per pixel: <c>Gray8</c> for an SMask, <c>Alpha8</c> for a stencil).</param>
+        /// <param name="invertMask">When <see langword="true"/> the mask byte is inverted (stencil image masks).</param>
+        /// <param name="colourSampling">Sampling used when upscaling the colour bitmap.</param>
+        /// <param name="maskSampling">Sampling used when resizing the mask bitmap.</param>
+        private static SKBitmap CompositeMaskImage(SKBitmap colour, SKBitmap mask, bool invertMask,
+            SKSamplingOptions colourSampling, SKSamplingOptions maskSampling)
+        {
+            int outWidth = Math.Max(colour.Info.Width, mask.Info.Width);
+            int outHeight = Math.Max(colour.Info.Height, mask.Info.Height);
+
+            // Upscale the colour to the composite resolution (no-op when it already matches).
+            if (colour.Info.Width != outWidth || colour.Info.Height != outHeight)
+            {
+                var colourInfo = new SKImageInfo(outWidth, outHeight, colour.ColorType, colour.AlphaType);
+                SKBitmap upscaled = colour.Resize(colourInfo, colourSampling);
+                colour.Dispose();
+                colour = upscaled;
+            }
+
+            // Bring the mask to the same resolution (no-op when it already matches).
+            SKBitmap maskAtOut = mask;
+            bool disposeMaskAtOut = false;
+            if (mask.Info.Width != outWidth || mask.Info.Height != outHeight)
+            {
+                var maskInfo = new SKImageInfo(outWidth, outHeight, mask.ColorType, mask.AlphaType);
+                maskAtOut = mask.Resize(maskInfo, maskSampling);
+                disposeMaskAtOut = true;
+            }
+
+            try
+            {
+                Span<byte> dst = colour.GetPixelSpan();
+                ReadOnlySpan<byte> maskSpan = maskAtOut.GetPixelSpan();
+                int pixelCount = outWidth * outHeight;
+
+                for (int p = 0; p < pixelCount; p++)
+                {
+                    dst[(p * 4) + 3] = invertMask ? (byte)~maskSpan[p] : maskSpan[p];
+                }
+            }
+            finally
+            {
+                if (disposeMaskAtOut)
+                {
+                    maskAtOut.Dispose();
+                }
+            }
+
+            return colour;
         }
 
         private static SKSamplingOptions GetSamplingOption(this IPdfImage pdfImage)
