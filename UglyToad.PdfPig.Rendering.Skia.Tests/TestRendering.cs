@@ -814,16 +814,18 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "annotation-colors-2_1.png",
                 "annotation-colors-2.pdf", 1, 2
             },
+            new object[]
+            {
+                "0000079_1.png",
+                "0000079.pdf", 1, 2
+            },
+            new object[]
+            {
+                "0966260_1.png",
+                "0966260.pdf", 1, 2
+            },
         };
-
-        [Theory(Skip = "for debugging purpose.")]
-        [MemberData(nameof(documents))]
-        public void TestAtScale(string expectedImage, string pdfFile, int pageNumber, int scale)
-        {
-            bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale);
-            Assert.True(success);
-        }
-
+        
         [Theory]
         [MemberData(nameof(documentsPdfPig))]
         public void PdfPigSkiaTest(string expectedImage, string pdfFile, int pageNumber, int scale)
