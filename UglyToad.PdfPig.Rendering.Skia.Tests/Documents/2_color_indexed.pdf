@@ -1,0 +1,236 @@
+%PDF-1.7	
+
+1 0 obj		
+<<
+	/Type /Pages
+	/Kids [2 0 R]		
+	/Count 1
+>>
+endobj
+
+2 0 obj		
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 531 666]		
+	/Contents [4 0 R]	
+	/Resources <<
+		/Font <</F1 5 0 R>>
+		/ColorSpace<</CS1 6 0 R /CS2 7 0 R /CS3 8 0 R 
+			     /CS4 9 0 R /CS5 11 0 R /CS6 14 0 R 
+			     /CS7 16 0 R /CS8 18 0 R /CS9 21 0 R>>
+	>>			
+	
+>>
+endobj
+
+3 0 obj		
+<<
+	/Type /Catalog
+	/Pages 1 0 R	
+>>
+endobj
+
+4 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+BT /F1 25 Tf 180 580 TD (Indexed)Tj
+/F1 15 Tf -160 -55 TD (DeviceRGB)Tj
+130 0 TD (DeviceCMYK)Tj
+130 0 TD (DeviceGray)Tj
+-260 -100 TD (CalRGB)Tj
+130 0 TD (Iccbased-3)Tj
+130 0 TD (CalGray)Tj
+-260 -100 TD (Lab)Tj
+130 0 TD (Separation)Tj
+130 0 TD (DeviceN)Tj
+ET
+
+q 1 0 0 1 0 460 cm
+/CS1 cs 3 scn 20 0 70 60 re f
+/CS2 cs 3 scn 150 0 70 60 re f
+/CS3 cs 3 scn 280 0 70 60 re f
+Q
+
+q 1 0 0 1 0 360 cm
+/CS4 cs 3 scn 20 0 70 60 re f
+/CS5 cs 3 scn 150 0 70 60 re f
+/CS6 cs 3 scn 280 0 70 60 re f
+Q
+
+q 1 0 0 1 0 260 cm
+/CS7 cs 0 scn 20 0 70 60 re b
+/CS8 cs 3 scn 150 0 70 60 re f
+/CS9 cs 3 scn 280 0 70 60 re f
+Q
+
+endstream
+endobj
+
+5 0 obj
+<<
+	/Type /Font
+	/Subtype /Type1
+	/BaseFont /Helvetica
+>>
+endobj
+
+6 0 obj
+[/Indexed /DeviceRGB 4 <000000 010101 445522 889944 558866>]
+endobj
+
+7 0 obj
+[/Indexed /DeviceCMYK 4 <01050809 55886622 44556622 7F00007F 88559922>]
+endobj
+
+8 0 obj
+[/Indexed /DeviceGray 5 <05 A2 B5 C1 55 66>]
+endobj
+
+9 0 obj
+[/Indexed 10 0 R 5 <000000 010101 445522 889944 558866 AABBCC>]
+endobj
+
+10 0 obj
+[/CalRGB <<%/WhitePoint [1.0 1.0 0.5 ]
+/WhitePoint [0.905 1.0 1.0890 ]
+/Gamma [1.800000 1.800000 1.800000 ]
+/Matrix  [0.4497 0.2446 0.0252  0.3163 0.6720 0.1412 0.1845 0.0833 0.9227]
+>>
+]
+endobj
+
+11 0 obj
+[/Indexed 12 0 R 5 <000000 010101 445522 889944 558866 AABBCC>]
+endobj
+
+12 0 obj% Color space
+[ /ICCBased 13 0 R ]
+endobj
+
+13 0 obj% ICC profile stream
+<< /N 3
+%/Alternate /DeviceRGB
+/Length 0
+/Filter /ASCIIHexDecode
+>>
+stream
+00 00 02 0C 61 70 70 6C 02 00 00 00 6D 6E 74 72
+52 47 42 20 58 59 5A 20 07 CB 00 02 00 16 00 0E
+00 22 00 2C 61 63 73 70 41 50 50 4C 00 00 00 00
+61 70 70 6C 00 00 04 01 00 00 00 00 00 00 00 02
+00 00 00 00 00 00 F6 D4 00 01 00 00 00 00 D3 2B
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 09 64 65 73 63 00 00 00 F0 00 00 00 71
+72 58 59 5A 00 00 01 64 00 00 00 14 67 58 59 5A
+00 00 01 78 00 00 00 14 62 58 59 5A 00 00 01 8C
+00 00 00 14 72 54 52 43 00 00 01 A0 00 00 00 0E
+67 54 52 43 00 00 01 B0 00 00 00 0E 62 54 52 43
+00 00 01 C0 00 00 00 0E 77 74 70 74 00 00 01 D0
+00 00 00 14 63 70 72 74 00 00 01 E4 00 00 00 27
+64 65 73 63 00 00 00 00 00 00 00 17 41 70 70 6C
+65 20 31 33 22 20 52 47 42 20 53 74 61 6E 64 61
+72 64 00 00 00 00 00 00 00 00 00 00 00 17 41 70
+70 6C 65 20 31 33 22 20 52 47 42 20 53 74 61 6E
+64 61 72 64 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 58 59 5A 58 59 5A 20 00 00 00 00 00 00 63 0A
+00 00 35 0F 00 00 03 30 58 59 5A 20 00 00 00 00
+00 00 53 3D 00 00 AE 37 00 00 15 76 58 59 5A 20
+00 00 00 00 00 00 40 89 00 00 1C AF 00 00 BA 82
+63 75 72 76 00 00 00 00 00 00 00 01 01 CC 63 75
+63 75 72 76 00 00 00 00 00 00 00 01 01 CC 63 75
+63 75 72 76 00 00 00 00 00 00 00 01 01 CC 58 59
+58 59 5A 20 00 00 00 00 00 00 F3 1B 00 01 00 00
+00 01 67 E7 74 65 78 74 00 00 00 00 20 43 6F 70
+79 72 69 67 68 74 20 41 70 70 6C 65 20 43 6F 6D
+70 75 74 65 72 73 20 31 39 39 34 00 >
+endstream
+endobj
+
+14 0 obj
+[/Indexed 15 0 R 5 <05 A2 B5 C1 55 66>]
+endobj
+
+15 0 obj
+[/CalGray <<
+/WhitePoint [0.9505 1.0000 1.0890 ]
+/Gamma 2.222000 
+>>
+]endobj
+
+16 0 obj
+[/Indexed 17 0 R 5 <FF7F7F 64007F 000000 64807F 647F7F 008080>]
+endobj
+
+17 0 obj
+[/Lab << /WhitePoint [ 0.9642 1 0.82491 ] /Range [ -128 127 -128 127 ] >> ]
+endobj
+
+18 0 obj
+[/Indexed 19 0 R 5<00 22 5A 65 58 85>]
+endobj
+
+19 0 obj		
+[/Separation /LogoGreen /DeviceCMYK 20 0 R]
+endobj
+
+20 0 obj		
+<< 
+/FunctionType 4
+/Domain [0.0 1.0]
+/Range [0.0 1.0 0.0 1.0 0.0 1.0 0.0 1.0 ]
+/Length 0
+>>
+stream
+{  dup 0.84 mul
+exch 0.00 exch dup 0.44 mul
+exch 0.21 mul
+}
+endstream
+endobj
+
+21 0 obj
+[/Indexed 22 0 R 5 <5544 8899 6622 7F7F AACC FFDD>]
+endobj
+
+22 0 obj
+[/DeviceN 
+	[/Cyan /Black] 
+	/DeviceCMYK 
+	23 0 R	
+]	
+endobj
+
+23 0 obj		
+<< 
+/FunctionType 4
+/Domain [0.0 1.0 0.0 1.0]
+/Range [0.0 1.0 0.0 1.0 0.0 1.0 0.0 1.0 ]
+/Length 0
+>>
+stream
+{0 0 3 -1 roll} 
+endstream
+endobj
+
+
+xref	
+		
+
+trailer	
+<<
+	/Size 0		
+	/Root 3 0 R	
+>>
+
+startxref
+0		
+
+%%EOF	
+ 

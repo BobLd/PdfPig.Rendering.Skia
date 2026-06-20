@@ -19,77 +19,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 {
     public class TestRendering
     {
-        public static readonly object[][] documents = new object[][]
-        {
-            new object[]
-            {
-                "Apitron.PDF.Kit.Samples_patternFill-mupdf-1.png",
-                "Apitron.PDF.Kit.Samples_patternFill.pdf", 1, 3
-            },
-            new object[]
-            {
-                "Apitron.PDF.Kit.Samples_patternFill-pdfium-1.png",
-                "Apitron.PDF.Kit.Samples_patternFill.pdf", 1, 3
-            },
-
-            new object[]
-            {
-                "cat-genetics-mupdf-1.png",
-                "cat-genetics.pdf", 1, 3
-            },
-            new object[]
-            {
-                "cat-genetics-pdfium-1.png",
-                "cat-genetics.pdf", 1, 3
-            },
-
-            new object[]
-            {
-                "cat-genetics_bobld-mupdf-1.png",
-                "cat-genetics_bobld.pdf", 1, 3
-            },
-            new object[]
-            {
-                "cat-genetics_bobld-pdfium-1.png",
-                "cat-genetics_bobld.pdf", 1, 3
-            },
-
-            new object[]
-            {
-                "GHOSTSCRIPT-699554-0.zip-4-mupdf-1.png",
-                "GHOSTSCRIPT-699554-0.zip-4.pdf", 1, 3
-            },
-            new object[]
-            {
-                "GHOSTSCRIPT-699554-0.zip-4-pdfium-1.png",
-                "GHOSTSCRIPT-699554-0.zip-4.pdf", 1, 3
-            },
-
-            /*
-            new object[]
-            {
-                "fseprd1102849-mupdf-1.png",
-                "fseprd1102849.pdf", 1, 3
-            },
-            new object[]
-            {
-                "fseprd1102849-pdfium-1.png",
-                "fseprd1102849.pdf", 1, 3
-            },
-            */
-
-            new object[]
-            {
-                "GHOSTSCRIPT-696547-0.zip-7-mupdf-1.png",
-                "GHOSTSCRIPT-696547-0.zip-7.pdf", 1, 3
-            },
-            new object[]
-            {
-                "GHOSTSCRIPT-696547-0.zip-7-pdfium-1.png",
-                "GHOSTSCRIPT-696547-0.zip-7.pdf", 1, 3
-            },
-        };
-
         public static readonly object[][] documentsPdfPig = new object[][]
         {
             // These are not perfect yet and can be updated once the rendering is improved
@@ -196,6 +125,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             {
                 "bold-italic_1.png",
                 "bold-italic.pdf", 1, 2
+            },
+            new object[]
+            {
+                "DeviceN_CS_test_3.png",
+                "DeviceN_CS_test.pdf", 3, 2
             },
             new object[]
             {
@@ -559,19 +493,16 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
 
             new object[]
             {
-                // Not completely correct but good start
                 "0000190_1.png",
                 "0000190.pdf", 1, 2
             },
             new object[]
             {
-                // Not completely correct but good start
                 "0000190_3.png",
                 "0000190.pdf", 3, 2
             },
             new object[]
             {
-                // Rendering not correct
                 "0000190_cropped_1.png",
                 "0000190_cropped.pdf", 1, 2
             },
@@ -823,6 +754,64 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
             {
                 "0966260_1.png",
                 "0966260.pdf", 1, 2
+            },
+
+            new object[]
+            {
+                "version4pdf_1.png",
+                "version4pdf.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GHOSTSCRIPT-702013-1_1.png",
+                "GHOSTSCRIPT-702013-1.pdf", 1, 2
+            },
+
+            new object[]
+            {
+                "color_icc_based_1.png",
+                "color_icc_based.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2_color_indexed_1.png",
+                "2_color_indexed.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2_color_calrgb_1.png",
+                "2_color_calrgb.pdf", 1, 2
+            },
+            new object[]
+            {
+                "2_color_lab_1.png",
+                "2_color_lab.pdf", 1, 2
+            },
+            new object[]
+            {
+                "color_calgray_1.png",
+                "color_calgray.pdf", 1, 2
+            },
+            new object[]
+            {
+                "color_calrgb_1.png",
+                "color_calrgb.pdf", 1, 2
+            },
+
+            new object[]
+            {
+                "color_lab_1.png",
+                "color_lab.pdf", 1, 2
+            },
+            new object[]
+            {
+                "color_separation_1.png",
+                "color_separation.pdf", 1, 2
+            },
+            new object[]
+            {
+                "GWG130_ICC_Source_Profile_x4_1.png",
+                "GWG130_ICC_Source_Profile_x4.pdf", 1, 2
             },
         };
         

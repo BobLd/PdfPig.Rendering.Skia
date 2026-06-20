@@ -73,6 +73,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
             bool savedFlag = _isRenderingSoftMask;
             _isRenderingSoftMask = true;
 
+            // A soft mask is an alpha/luminosity computation, not final output-device colour, so the
+            // output intent must not be applied to its device colours (otherwise black no longer has
+            // luminosity 0 and the mask's transparent regions become a visible square). Clearing the
+            // effective output intent on the graphics state achieves this; it propagates to the group's
+            // nested states (via DeepClone) and is restored below.
+            var maskState = GetCurrentState();
+            var savedOutputIntent = maskState.OutputIntent;
+            maskState.OutputIntent = null;
+
             try
             {
                 // Drive the form processor through the mask's transparency group exactly as
@@ -84,6 +93,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             {
                 _canvas = savedCanvas;
                 _isRenderingSoftMask = savedFlag;
+                maskState.OutputIntent = savedOutputIntent;
             }
 
             return surface.Snapshot();

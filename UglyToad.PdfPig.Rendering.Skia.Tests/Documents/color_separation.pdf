@@ -1,0 +1,85 @@
+%PDF-1.6	
+
+1 0 obj		
+<<
+	/Type /Pages
+	/Kids [2 0 R]		
+	/Count 1
+>>
+endobj
+
+2 0 obj		
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 612 792]		
+	/Contents [4 0 R]	
+	/Resources <<		
+		/ColorSpace <</CS1 5 0 R >>
+	>>			
+	
+>>
+endobj
+
+3 0 obj		
+<<
+	/Type /Catalog
+	/Pages 1 0 R	
+>>
+endobj
+
+4 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+/DeviceCMYK cs
+0.84 0.0 0.44 0.21 sc
+%1 1 1 1 SC
+100 100 100 100 re
+B
+
+/CS1 cs
+1.0 scn
+
+200 200 100 100 re
+B
+
+endstream
+endobj
+
+5 0 obj			
+[ 
+/Separation /LogoGreen /DeviceCMYK 12 0 R
+]
+endobj
+
+12 0 obj		
+<< 
+/FunctionType 4
+/Domain [0.0 1.0]
+/Range [0.0 1.0 0.0 1.0 0.0 1.0 0.0 1.0 ]
+/Length 62
+>>
+stream
+{  dup 0.84 mul
+exch 0.00 exch dup 0.44 mul
+exch 0.21 mul
+}
+endstream
+endobj
+
+xref	
+		
+
+trailer	
+<<
+	/Size 0		
+	/Root 3 0 R	
+>>
+
+startxref
+0		
+
+%%EOF	
+ 
