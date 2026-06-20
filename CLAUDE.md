@@ -103,3 +103,11 @@ A page often paints the same mesh shading many times (a chart re-invoking `sh`),
 - **Text clip modes** (`FillClip`, `StrokeClip`, etc.): operator is recognised but clipping is not applied.
 - **Image mask alpha**: ignores `colour.Alpha` (hardcoded to 255) in `SkiaStreamProcessor.Image.cs`.
 - **Thread safety**: `SkiaFontCache` mutates its list under a read lock, not a write lock.
+- **Transparency group blending colour space** (PDF 8.6.5.5 / 11.4.7): a transparency group's `/Group /CS`
+  (e.g. an ICCBased blending space, which the spec requires to carry both AToB and BToA transforms) is not
+  used as the compositing colour space. Groups are always composited in Skia's native sRGB (`Rgba8888`)
+  via `SaveLayer` in `SkiaStreamProcessor.ProcessFormXObject`, the same pragmatic approximation pdfbox
+  makes. Blend math therefore happens in sRGB rather than the declared blending space; this is only
+  visible for non-separable blend modes / overprint inside isolated groups. Honouring it would require a
+  colour-managed software compositor (rendering each group into an ICC-space buffer and converting back),
+  which Skia does not provide.
