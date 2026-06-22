@@ -77,14 +77,12 @@ internal partial class SkiaStreamProcessor
         const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
         SKPoint[]? grid = null;
         SKColor[]? gridCol = null;
-        double[]? interpBuffer = null;
         SKPaint? gouraudPaint = null;
 
         if (!hasFunction)
         {
             grid = new SKPoint[gridCount];
             gridCol = new SKColor[gridCount];
-            interpBuffer = new double[numStreamColorComponents];
             gouraudPaint = new SKPaint
             {
                 IsAntialias = shading.AntiAlias,
@@ -198,7 +196,7 @@ internal partial class SkiaStreamProcessor
                 else
                 {
                     TessellateAndDrawTensorPatch(shading, currentState, points, cornerColors,
-                        grid!, gridCol!, interpBuffer!, gouraudPaint!);
+                        grid!, gridCol!, gouraudPaint!);
                 }
 
                 prevPts = points;
@@ -222,7 +220,7 @@ internal partial class SkiaStreamProcessor
     /// </summary>
     private void TessellateAndDrawTensorPatch(Shading shading, CurrentGraphicsState currentState,
         SKPoint[] tcp, double[][] cornerColors,
-        SKPoint[] grid, SKColor[] gridCol, Span<double> interpBuffer,
+        SKPoint[] grid, SKColor[] gridCol,
         SKPaint paint)
     {
         // Map the 16 stream points into a 4×4 grid stored row-major in a stackalloc
@@ -239,19 +237,9 @@ internal partial class SkiaStreamProcessor
         int axisLen = n + 1;
         SampleTensorPatchGrid(p, n, grid.AsSpan(0, axisLen * axisLen));
 
-        float invN = 1f / n;
         double alpha = currentState.AlphaConstantNonStroking;
         Span<double> tensorEvalBuffer = stackalloc double[ShadingEvalBufferSize];
-        for (int j = 0; j < axisLen; j++)
-        {
-            float v = j * invN;
-            int rowOffset = j * axisLen;
-            for (int i = 0; i < axisLen; i++)
-            {
-                float u = i * invN;
-                gridCol[rowOffset + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, tensorEvalBuffer);
-            }
-        }
+        FillGridColors(shading, alpha, cornerColors, axisLen, gridCol, tensorEvalBuffer);
 
         DrawGridTriangles(grid, gridCol, n, paint);
     }

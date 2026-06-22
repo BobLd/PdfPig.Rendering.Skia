@@ -77,14 +77,12 @@ internal partial class SkiaStreamProcessor
         const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
         SKPoint[]? grid = null;
         SKColor[]? gridCol = null;
-        double[]? interpBuffer = null;
         SKPaint? gouraudPaint = null;
 
         if (!hasFunction)
         {
             grid = new SKPoint[gridCount];
             gridCol = new SKColor[gridCount];
-            interpBuffer = new double[numStreamColorComponents];
             gouraudPaint = new SKPaint
             {
                 IsAntialias = shading.AntiAlias,
@@ -213,7 +211,7 @@ internal partial class SkiaStreamProcessor
                 else
                 {
                     TessellateAndDrawCoonsPatch(shading, currentState, points, cornerColors,
-                        grid!, gridCol!, interpBuffer!, gouraudPaint!);
+                        grid!, gridCol!, gouraudPaint!);
                 }
 
                 prevPts = points;
@@ -235,15 +233,14 @@ internal partial class SkiaStreamProcessor
     /// DrawVertices call. Corner-colour bilinear interpolation matches PDFBox:
     /// cornerColors[0..3] correspond to (u,v) = (0,0), (1,0), (1,1), (0,1).
     /// <para>
-    /// All scratch (<paramref name="grid"/>, <paramref name="gridCol"/>,
-    /// <paramref name="interpBuffer"/>) and output buffers are owned by the caller and
-    /// reused across every patch in the mesh, so the per-patch loop runs without
-    /// allocations.
+    /// All scratch (<paramref name="grid"/>, <paramref name="gridCol"/>) and output buffers are
+    /// owned by the caller and reused across every patch in the mesh, so the per-patch loop runs
+    /// without allocations.
     /// </para>
     /// </summary>
     private void TessellateAndDrawCoonsPatch(Shading shading, CurrentGraphicsState currentState,
         ReadOnlySpan<SKPoint> pts, double[][] cornerColors,
-        SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
+        SKPoint[] grid, SKColor[] gridCol,
         SKPaint paint)
     {
         // Subdivide proportionally to the patch size — a fine mesh of tiny patches needs only
@@ -254,19 +251,9 @@ internal partial class SkiaStreamProcessor
         int axisLen = n + 1;
         SampleCoonsPatchGrid(pts, n, grid.AsSpan(0, axisLen * axisLen));
 
-        float invN = 1f / n;
         double alpha = currentState.AlphaConstantNonStroking;
         Span<double> coonsEvalBuffer = stackalloc double[ShadingEvalBufferSize];
-        for (int j = 0; j < axisLen; j++)
-        {
-            float v = j * invN;
-            int rowOffset = j * axisLen;
-            for (int i = 0; i < axisLen; i++)
-            {
-                float u = i * invN;
-                gridCol[rowOffset + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, coonsEvalBuffer);
-            }
-        }
+        FillGridColors(shading, alpha, cornerColors, axisLen, gridCol, coonsEvalBuffer);
 
         DrawGridTriangles(grid, gridCol, n, paint);
     }

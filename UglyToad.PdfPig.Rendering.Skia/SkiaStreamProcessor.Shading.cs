@@ -70,6 +70,27 @@ internal partial class SkiaStreamProcessor
     /// </summary>
     private const int PatchTextureLutSize = 2 * PatchTextureSize;
 
+    /// <summary>
+    /// Selects how the colour of a no-Function Coons / Tensor (Type 6 / 7) patch interior is computed.
+    /// <list type="bullet">
+    /// <item><term><see langword="true"/> (fast)</term><description>Convert the four patch corner
+    /// colours once and interpolate the result in device RGB across the patch
+    /// (<see cref="FillGridColorsFromCorners"/>). This is what most PDF renderers do; it is an
+    /// approximation that loses any colour-space / tint-transform curvature <em>within</em> a single
+    /// patch, but for the smooth tints these meshes carry it is imperceptible and it avoids running
+    /// the colour conversion (e.g. a DeviceN Type 4 PostScript tint transform) once per tessellation
+    /// vertex — millions of times for a single page (see ColorIssue.pdf).</description></item>
+    /// <item><term><see langword="false"/> (accurate)</term><description>Interpolate the corner
+    /// colour <em>components</em> per tessellation vertex and run the full colour conversion at each
+    /// one (<see cref="FillGridColorsPerVertex"/>), exactly reproducing the colour curve across the
+    /// patch at grid resolution.</description></item>
+    /// </list>
+    /// Both paths are otherwise identical (same geometry, same corner colours). This is currently a
+    /// compile-time constant pinned to the fast path; it is intended to later be surfaced as a
+    /// library option.
+    /// </summary>
+    private const bool UseFastMeshColourInterpolation = true;
+
     // Advisory cull hint for recording a mesh picture. The recorded geometry lives in pattern
     // space (arbitrary range), so a tight rect could clip it — keep it effectively unbounded.
     private static readonly SKRect MeshPictureCullRect = new SKRect(-1_000_000f, -1_000_000f, 1_000_000f, 1_000_000f);
@@ -394,41 +415,167 @@ internal partial class SkiaStreamProcessor
     }
 
     /// <summary>
-    /// Bilinear interpolation of corner colour components followed by Function evaluation
-    /// (when present) and colour-space conversion. cornerColors index convention:
-    /// [0] = (u=0, v=0), [1] = (u=1, v=0), [2] = (u=1, v=1), [3] = (u=0, v=1).
+    /// Fills the (n+1)² Gouraud colour <paramref name="gridCol"/> grid for a no-Function Coons /
+    /// Tensor patch, dispatching to the fast (device-space, corner-only) or accurate (per-vertex)
+    /// colour path according to <see cref="UseFastMeshColourInterpolation"/>. The two helpers share
+    /// the same signature so the only difference between the paths is which one runs.
+    /// </summary>
+    private static void FillGridColors(Shading shading, double alpha, double[][] cornerColors,
+        int axisLen, SKColor[] gridCol, Span<double> evalBuffer)
+    {
+#pragma warning disable CS0162 // Unreachable code: the inactive branch is retained behind the (currently fixed) UseFastMeshColourInterpolation toggle.
+        if (UseFastMeshColourInterpolation)
+        {
+            FillGridColorsFromCorners(shading, alpha, cornerColors, axisLen, gridCol, evalBuffer);
+        }
+        else
+        {
+            FillGridColorsPerVertex(shading, alpha, cornerColors, axisLen, gridCol, evalBuffer);
+        }
+#pragma warning restore CS0162
+    }
+
+    /// <summary>
+    /// Accurate colour path: bilinearly interpolates the four corner colour <em>components</em> at
+    /// every grid vertex and runs the full shading-Function (if any) and colour-space conversion at
+    /// each one, so the colour curve across the patch is reproduced at grid resolution. cornerColors
+    /// index convention: [0] = (u=0, v=0), [1] = (u=1, v=0), [2] = (u=1, v=1), [3] = (u=0, v=1).
     /// <para>
-    /// <paramref name="interpBuffer"/> must have length ≥ cornerColors[0].Length and is
-    /// overwritten in place. The caller owns it so the per-grid-vertex allocation that
-    /// would otherwise dominate this hot loop is moved to once-per-patch.
+    /// This is the original, more expensive path: for a DeviceN / Separation space whose tint
+    /// transform is a Type 4 (PostScript) function it evaluates the interpreter once per vertex.
+    /// See <see cref="UseFastMeshColourInterpolation"/> and <see cref="FillGridColorsFromCorners"/>.
     /// </para>
     /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static SKColor EvaluatePatchColor(Shading shading, double alpha,
-        double[][] cornerColors, float u, float v, Span<double> interpBuffer, Span<double> evalBuffer)
+    private static void FillGridColorsPerVertex(Shading shading, double alpha, double[][] cornerColors,
+        int axisLen, SKColor[] gridCol, Span<double> evalBuffer)
     {
-        // Cache the four corner arrays once per call so the inner k-loop walks four
-        // contiguous double[] strides rather than re-dereferencing cornerColors[...]
-        // on every k. Called PatchSubdivisions² × patches times — small per-call win
-        // adds up.
         double[] cc0 = cornerColors[0];
         double[] cc1 = cornerColors[1];
         double[] cc2 = cornerColors[2];
         double[] cc3 = cornerColors[3];
         int components = cc0.Length;
-        float oneMinusU = 1f - u;
-        float oneMinusV = 1f - v;
-        double w00 = oneMinusU * oneMinusV;
-        double w10 = u * oneMinusV;
-        double w11 = u * v;
-        double w01 = oneMinusU * v;
-        for (int k = 0; k < components; k++)
+
+        // Per-vertex scratch for the interpolated components. Reused across every vertex of the
+        // patch; capped against the stack-buffer size so a pathologically wide colour space falls
+        // back to the heap rather than overflowing the stack.
+        Span<double> interp = components <= ShadingEvalBufferSize
+            ? stackalloc double[components]
+            : new double[components];
+
+        float invN = axisLen > 1 ? 1f / (axisLen - 1) : 0f;
+        for (int j = 0; j < axisLen; j++)
         {
-            interpBuffer[k] = w00 * cc0[k] + w10 * cc1[k] + w11 * cc2[k] + w01 * cc3[k];
+            float v = j * invN;
+            float oneMinusV = 1f - v;
+            int rowOffset = j * axisLen;
+            for (int i = 0; i < axisLen; i++)
+            {
+                float u = i * invN;
+                float oneMinusU = 1f - u;
+                double w00 = oneMinusU * oneMinusV;
+                double w10 = u * oneMinusV;
+                double w11 = u * v;
+                double w01 = oneMinusU * v;
+                for (int k = 0; k < components; k++)
+                {
+                    interp[k] = w00 * cc0[k] + w10 * cc1[k] + w11 * cc2[k] + w01 * cc3[k];
+                }
+
+                int written = shading.Eval(interp.Slice(0, components), evalBuffer);
+                gridCol[rowOffset + i] = shading.ColorSpace.GetSKColor(evalBuffer.Slice(0, written), alpha);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fast colour path: fills the (n+1)² Gouraud colour <paramref name="gridCol"/> grid for a
+    /// no-Function Coons / Tensor patch by converting the four patch corner colours once and
+    /// bilinearly interpolating them in device RGB across the grid. cornerColors index convention:
+    /// [0] = (u=0, v=0), [1] = (u=1, v=0), [2] = (u=1, v=1), [3] = (u=0, v=1).
+    /// <para>
+    /// The previous implementation interpolated the corner colour <em>components</em> per grid
+    /// vertex and ran the full colour-space conversion at each one. For a DeviceN / Separation
+    /// space whose tint transform is a Type 4 (PostScript) function — and a mesh finely tessellated
+    /// for geometric accuracy — that evaluated the interpreter once per vertex, millions of times
+    /// for a single page (see ColorIssue.pdf). Converting only the four corners reduces that to
+    /// four conversions per patch.
+    /// </para>
+    /// <para>
+    /// This is an approximation, not an exact equivalent of the per-vertex path: the patch interior
+    /// is now linearly interpolated in device RGB between the four converted corners, so any
+    /// curvature the colour space / tint transform introduces <em>within</em> a single patch is
+    /// lost (it was previously captured at grid resolution). For the smooth tints these meshes
+    /// almost always carry the difference is imperceptible, and it matches the device-space colour
+    /// interpolation other PDF renderers use; a strongly non-linear tint spread over one large
+    /// patch is where the two would visibly diverge. Note the geometry grid is still subdivided
+    /// <c>n×n</c> for surface accuracy — only the colour no longer benefits from that subdivision.
+    /// </para>
+    /// </summary>
+    private static void FillGridColorsFromCorners(Shading shading, double alpha, double[][] cornerColors,
+        int axisLen, SKColor[] gridCol, Span<double> evalBuffer)
+    {
+        SKColor c00 = ConvertCornerColor(shading, alpha, cornerColors[0], evalBuffer);
+        SKColor c10 = ConvertCornerColor(shading, alpha, cornerColors[1], evalBuffer);
+        SKColor c11 = ConvertCornerColor(shading, alpha, cornerColors[2], evalBuffer);
+        SKColor c01 = ConvertCornerColor(shading, alpha, cornerColors[3], evalBuffer);
+
+        int gridLen = axisLen * axisLen;
+
+        // Flat patch (all four corners identical): skip the interpolation arithmetic entirely.
+        if (c00 == c10 && c00 == c11 && c00 == c01)
+        {
+            for (int k = 0; k < gridLen; k++)
+            {
+                gridCol[k] = c00;
+            }
+            return;
         }
 
-        int written = shading.Eval(interpBuffer.Slice(0, components), evalBuffer);
+        float invN = axisLen > 1 ? 1f / (axisLen - 1) : 0f;
+        for (int j = 0; j < axisLen; j++)
+        {
+            float v = j * invN;
+            float oneMinusV = 1f - v;
+            int rowOffset = j * axisLen;
+            for (int i = 0; i < axisLen; i++)
+            {
+                float u = i * invN;
+                float oneMinusU = 1f - u;
+                float w00 = oneMinusU * oneMinusV;
+                float w10 = u * oneMinusV;
+                float w11 = u * v;
+                float w01 = oneMinusU * v;
+                gridCol[rowOffset + i] = BilerpColor(c00, c10, c11, c01, w00, w10, w11, w01);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Converts a single patch corner's stream colour components to an <see cref="SKColor"/>,
+    /// applying the shading Function (a no-op for the no-Function path) and the colour-space
+    /// conversion. <paramref name="evalBuffer"/> is caller-owned scratch.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static SKColor ConvertCornerColor(Shading shading, double alpha, double[] components, Span<double> evalBuffer)
+    {
+        int written = shading.Eval(components, evalBuffer);
         return shading.ColorSpace.GetSKColor(evalBuffer.Slice(0, written), alpha);
+    }
+
+    /// <summary>
+    /// Bilinearly blends four corner <see cref="SKColor"/>s in device RGBA using the supplied
+    /// pre-computed weights (w00..w01 sum to 1). Corner convention matches
+    /// <see cref="FillGridColorsFromCorners"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static SKColor BilerpColor(SKColor c00, SKColor c10, SKColor c11, SKColor c01,
+        float w00, float w10, float w11, float w01)
+    {
+        byte r = (byte)(c00.Red * w00 + c10.Red * w10 + c11.Red * w11 + c01.Red * w01 + 0.5f);
+        byte g = (byte)(c00.Green * w00 + c10.Green * w10 + c11.Green * w11 + c01.Green * w01 + 0.5f);
+        byte b = (byte)(c00.Blue * w00 + c10.Blue * w10 + c11.Blue * w11 + c01.Blue * w01 + 0.5f);
+        byte a = (byte)(c00.Alpha * w00 + c10.Alpha * w10 + c11.Alpha * w11 + c01.Alpha * w01 + 0.5f);
+        return new SKColor(r, g, b, a);
     }
 
     /// <summary>

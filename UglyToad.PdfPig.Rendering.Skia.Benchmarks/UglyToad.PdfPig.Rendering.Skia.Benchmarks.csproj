@@ -16,7 +16,7 @@
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(PdfPigSkiaVersion)' == 'Latest'">
-		<PackageReference Include="PdfPig.Rendering.Skia" Version="0.1.15.1-alpha015" />
+		<PackageReference Include="PdfPig.Rendering.Skia" Version="0.1.15.1-alpha017" />
 	</ItemGroup>
 
 	<ItemGroup>
