@@ -1,4 +1,4 @@
-﻿// Copyright 2024 BobLd
+﻿// Copyright BobLd
 //
 // Licensed under the Apache License, Version 2.0 (the "License").
 // you may not use this file except in compliance with the License.
@@ -15,83 +15,12 @@
 using System.IO;
 using Xunit;
 
-namespace UglyToad.PdfPig.Rendering.Skia.Tests
+namespace UglyToad.PdfPig.Rendering.Skia.Tests;
+
+public class TestRendering
 {
-    public class TestRendering
+    public static readonly object[][] DocumentsPdfPig = new object[][]
     {
-        public static readonly object[][] documents = new object[][]
-        {
-            new object[]
-            {
-                "Apitron.PDF.Kit.Samples_patternFill-mupdf-1.png",
-                "Apitron.PDF.Kit.Samples_patternFill.pdf", 1, 3
-            },
-            new object[]
-            {
-                "Apitron.PDF.Kit.Samples_patternFill-pdfium-1.png",
-                "Apitron.PDF.Kit.Samples_patternFill.pdf", 1, 3
-            },
-
-            new object[]
-            {
-                "cat-genetics-mupdf-1.png",
-                "cat-genetics.pdf", 1, 3
-            },
-            new object[]
-            {
-                "cat-genetics-pdfium-1.png",
-                "cat-genetics.pdf", 1, 3
-            },
-
-            new object[]
-            {
-                "cat-genetics_bobld-mupdf-1.png",
-                "cat-genetics_bobld.pdf", 1, 3
-            },
-            new object[]
-            {
-                "cat-genetics_bobld-pdfium-1.png",
-                "cat-genetics_bobld.pdf", 1, 3
-            },
-
-            new object[]
-            {
-                "GHOSTSCRIPT-699554-0.zip-4-mupdf-1.png",
-                "GHOSTSCRIPT-699554-0.zip-4.pdf", 1, 3
-            },
-            new object[]
-            {
-                "GHOSTSCRIPT-699554-0.zip-4-pdfium-1.png",
-                "GHOSTSCRIPT-699554-0.zip-4.pdf", 1, 3
-            },
-
-            /*
-            new object[]
-            {
-                "fseprd1102849-mupdf-1.png",
-                "fseprd1102849.pdf", 1, 3
-            },
-            new object[]
-            {
-                "fseprd1102849-pdfium-1.png",
-                "fseprd1102849.pdf", 1, 3
-            },
-            */
-
-            new object[]
-            {
-                "GHOSTSCRIPT-696547-0.zip-7-mupdf-1.png",
-                "GHOSTSCRIPT-696547-0.zip-7.pdf", 1, 3
-            },
-            new object[]
-            {
-                "GHOSTSCRIPT-696547-0.zip-7-pdfium-1.png",
-                "GHOSTSCRIPT-696547-0.zip-7.pdf", 1, 3
-            },
-        };
-
-        public static readonly object[][] documentsPdfPig = new object[][]
-        {
             // These are not perfect yet and can be updated once the rendering is improved
             new object[]
             {
@@ -535,7 +464,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "PDFBOX-2100-gouraud-RGB-function_1.png",
                 "PDFBOX-2100-gouraud-RGB-function.pdf", 1, 2
             },
-            
+
             new object[]
             {
                 "MOZILLA-LINK-6305-5_1.png",
@@ -824,19 +753,18 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests
                 "0966260_1.png",
                 "0966260.pdf", 1, 2
             },
-        };
-        
-        [Theory]
-        [MemberData(nameof(documentsPdfPig))]
-        public void PdfPigSkiaTest(string expectedImage, string pdfFile, int pageNumber, int scale)
-        {
+    };
+
+    [Theory]
+    [MemberData(nameof(DocumentsPdfPig))]
+    public void PdfPigSkiaTest(string expectedImage, string pdfFile, int pageNumber, int scale)
+    {
 #if DEBUG
             throw new System.ArgumentException("PdfPigSkiaTest needs to run in Release mode.");
 #endif
 
-            expectedImage = Path.Combine("pdfpig_skia", expectedImage);
-            bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale);
-            Assert.True(success);
-        }
+        expectedImage = Path.Combine("pdfpig_skia", expectedImage);
+        bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale);
+        Assert.True(success);
     }
 }

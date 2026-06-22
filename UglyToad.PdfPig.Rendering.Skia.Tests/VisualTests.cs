@@ -1,4 +1,4 @@
-// Copyright 2024 BobLd
+// Copyright BobLd
 //
 // Licensed under the Apache License, Version 2.0 (the "License").
 // you may not use this file except in compliance with the License.
@@ -17,48 +17,48 @@ using System.IO;
 using System.Linq;
 using Xunit;
 
-namespace UglyToad.PdfPig.Rendering.Skia.Tests
+namespace UglyToad.PdfPig.Rendering.Skia.Tests;
+
+public class VisualTests
 {
-    public class VisualTests
+    private const float Scale = 2;
+    private const string OutputPath = "Output";
+
+    private static readonly HashSet<string> _documentsToIgnore =
+    [
+        "SPARC - v9 Architecture Manual.pdf",
+        "TIKA-1552-0.pdf"
+    ];
+    
+    public static IEnumerable<object[]> GetAllDocuments => Directory.EnumerateFiles(Helper.DocumentsFolder, "*.pdf")
+        .Select(Path.GetFileName)
+        .Where(p => !_documentsToIgnore.Contains(p))
+        .Select(p => new object[] { p });
+
+    public VisualTests()
     {
-        private const float _scale = 2;
-        private const string _outputPath = "Output";
+        Directory.CreateDirectory(OutputPath);
+    }
 
-        private static readonly HashSet<string> _documentsToIgnore = new HashSet<string>
+    [Theory]
+    [MemberData(nameof(GetAllDocuments))]
+    public void RenderToFolder(string docPath)
+    {
+        string rootName = docPath.Substring(0, docPath.Length - 4);
+
+        using (var document = PdfDocument.Open(Path.Combine(Helper.DocumentsFolder, docPath), SkiaRenderingParsingOptions.Instance))
         {
-            "SPARC - v9 Architecture Manual.pdf",
-            "TIKA-1552-0.pdf"
-        };
+            document.AddSkiaPageFactory();
 
-        public static IEnumerable<object[]> GetAllDocuments => Directory.EnumerateFiles("Documents", "*.pdf")
-            .Select(Path.GetFileName)
-            .Where(p => !_documentsToIgnore.Contains(p))
-            .Select(p => new object[] { p });
-
-        public VisualTests()
-        {
-            Directory.CreateDirectory(_outputPath);
-        }
-
-        [Theory]
-        [MemberData(nameof(GetAllDocuments))]
-        public void RenderToFolder(string docPath)
-        {
-            string rootName = docPath.Substring(0, docPath.Length - 4);
-
-            using (var document = PdfDocument.Open(Path.Combine("Documents", docPath), SkiaRenderingParsingOptions.Instance))
+            for (int p = 1; p <= document.NumberOfPages; p++)
             {
-                document.AddSkiaPageFactory();
-
-                for (int p = 1; p <= document.NumberOfPages; p++)
+                using (var fs = new FileStream(Path.Combine(OutputPath, $"{rootName}_{p}.png"), FileMode.Create))
+                using (var ms = document.GetPageAsPng(p, Scale))
                 {
-                    using (var fs = new FileStream(Path.Combine(_outputPath, $"{rootName}_{p}.png"), FileMode.Create))
-                    using (var ms = document.GetPageAsPng(p, _scale))
-                    {
-                        ms.WriteTo(fs);
-                    }
+                    ms.WriteTo(fs);
                 }
             }
         }
     }
 }
+

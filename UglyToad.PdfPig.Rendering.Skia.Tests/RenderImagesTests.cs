@@ -1,4 +1,4 @@
-﻿// Copyright 2024 BobLd
+﻿// Copyright BobLd
 //
 // Licensed under the Apache License, Version 2.0 (the "License").
 // you may not use this file except in compliance with the License.
@@ -16,25 +16,24 @@ using System.IO;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 using Xunit;
 
-namespace UglyToad.PdfPig.Rendering.Skia.Tests
-{
-    public class RenderImagesTests
-    {
+namespace UglyToad.PdfPig.Rendering.Skia.Tests;
 
-        [Fact]
-        public void PdfPigImageAsSkiaImages()
+public class RenderImagesTests
+{
+
+    [Fact]
+    public void PdfPigImageAsSkiaImages()
+    {
+        using (var document = PdfDocument.Open(Path.Combine(Helper.SpecificTestDocumentsFolder, "Shadows.at.Sundown.-.Lvl.11_removed.pdf"), SkiaRenderingParsingOptions.Instance))
         {
-            using (var document = PdfDocument.Open(Path.Combine("SpecificTestDocuments", "Shadows.at.Sundown.-.Lvl.11_removed.pdf"), SkiaRenderingParsingOptions.Instance))
+            var page = document.GetPage(1);
+            foreach (var pdfImage in page.GetImages())
             {
-                var page = document.GetPage(1);
-                foreach (var pdfImage in page.GetImages())
-                {
-                    var bitmap = pdfImage.GetSKBitmap();
-                    
-                    Assert.NotNull(bitmap);
-                    Assert.True(bitmap!.Width > 0);
-                    Assert.True(bitmap.Height > 0);
-                }
+                var bitmap = pdfImage.GetSKBitmap();
+
+                Assert.NotNull(bitmap);
+                Assert.True(bitmap!.Width > 0);
+                Assert.True(bitmap.Height > 0);
             }
         }
     }

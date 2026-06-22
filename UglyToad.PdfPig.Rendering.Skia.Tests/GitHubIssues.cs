@@ -1,4 +1,4 @@
-﻿// Copyright 2024 BobLd
+﻿// Copyright BobLd
 //
 // Licensed under the Apache License, Version 2.0 (the "License").
 // you may not use this file except in compliance with the License.
@@ -13,76 +13,74 @@
 // limitations under the License.
 
 using System.IO;
-using UglyToad.PdfPig.Graphics.Colors;
 using Xunit;
 
-namespace UglyToad.PdfPig.Rendering.Skia.Tests
+namespace UglyToad.PdfPig.Rendering.Skia.Tests;
+
+public class GitHubIssues
 {
-    public class GitHubIssues
+    private const int Scale = 2;
+    private const string OutputPath = "OutputSpecific";
+
+    public GitHubIssues()
     {
-        private const int _scale = 2;
-        private const string _outputPath = "OutputSpecific";
+        Directory.CreateDirectory(OutputPath);
+    }
 
-        public GitHubIssues()
+    [Fact]
+    public void IssuePdfPig775()
+    {
+        using (var document = PdfDocument.Open(Path.Combine(Helper.SpecificTestDocumentsFolder, "Shadows.at.Sundown.-.Lvl.11_removed.pdf"), SkiaRenderingParsingOptions.Instance))
         {
-            Directory.CreateDirectory(_outputPath);
-        }
+            document.AddSkiaPageFactory();
 
-        [Fact]
-        public void IssuePdfPig775()
-        {
-            using (var document = PdfDocument.Open(Path.Combine("SpecificTestDocuments", "Shadows.at.Sundown.-.Lvl.11_removed.pdf"), SkiaRenderingParsingOptions.Instance))
+            for (int p = 1; p <= document.NumberOfPages; ++p)
             {
-                document.AddSkiaPageFactory();
-
-                for (int p = 1; p <= document.NumberOfPages; ++p)
+                using (var fs = new FileStream(Path.Combine(OutputPath, $"Shadows.at.Sundown.-.Lvl.11_removed_{p}.png"), FileMode.Create))
+                using (var ms = document.GetPageAsPng(p, Scale))
                 {
-                    using (var fs = new FileStream(Path.Combine(_outputPath, $"Shadows.at.Sundown.-.Lvl.11_removed_{p}.png"), FileMode.Create))
-                    using (var ms = document.GetPageAsPng(p, _scale))
-                    {
-                        ms.WriteTo(fs);
-                    }
+                    ms.WriteTo(fs);
                 }
             }
         }
+    }
 
-        [Fact]
-        public void Issue27_1()
+    [Fact]
+    public void Issue27_1()
+    {
+        using (var document = PdfDocument.Open(Path.Combine(Helper.SpecificTestDocumentsFolder, "Go.pdf"), SkiaRenderingParsingOptions.Instance))
         {
-            using (var document = PdfDocument.Open(Path.Combine("SpecificTestDocuments", "Go.pdf"), SkiaRenderingParsingOptions.Instance))
-            {
-                document.AddSkiaPageFactory();
+            document.AddSkiaPageFactory();
 
-                for (int p = 1; p <= document.NumberOfPages; ++p)
+            for (int p = 1; p <= document.NumberOfPages; ++p)
+            {
+                using (var fs = new FileStream(Path.Combine(OutputPath, $"Go_{p}.png"), FileMode.Create))
+                using (var ms = document.GetPageAsPng(p, Scale))
                 {
-                    using (var fs = new FileStream(Path.Combine(_outputPath, $"Go_{p}.png"), FileMode.Create))
-                    using (var ms = document.GetPageAsPng(p, _scale))
-                    {
-                        ms.WriteTo(fs);
-                    }
+                    ms.WriteTo(fs);
                 }
             }
         }
+    }
 
-        [Fact]
-        public void Issue27_2()
+    [Fact]
+    public void Issue27_2()
+    {
+        using (var document = PdfDocument.Open(Path.Combine(Helper.SpecificTestDocumentsFolder, "new.pdf"), SkiaRenderingParsingOptions.Instance))
         {
-            using (var document = PdfDocument.Open(Path.Combine("SpecificTestDocuments", "new.pdf"), SkiaRenderingParsingOptions.Instance))
-            {
-                document.AddSkiaPageFactory();
+            document.AddSkiaPageFactory();
 
-                for (int p = 1; p <= document.NumberOfPages; ++p)
+            for (int p = 1; p <= document.NumberOfPages; ++p)
+            {
+                foreach (var image in document.GetPage(p).GetImages())
                 {
-                    foreach (var image in document.GetPage(p).GetImages())
-                    {
-                        Assert.True(image.TryGetPng(out _));
-                    }
-                    
-                    using (var fs = new FileStream(Path.Combine(_outputPath, $"new_{p}.png"), FileMode.Create))
-                    using (var ms = document.GetPageAsPng(p, _scale))
-                    {
-                        ms.WriteTo(fs);
-                    }
+                    Assert.True(image.TryGetPng(out _));
+                }
+
+                using (var fs = new FileStream(Path.Combine(OutputPath, $"new_{p}.png"), FileMode.Create))
+                using (var ms = document.GetPageAsPng(p, Scale))
+                {
+                    ms.WriteTo(fs);
                 }
             }
         }

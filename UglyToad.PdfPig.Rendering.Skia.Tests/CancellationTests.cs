@@ -24,7 +24,7 @@ public class CancellationTests
     [Fact]
     public void PageTimedOut()
     {
-        using (var document = PdfDocument.Open(Path.Combine("SpecificTestDocuments", "map.pdf"), SkiaRenderingParsingOptions.Instance))
+        using (var document = PdfDocument.Open(Path.Combine(Helper.SpecificTestDocumentsFolder, "map.pdf"), SkiaRenderingParsingOptions.Instance))
         {
             document.AddSkiaPageFactory();
 
@@ -51,7 +51,7 @@ public class CancellationTests
     [Fact]
     public void CancelBeforeStart()
     {
-        using (var document = PdfDocument.Open(Path.Combine("SpecificTestDocuments", "new.pdf"), SkiaRenderingParsingOptions.Instance))
+        using (var document = PdfDocument.Open(Path.Combine(Helper.SpecificTestDocumentsFolder, "new.pdf"), SkiaRenderingParsingOptions.Instance))
         {
             document.AddSkiaPageFactory();
             
