@@ -1,4 +1,4 @@
-﻿// Copyright 2024 BobLd
+﻿// Copyright BobLd
 //
 // Licensed under the Apache License, Version 2.0 (the "License").
 // you may not use this file except in compliance with the License.
@@ -28,63 +28,59 @@ using UglyToad.PdfPig.Rendering.Skia.Helpers;
 using UglyToad.PdfPig.Tokenization.Scanner;
 using UglyToad.PdfPig.Tokens;
 
-namespace UglyToad.PdfPig.Rendering.Skia
+namespace UglyToad.PdfPig.Rendering.Skia;
+
+/// <summary>
+/// The Skia page factory to render pages as images.
+/// </summary>
+public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
 {
-    /// <summary>
-    /// The Skia page factory to render pages as images.
-    /// </summary>
-    public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
+    private readonly SkiaFontCache _fontCache;
+
+    private static readonly AsyncLocal<CancellationToken> _currentToken = new();
+
+    internal static CancellationToken CurrentToken
     {
-        private readonly SkiaFontCache _fontCache;
+        get => _currentToken.Value;
+        set => _currentToken.Value = value;
+    }
 
-        private static readonly AsyncLocal<CancellationToken> _currentToken = new();
+    /// <summary>
+    /// <see cref="SkiaPageFactory"/> constructor.
+    /// </summary>
+    public SkiaPageFactory(
+        IPdfTokenScanner pdfScanner,
+        IResourceStore resourceStore,
+        ILookupFilterProvider filterProvider,
+        IPageContentParser pageContentParser,
+        ParsingOptions parsingOptions)
+        : base(pdfScanner, resourceStore, filterProvider, pageContentParser, parsingOptions)
+    {
+        _fontCache = new SkiaFontCache();
+    }
 
-        internal static CancellationToken CurrentToken
-        {
-            get => _currentToken.Value;
-            set => _currentToken.Value = value;
-        }
+    /// <inheritdoc/>
+    protected override SKPicture ProcessPage(int pageNumber, DictionaryToken dictionary,
+        NamedDestinations namedDestinations, MediaBox mediaBox, CropBox cropBox, UserSpaceUnit userSpaceUnit,
+        PageRotationDegrees rotation, TransformationMatrix initialMatrix,
+        IReadOnlyList<IGraphicsStateOperation> operations)
+    {
+        var annotationProvider = new AnnotationProvider(PdfScanner,
+            dictionary,
+            initialMatrix,
+            namedDestinations,
+            ParsingOptions.Logger);
 
-        /// <summary>
-        /// <see cref="SkiaPageFactory"/> constructor.
-        /// </summary>
-        public SkiaPageFactory(
-            IPdfTokenScanner pdfScanner,
-            IResourceStore resourceStore,
-            ILookupFilterProvider filterProvider,
-            IPageContentParser pageContentParser,
-            ParsingOptions parsingOptions)
-            : base(pdfScanner, resourceStore, filterProvider, pageContentParser, parsingOptions)
-        {
-            _fontCache = new SkiaFontCache();
-        }
+        var context = new SkiaStreamProcessor(pageNumber, ResourceStore, PdfScanner, PageContentParser,
+            FilterProvider, cropBox, userSpaceUnit, rotation, initialMatrix, ParsingOptions,
+            annotationProvider, _fontCache, CurrentToken);
 
-        /// <inheritdoc/>
-        protected override SKPicture ProcessPage(int pageNumber, DictionaryToken dictionary,
-            NamedDestinations namedDestinations, MediaBox mediaBox, CropBox cropBox, UserSpaceUnit userSpaceUnit,
-            PageRotationDegrees rotation, TransformationMatrix initialMatrix,
-            IReadOnlyList<IGraphicsStateOperation> operations)
-        {
-            var annotationProvider = new AnnotationProvider(PdfScanner,
-                dictionary,
-                initialMatrix,
-                namedDestinations,
-                ParsingOptions.Logger);
+        return context.Process(pageNumber, operations);
+    }
 
-            // Special case where cropbox is outside mediabox: use cropbox instead of intersection
-            var effectiveCropBox = new CropBox(mediaBox.Bounds.Intersect(cropBox.Bounds) ?? cropBox.Bounds);
-
-            var context = new SkiaStreamProcessor(pageNumber, ResourceStore, PdfScanner, PageContentParser,
-                FilterProvider, effectiveCropBox, userSpaceUnit, rotation, initialMatrix, ParsingOptions,
-                annotationProvider, _fontCache, CurrentToken);
-
-            return context.Process(pageNumber, operations);
-        }
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            _fontCache.Dispose();
-        }
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _fontCache.Dispose();
     }
 }
