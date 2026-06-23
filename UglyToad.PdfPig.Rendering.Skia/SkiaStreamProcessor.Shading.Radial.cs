@@ -48,35 +48,16 @@ internal partial class SkiaStreamProcessor
         float t0 = (float)domain[0];
         float t1 = (float)domain[1];
 
+        // Size the colour LUT to the radial sweep's on-screen extent (axis distance plus both
+        // radii, in device pixels) — one texel per device pixel, as the old per-stop sampling did,
+        // so step-function transitions stay pixel-sharp. See RenderAxialShading for the rationale.
         float radialExtent =
             MapToDevicePixels(patternTransformMatrix, x1 - x0, y1 - y0)
             + MapToDevicePixels(patternTransformMatrix, r0, 0)
             + MapToDevicePixels(patternTransformMatrix, r1, 0);
-        int factor = Math.Max(10, (int)Math.Ceiling(radialExtent));
-        var colors = new SKColor[factor + 1];
-        float[] colorPos = new float[factor + 1];
+        int lutWidth = RampStopsForExtent(radialExtent);
 
-        Span<double> evalIn = stackalloc double[1];
-        Span<double> evalOut = stackalloc double[ShadingEvalBufferSize];
         double alpha = currentState.AlphaConstantNonStroking;
-        ColorSpaceDetails radialColorSpace = shading.ColorSpace;
-        for (int t = 0; t <= factor; t++)
-        {
-            // See RenderAxialShading for the rationale of these two computations:
-            //   - tx walks the user-supplied Domain (correct when t0 ≠ 0)
-            //   - colorPos must be in [0,1] for Skia's gradient shader
-            double frac = t / (double)factor;
-            double tx = t0 + frac * (t1 - t0);
-            evalIn[0] = tx;
-            int written = shading.Eval(evalIn, evalOut);
-            Span<double> v = evalOut.Slice(0, written);
-
-            FixIncorrectValues(v, domain); // This is a hack, this should never happen
-
-            colors[t] = radialColorSpace.GetSKColor(v, alpha);
-            // TODO - is it non stroking??
-            colorPos[t] = (float)frac;
-        }
 
         // PDF 1.7 §8.7.4.3: BBox is a temporary clipping boundary applied on top of the
         // current clipping path. For a Type 2 (shading) pattern it is given in pattern
@@ -120,19 +101,13 @@ internal partial class SkiaStreamProcessor
                 }
             }
 
-            // PDF Extend controls whether the gradient continues past the start/end circles.
-            // Skia's tile mode on a two-point conical gradient is the closest equivalent:
-            //   Both true   → Clamp  (t=0/t=1 colours bleed to infinity)
-            //   Both false  → Decal  (areas outside the gradient are transparent)
-            // Mixed extends have no exact tile-mode counterpart; Decal keeps at least the
-            // non-extending side correct, and the extending side is rare enough in practice
-            // that we accept the imperfection rather than rasterising by hand.
-            SKShaderTileMode tileMode = (extend[0] && extend[1])
-                ? SKShaderTileMode.Clamp
-                : SKShaderTileMode.Decal;
-
-            using (var shader = SKShader.CreateTwoPointConicalGradient(new SKPoint(x0, y0), r0, new SKPoint(x1, y1),
-                       r1, colors, colorPos, tileMode, patternTransformMatrix))
+            // PDF Extend controls whether the gradient continues past the start/end circles. The
+            // SKSL radial shader honours each flag independently and solves the PDF circle-family
+            // equation exactly. The old two-point conical gradient could only approximate this via a
+            // single tile mode (Clamp when both extend, else Decal), with no exact counterpart for
+            // mixed extends — that imperfection is now gone.
+            using (SKImage lut = BuildShadingRampImage(shading, alpha, t0, t1, lutWidth, domain))
+            using (var shader = CreateRadialShader(x0, y0, r0, x1, y1, r1, extend[0], extend[1], lutWidth, lut, patternTransformMatrix))
             using (var paint = new SKPaint())
             {
                 paint.IsAntialias = shading.AntiAlias;

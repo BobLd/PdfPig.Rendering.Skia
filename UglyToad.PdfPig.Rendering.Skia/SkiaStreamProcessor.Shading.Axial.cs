@@ -47,46 +47,27 @@ internal partial class SkiaStreamProcessor
             // TODO
         }
 
-        // Number of stops to sample from the colour function. The gradient line goes from
-        // (x0, y0) to (x1, y1) in shading space — map that vector into device pixels and
-        // aim for one stop per device pixel. Lower densities work for smooth functions
-        // but smear any hard step-discontinuity (e.g. a Type 3 stitching function at one
-        // of its Bounds) across many pixels: the gap between adjacent stops becomes the
-        // width of the transition. One-per-pixel keeps the gap below the antialiasing
-        // edge so steps render as cleanly as a clipped fill. Floored at 10 for degenerate
-        // (zero-length) axes.
+        // Size the colour LUT to the gradient's on-screen extent — one texel per device pixel —
+        // mapping the axis vector (x0,y0)->(x1,y1) from shading space into device pixels. This
+        // matches the resolution the old per-stop sampling used so a hard step-discontinuity
+        // (e.g. a Type 3 stitching function at one of its Bounds) stays within a pixel rather than
+        // smearing across the sweep. The SKSL axial shader then computes the parametric position
+        // exactly per pixel (no stop quantization) and honours the Extend flags directly — the old
+        // CreateLinearGradient path always clamped (i.e. behaved as Extend = [true, true]).
+        //
+        // NOTE: the common sub-case of a single Type 2 (exponential) function in a device RGB / Gray
+        // space is C0 + t^N·(C1−C0) and could be evaluated closed-form directly in SkSL, skipping the
+        // LUT bitmap / texture entirely. Left on the generic LUT path for now (one code path, exact
+        // match with Shading.Eval for every function / colour space).
         float axisLength = MapToDevicePixels(patternTransformMatrix, x1 - x0, y1 - y0);
-        int factor = Math.Max(10, (int)Math.Ceiling(axisLength));
-        var colors = new SKColor[factor + 1];
-        float[] colorPos = new float[factor + 1];
+        int lutWidth = RampStopsForExtent(axisLength);
 
-        Span<double> evalIn = stackalloc double[1];
-        Span<double> evalOut = stackalloc double[ShadingEvalBufferSize];
         double alpha = currentState.AlphaConstantNonStroking;
-        ColorSpaceDetails axialColorSpace = shading.ColorSpace;
-        for (int t = 0; t <= factor; t++)
-        {
-            // Sample the parametric variable across the user-supplied Domain (NOT 0..t1
-            // — the previous form silently broke whenever t0 ≠ 0).
-            double frac = t / (double)factor;
-            double tx = t0 + frac * (t1 - t0);
-            evalIn[0] = tx;
-            int written = shading.Eval(evalIn, evalOut);
-            Span<double> v = evalOut.Slice(0, written);
+        bool[] extend = shading.Extend;
 
-            FixIncorrectValues(v, domain); // This is a hack, this should never happen, see GHOSTSCRIPT-693154-0
-
-            colors[t] = axialColorSpace.GetSKColor(v, alpha); // TODO - is it non stroking??
-            // Skia expects colorPos in [0,1] along the gradient line. The previous form
-            // passed raw domain values (e.g. 0..161) which Skia then clamped to [0,1],
-            // collapsing every intermediate stop onto position 1 and rendering the gradient
-            // as a single colour (the most visible casualty was P.pdf's bottom-right
-            // colour-bar legend).
-            colorPos[t] = (float)frac;
-        }
-
-        using (var shader = SKShader.CreateLinearGradient(new SKPoint(x0, y0), new SKPoint(x1, y1), colors, colorPos, SKShaderTileMode.Clamp, patternTransformMatrix))
-        using (var paint = new SKPaint())
+        using (SKImage lut = BuildShadingRampImage(shading, alpha, t0, t1, lutWidth, domain))
+        using (SKShader shader = CreateAxialShader(x0, y0, x1, y1, extend[0], extend[1], lutWidth, lut, patternTransformMatrix))
+        using (SKPaint paint = new SKPaint())
         {
             paint.IsAntialias = shading.AntiAlias;
             paint.Shader = shader;
