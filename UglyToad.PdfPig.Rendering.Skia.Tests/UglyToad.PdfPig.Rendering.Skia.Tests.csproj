@@ -502,9 +502,6 @@
 		<None Update="ExpectedImages\linux\pdfpig_skia\0000281_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
-		<None Update="ExpectedImages\linux\pdfpig_skia\0010050_1.png">
-		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-		</None>
 		<None Update="ExpectedImages\linux\pdfpig_skia\2108.11480_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
@@ -605,9 +602,6 @@
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\macos\pdfpig_skia\0000281_1.png">
-		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-		</None>
-		<None Update="ExpectedImages\macos\pdfpig_skia\0010050_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\macos\pdfpig_skia\2108.11480_1.png">
