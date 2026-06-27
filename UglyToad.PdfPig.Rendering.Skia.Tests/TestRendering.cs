@@ -763,6 +763,8 @@ public class TestRendering
             "0011979_2.png",
             "0011979.pdf", 2, 2
         },
+        
+        // TODO - Add Type3Test.pdf test
     };
 
     [Theory]

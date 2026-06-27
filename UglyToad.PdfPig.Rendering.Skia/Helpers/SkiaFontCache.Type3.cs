@@ -21,6 +21,7 @@ using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Operations;
 using UglyToad.PdfPig.Graphics.Operations.InlineImages;
 using UglyToad.PdfPig.Graphics.Operations.PathConstruction;
+using UglyToad.PdfPig.Graphics.Operations.PathPainting;
 using UglyToad.PdfPig.Graphics.Operations.SpecialGraphicsState;
 using UglyToad.PdfPig.Graphics.Operations.TextState;
 using UglyToad.PdfPig.PdfFonts;
@@ -82,8 +83,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         /// spec-ignored, so the current text colour drives painting at draw time).</item>
         /// <item>No <c>InvokeNamedXObject</c> (Do) or <c>BeginInlineImage</c> (BI/ID/EI) appears
         /// — those produce raster output that can't be replayed as a path.</item>
+        /// <item>No stroking paint operator (<c>S s B B* b b*</c>) appears. The vector path is
+        /// replayed as a single fill governed by the text rendering mode, so it cannot reproduce
+        /// a stroke's line width, dash pattern, cap/join or stroking colour. A d1 stencil is
+        /// allowed to stroke (only colour is inherited, not the other stroke parameters), so such
+        /// glyphs must run their real operators via the picture path to look correct.</item>
         /// </list>
-        /// Anything else (d0 coloured glyphs, bitmaps, missing marker) falls into the picture path.
+        /// Anything else (d0 coloured glyphs, bitmaps, stroked stencils, missing marker) falls into
+        /// the picture path.
         /// </summary>
         private static bool CanCacheAsVector(IReadOnlyList<IGraphicsStateOperation> operations)
         {
@@ -100,6 +107,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     case InvokeNamedXObject:
                     case BeginInlineImage:
                         return false; // raster content
+                    case StrokePath:                            // S
+                    case CloseAndStrokePath:                    // s
+                    case FillPathNonZeroWindingAndStroke:       // B
+                    case FillPathEvenOddRuleAndStroke:          // B*
+                    case CloseFillPathNonZeroWindingAndStroke:  // b
+                    case CloseFillPathEvenOddRuleAndStroke:     // b*
+                        return false; // stroke appearance can't be replayed by a fill-only path
                 }
             }
             return sawD1;
