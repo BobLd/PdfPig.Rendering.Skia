@@ -23,6 +23,8 @@ dotnet test --filter "FullyQualifiedName~ClassName.MethodName" UglyToad.PdfPig.R
 
 Test framework: **xUnit**. Test PDFs live in `UglyToad.PdfPig.Rendering.Skia.Tests/Documents/`.
 
+> **Binary test assets must stay binary in git.** `.gitattributes` has `* text=auto`, but uncompressed PDFs contain no NUL bytes, so git's heuristic misdetects them as *text* and strips CR bytes on storage. A PDF's xref uses absolute byte offsets, so dropping CRs shifts the layout and breaks them: the file checks out fine on Windows (`autocrlf` restores CRLF) but corrupt on Linux/macOS (LF), giving `IndexOutOfRangeException` in `MemoryInputBytes.Seek` / `PdfTokenScanner.TryReadStream`. The bug is byte-based, not OS-based — feeding the LF blob to the renderer fails on any OS. `.gitattributes` therefore force-marks `*.pdf` (and `*.png/jpg/jpeg/gif/ico/snk`) as `binary`. After adding a new test PDF, confirm `git check-attr -a <file>` reports `binary: set`; if it was committed before the rule, run `git add --renormalize .`.
+
 #### Image-regression tests (`PdfPigSkiaTest`)
 
 The bulk of the suite renders a PDF page and compares it pixel-by-pixel against a committed golden PNG. Things to know before touching the renderer:

@@ -4,6 +4,23 @@
 * text=auto
 
 ###############################################################################
+# Binary test assets must never be line-ending normalized.
+#
+# Some test PDFs are fully uncompressed (no NUL bytes), so git's text=auto
+# heuristic misdetects them as text and strips CR bytes when storing the blob.
+# That corrupts the binary xref byte offsets, so the file checks out broken on
+# platforms that use LF (Linux/macOS) while Windows autocrlf masks the issue.
+# Forcing these as binary keeps the bytes identical on every platform.
+###############################################################################
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.snk binary
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by
