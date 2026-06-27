@@ -268,11 +268,87 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             var currentState = GetCurrentState();
 
-            PaintFillPath(currentState, fillingRule);
-            PaintStrokePath(currentState);
+            if (!TryPaintAtomicFillStroke(currentState, fillingRule))
+            {
+                PaintFillPath(currentState, fillingRule);
+                PaintStrokePath(currentState);
+            }
 
             _currentPath.Dispose();
             _currentPath = null;
+        }
+
+        /// <summary>
+        /// Paint a path that is both filled and stroked by a single operator (<c>B</c>, <c>B*</c>,
+        /// <c>b</c>, <c>b*</c>) as one atomic object when transparency is involved.
+        /// <para>
+        /// ISO 32000-2 11.7.4.4: "For the purpose of compositing with the backdrop, the filling and
+        /// stroking operations performed by a single path-painting operator shall be treated as if
+        /// they were a single graphic object", i.e. a knockout transparency group. Painting fill then
+        /// stroke separately instead composites a semi-transparent stroke twice where it overlaps the
+        /// fill, so the stroke shows a different colour over the fill than over the bare backdrop
+        /// (visible on self-intersecting paths). Rendering both into one isolated layer and giving the
+        /// stroke <see cref="SKBlendMode.Src"/> makes the stroke knock the fill out within the group,
+        /// so it keeps a single uniform colour everywhere.
+        /// </para>
+        /// Returns <see langword="false"/> (leaving the caller to paint sequentially) for the opaque
+        /// case, where the group is unnecessary, and for pattern colours / active soft masks, which
+        /// keep their existing handling.
+        /// </summary>
+        private bool TryPaintAtomicFillStroke(CurrentGraphicsState currentState, FillingRule fillingRule)
+        {
+            if (_currentPath is null)
+            {
+                return false;
+            }
+
+            if (currentState.CurrentNonStrokingColor?.ColorSpace == ColorSpace.Pattern ||
+                currentState.CurrentStrokingColor?.ColorSpace == ColorSpace.Pattern)
+            {
+                return false;
+            }
+
+            if (TryGetActiveSoftMask(out _))
+            {
+                return false;
+            }
+
+            bool hasTransparency = currentState.AlphaConstantNonStroking < 1.0 ||
+                                   currentState.AlphaConstantStroking < 1.0 ||
+                                   currentState.BlendMode != BlendMode.Normal;
+            if (!hasTransparency)
+            {
+                // Opaque + Normal blend: the stroke fully hides the fill it covers, so sequential
+                // fill-then-stroke is identical to the knockout group but cheaper (no layer).
+                return false;
+            }
+
+            _currentPath.FillType = fillingRule.ToSKPathFillType();
+
+            // The gs blend mode is applied once, when the group layer is composited back onto the
+            // backdrop; the fill and stroke draw with Normal blend inside the (isolated) layer.
+            using var groupPaint = new SKPaint { BlendMode = currentState.BlendMode.ToSKBlendMode() };
+            _canvas.SaveLayer(groupPaint);
+            try
+            {
+                var fillPaint = _paintCache.GetPaint(currentState.CurrentNonStrokingColor,
+                    currentState.AlphaConstantNonStroking, false, null, null, null, null, BlendMode.Normal);
+                _canvas.DrawPath(_currentPath, fillPaint);
+
+                // SKBlendMode.Src: within the layer the stroke replaces (knocks out) the fill it
+                // covers instead of compositing over it, giving the stroke a uniform colour.
+                var knockoutStroke = _paintCache.GetPaint(currentState.CurrentStrokingColor,
+                    currentState.AlphaConstantStroking, true, (float)currentState.LineWidth,
+                    currentState.JoinStyle, currentState.CapStyle, currentState.LineDashPattern,
+                    BlendMode.Normal, SKBlendMode.Src);
+                _canvas.DrawPath(_currentPath, knockoutStroke);
+            }
+            finally
+            {
+                _canvas.Restore();
+            }
+
+            return true;
         }
     }
 }

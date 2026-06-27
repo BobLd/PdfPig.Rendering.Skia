@@ -55,10 +55,18 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         }
 
         public SKPaint GetPaint(IColor? color, double alpha, bool stroke, float? strokeWidth, LineJoinStyle? joinStyle,
-            LineCapStyle? capStyle, LineDashPattern? dashPattern, BlendMode blendMode)
+            LineCapStyle? capStyle, LineDashPattern? dashPattern, BlendMode blendMode, SKBlendMode? skBlendModeOverride = null)
         {
             color ??= RGBColor.Black;
             var key = GetPaintKey(color, alpha, stroke, strokeWidth, joinStyle, capStyle, dashPattern, blendMode);
+
+            if (skBlendModeOverride.HasValue)
+            {
+                // The override is a raw Skia blend mode that has no PDF BlendMode equivalent (e.g.
+                // SKBlendMode.Src for the knockout stroke of an atomic fill+stroke). Fold it into the
+                // key so it never aliases a normal cached paint.
+                key = HashCode.Combine(key, skBlendModeOverride.Value);
+            }
 
             if (_cache.TryGetValue(key, out var paint))
             {
@@ -70,7 +78,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 IsAntialias = _isAntialias,
                 Color = color.ToSKColor(alpha),
                 Style = stroke ? SKPaintStyle.Stroke : SKPaintStyle.Fill,
-                BlendMode = blendMode.ToSKBlendMode()
+                BlendMode = skBlendModeOverride ?? blendMode.ToSKBlendMode()
             };
             
             if (stroke)

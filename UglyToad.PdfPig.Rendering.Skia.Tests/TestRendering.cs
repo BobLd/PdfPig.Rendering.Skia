@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Uses documents from https://github.com/pdf-association/pdf-differences (CC BY 4.0)
+
 using System.IO;
 using Xunit;
 
@@ -762,6 +764,11 @@ public class TestRendering
         {
             "0011979_2.png",
             "0011979.pdf", 2, 2
+        },
+        new object[]
+        {
+            "SelfIntersecting-Transparency_1.png",
+            "SelfIntersecting-Transparency.pdf", 1, 2
         },
         
         // TODO - Add Type3Test.pdf test

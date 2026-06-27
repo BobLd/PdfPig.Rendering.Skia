@@ -1,0 +1,97 @@
+%PDF-1.7
+%‚„œ”
+%
+% Copyright 2023 PDF Association, Inc. https://www.pdfa.org
+%
+% Self-intersecting shape with fill and stroke colours and constant alpha transparency, using both winding rules.
+% Painted with combined "fill and srtoke" paint operator (atomic operation).
+%
+
+1 0 obj % Document Catalog
+<<
+    /Type /Catalog
+    /Outlines 2 0 R
+    /Pages 3 0 R
+>>
+endobj
+
+2 0 obj % No outlines (bookmarks)
+<<
+    /Type /Outlines
+    /Count 0
+>>
+endobj
+
+3 0 obj % Page tree root with single page
+<<
+    /Type /Pages
+    /Kids [ 4 0 R]
+    /Count 1
+>>
+endobj
+
+4 0 obj % Page object
+<<
+    /Type /Page
+    /Parent 3 0 R
+    /MediaBox [ 0 0 1500 1000 ] % Page size
+    /Resources << 
+        /ExtGState << /GS1 5 0 R >> 
+    >>
+    /Contents 6 0 R
+>>
+endobj
+
+5 0 obj % Graphics state parameter dictionary "GS1"
+<< 
+    /Type /ExtGState 
+    /CA 0.3 % Constant alpha for stroking = 30%
+    /ca 0.5 % Constant alpha for filling = 50%
+>>
+endobj
+
+6 0 obj % Page Content stream
+<<
+    /Length 573 
+>>
+stream
+20 w       % thick line width for stroking
+1 0 0 rg   % red fill
+0 1 0 RG   % green stroke
+/GS1 gs    % set transparency via a graphics state parameter dictionary
+1 j        % Round line join
+
+% Star-shape (self-intersecting X shape) 
+100	100 m
+550	550 l
+20  550 l
+540 50  l
+270 700 l
+b*         % close, fill and stroke using Odd/Even Rule
+
+2 j        % Bevel line join
+10 M       % Mitre limit
+
+% Star Shape (self-intersecting X shape)
+ 800 100 m
+1350 550 l
+ 720 550 l
+1340 50  l
+ 970 700 l
+b          % close, fill and stroke using Non-Zero Rule
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f
+0000000282 00000 n
+0000000387 00000 n
+0000000475 00000 n
+0000000588 00000 n
+0000000797 00000 n
+0000000989 00000 n
+trailer
+<< /Root 1 0 R /Size 7 >>
+startxref
+1646
+%%EOF
