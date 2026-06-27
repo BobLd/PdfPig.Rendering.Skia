@@ -770,6 +770,32 @@ public class TestRendering
             "SelfIntersecting-Transparency_1.png",
             "SelfIntersecting-Transparency.pdf", 1, 2
         },
+
+        new object[]
+        {
+            "DefaultRGBColourSpaces_1.png",
+            "DefaultRGBColourSpaces.pdf", 1, 2
+        },
+        new object[]
+        {
+            "DefaultRGBColourSpaces-inherit_1.png",
+            "DefaultRGBColourSpaces-inherit.pdf", 1, 2
+        },
+        new object[]
+        {
+            "NegativeFontSize_1.png",
+            "NegativeFontSize.pdf", 1, 2
+        },
+        new object[]
+        {
+            "OverlappingGlyphClipping_1.png",
+            "OverlappingGlyphClipping.pdf", 1, 2
+        },
+        new object[]
+        {
+            "TextClippingModeChanges_1.png",
+            "TextClippingModeChanges.pdf", 1, 2
+        },
         
         // TODO - Add Type3Test.pdf test
     };
