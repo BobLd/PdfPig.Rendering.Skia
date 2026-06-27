@@ -1,0 +1,93 @@
+%PDF-1.7
+%‚„œ”
+%
+% Copyright 2023 PDF Association, Inc. https://www.pdfa.org
+%
+% ISO 32000-2:2020 subclause 9.3.6 Text rendering mode:
+%
+% The behaviour of the clipping modes requires further explanation. Glyph outlines shall begin
+% accumulating if a BT operator is executed while the text rendering mode is set to a clipping mode or if
+% it is set to a clipping mode within a text object. Glyphs shall accumulate until the text object is ended by
+% an ET operator; the text rendering mode shall not be changed back to a nonclipping mode before that
+% point.
+% 
+% At the end of the text object identified by the ET operator the accumulated glyph outlines, if any, shall
+% be combined into a single path, treating the individual outlines as subpaths of that path and applying
+% the non-zero winding number rule (see 8.5.3.3.2, "Non-zero winding number rule"). The current
+% clipping path in the graphics state shall be set to the intersection of this path with the previous clipping
+% path. As is the case for path objects, this clipping shall occur after all filling and stroking operations for
+% the text object have occurred. It remains in effect until a previous clipping path is restored by an
+% invocation of the Q operator.
+% 
+% NOTE 2 Due to the use of non-zero winding number rule, the direction of the paths comprising each
+% glyph can cause different output for overlapping glyphs.
+% 
+
+1 0 obj % Document catalog
+<<
+    /Type /Catalog
+    /Pages 2 0 R
+>>
+endobj
+
+2 0 obj % Page tree root node
+<<
+    /Type   /Pages
+    /Kids   [ 3 0 R ]
+    /Count  1
+    /Resources  << 
+        /Font << 
+            /FnHelv << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> 
+            /FnTB   << /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >> 
+        >> 
+    >>
+>>
+endobj
+
+3 0 obj % Page object
+<<
+    /Type       /Page
+    /Parent     2 0 R
+    /MediaBox   [ 0 0 800 800 ]
+    /Contents   4 0 R
+>>
+endobj
+
+4 0 obj % Page Content stream
+<<
+    /Length 567 
+>>
+stream
+% Initial clip = media box (entire page)
+15 w         % Line width
+1 j          % Round line join style
+[] 0 d       % Dash array and phase
+1 0 0 RG     % red stroke
+
+BT
+	 /FnTB 500 Tf       % Times-Bold
+	 5 Tr               % Stroke and add to clip (fill is default black, but not used)
+	 1 0 0 1 10 90 Tm
+	 (B 8) Tj
+	 /FnHelv 660 Tf
+	 1 0 0 1 10 10 Tm
+	 (8B) Tj
+ET                      % Intersect text clip using non-zero winding
+
+0 0 1 rg                % blue fill
+70 50 700 400 re f      % blue filled rectangle, clipped by stroked red text
+
+endstream
+endobj
+xref
+0 5
+0000000000 65535 f
+0000001422 00000 n
+0000001506 00000 n
+0000001829 00000 n
+0000001972 00000 n
+trailer
+<< /Root 1 0 R /Size 5 >>
+startxref
+2623
+%%EOF

@@ -1,0 +1,101 @@
+%PDF-1.7
+%‚„œ”
+
+1 0 obj
+<< /Type       /Catalog
+   /Pages      2 0 R
+>>
+endobj
+
+2 0 obj
+<< /Type       /Pages
+   /Kids       [ 3 0 R ]
+   /Count      1
+>>
+endobj
+
+3 0 obj
+<< /Type       /Page
+   /Parent     2 0 R
+   /MediaBox   [ 0 0 600 800 ]
+   /Resources << /Font << /FHelv 4 0 R >> >>
+   /Contents   5 0 R
+>>
+endobj
+
+4 0 obj
+<< /Type /Font
+   /Subtype /Type1
+   /BaseFont /Helvetica
+>>
+endobj
+
+5 0 obj
+<< /Length 1788
+>>
+stream
+  8 w           % Line width clearly visible
+
+  q
+    % Current Tr = 0 (default value from initial graphics state)
+    1 0 0 RG            % Stroke = Red
+    BT
+      0 740 Td
+      /FHelv 60 Tf
+      7 Tr              % Text rendering mode = add to clip ONLY
+      ([Tr7 Once]) Tj
+    ET % End of text object --> apply clip of all glyphs so far
+    4 740 600 40 re B   % Text visible ONLY by clipping this black (DeviceGray) filled and red stroked rectangle 
+  Q
+
+  q
+    % Current Tr = 0 (default value from initial graphics state)
+    0.3 g               % Fill = gray 
+    0 1 0 RG			      % Stroke = Green
+    BT
+      0 680 Td
+      /FHelv 60 Tf
+      5 Tr			        % Text rendering mode = Stroke (green) and add to clip
+      (XX Tr5 XX) Tj
+      0 0 Td            % Move to start of SAME line of text
+      4 Tr              % Text rendering mode = Fill and add to clip (valid Tr change since as clipping)
+      (## Tr4 ##) Tj
+    ET % End of text object --> apply clip of all text so far
+    0 g
+    0 0 600 800 re f		% Apply clip to this black (DeviceGray) filled rectangle
+  Q
+
+  q
+    % Current Tr = 0 (default value from initial graphics state)
+    1 0 0 rg            % Fill = Red
+    0 0 1 RG			      % Stroke = Blue
+    BT
+      10 620 Td
+      /FHelv 60 Tf
+      5 Tr              % Text rendering mode = Stroke and add to clip
+      (XXXXX Tr) Tj
+      6 Tr              % Text rendering mode = Fill then stroke and add to clip (valid Tr change as still clipping)
+      0 0 Td			      % Move to start of SAME line of text
+	    (OOOOO Inside) Tj
+    ET % End of text object --> apply clip of all text so far
+    0 1 0 rg	        	% Green Fill
+    0 0 400 650 re f		% Apply clip to Green filled rectangle (NOTE HEIGHT!)
+  Q
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f
+0000000019 00000 n
+0000000089 00000 n
+0000000179 00000 n
+0000000346 00000 n
+0000000430 00000 n
+trailer
+<<
+  /Root 1 0 R
+  /Size 6
+>>
+startxref
+2275
+%%EOF
