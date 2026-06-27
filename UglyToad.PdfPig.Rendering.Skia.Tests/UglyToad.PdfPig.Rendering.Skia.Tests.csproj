@@ -538,6 +538,12 @@
 		<None Update="ExpectedImages\linux\pdfpig_skia\cat-genetics_bobld_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
+		<None Update="ExpectedImages\linux\pdfpig_skia\DefaultRGBColourSpaces-inherit_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\linux\pdfpig_skia\DefaultRGBColourSpaces_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
 		<None Update="ExpectedImages\linux\pdfpig_skia\GHOSTSCRIPT-686749-1_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
@@ -574,6 +580,9 @@
 		<None Update="ExpectedImages\linux\pdfpig_skia\MOZILLA-LINK-6305-5_20.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
+		<None Update="ExpectedImages\linux\pdfpig_skia\NegativeFontSize_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
 		<None Update="ExpectedImages\linux\pdfpig_skia\P2P-33713919_2.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
@@ -590,6 +599,9 @@
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\linux\pdfpig_skia\SPARC - v9 Architecture Manual_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\linux\pdfpig_skia\TextClippingModeChanges_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\macos\pdfpig_skia\0000042_1.png">
@@ -649,6 +661,12 @@
 		<None Update="ExpectedImages\macos\pdfpig_skia\cat-genetics_bobld_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
+		<None Update="ExpectedImages\macos\pdfpig_skia\DefaultRGBColourSpaces-inherit_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\macos\pdfpig_skia\DefaultRGBColourSpaces_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
 		<None Update="ExpectedImages\macos\pdfpig_skia\full-size-image_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
@@ -703,6 +721,12 @@
 		<None Update="ExpectedImages\macos\pdfpig_skia\MOZILLA-LINK-6305-5_20.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
+		<None Update="ExpectedImages\macos\pdfpig_skia\NegativeFontSize_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\macos\pdfpig_skia\OverlappingGlyphClipping_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
 		<None Update="ExpectedImages\macos\pdfpig_skia\P2P-33713919_2.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
@@ -719,6 +743,9 @@
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\macos\pdfpig_skia\SPARC - v9 Architecture Manual_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\macos\pdfpig_skia\TextClippingModeChanges_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\0000042_1.png">

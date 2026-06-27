@@ -1,0 +1,132 @@
+%PDF-1.7
+%‚„œ”
+%
+% Copyright 2024 PDF Association, Inc. https://www.pdfa.org
+%
+% Test when font size is negative by Tf operator and via Font entry in Graphics State Parameter dictionary.
+%
+
+1 0 obj % Document Catalog
+<<
+    /Type /Catalog
+    /Pages 2 0 R
+>>
+endobj
+
+2 0 obj % Page tree root with single page
+<<
+    /Type /Pages
+    /Kids [ 3 0 R]
+    /Count 1
+>>
+endobj
+
+3 0 obj % Page object
+<<
+    /Type /Page
+    /Parent 2 0 R
+    /MediaBox [ 0 0 1500 1000 ] % Page size
+    /Resources <<
+        /Font << 
+            /Helv  4 0 R 
+            /Times 5 0 R 
+        >>
+        /ExtGState << 
+            /ZeroFontSizeHelv  << /Type /ExtGState /Font [ 4 0 R   0 ] >>
+            /NegFontSizeHelv   << /Type /ExtGState /Font [ 4 0 R -20 ] >>
+            /PosFontSizeHelv   << /Type /ExtGState /Font [ 4 0 R +20 ] >>
+            /ZeroFontSizeTimes << /Type /ExtGState /Font [ 5 0 R   0 ] >>
+            /NegFontSizeTimes  << /Type /ExtGState /Font [ 5 0 R -20 ] >>
+            /PosFontSizeTimes  << /Type /ExtGState /Font [ 5 0 R +20 ] >>
+        >>
+    >>
+    /Contents 6 0 R
+>>
+endobj
+
+4 0 obj % Helvetica Type 1 standard 14 font (non-embedded)
+<<
+    /Type /Font
+    /Subtype /Type1
+    /BaseFont /Helvetica
+>>
+endobj
+
+5 0 obj % Times-Roman Type 1 standard 14 font (non-embedded)
+<<
+    /Type /Font
+    /Subtype /Type1
+    /BaseFont /Times-Roman
+>>
+endobj
+
+6 0 obj % Page Content stream
+<<
+    /Length 1461
+>>
+stream
+2 w        % visible line width for stroking
+1 0 0 rg   % red fill
+0 0 1 RG   % blue stroke
+
+q BT
+    0 Tr              % Text render mode = fill
+    q
+        1 0 0 1 50 800 Tm
+        /Helv +20 Tf
+        (Helvetica +20 font size via Tf operator) Tj
+        /Helv -20 Tf
+        (Helvetica -20 font size via Tf operator) Tj
+        /Helv 0 Tf
+        (Helvetica zero font size via Tf operator) Tj
+    Q
+    1 Tr              % Text render mode = stroke
+    q
+        2 0 0 2 50 600 Tm
+        /Times +20 Tf
+        (Times-Roman +20 font size via Tf operator) Tj
+        /Times -20 Tf
+        (Times-Roman -20 font size via Tf operator) Tj
+        /Times 0 Tf
+        (Times-Roman zero font size via Tf operator) Tj
+    Q
+ET Q
+
+q BT
+    0 Tr              % Text render mode = fill
+    q
+        1 0 0 1 50 400 Tm
+        /PosFontSizeHelv gs
+        (Helvetica +20 font size via gs operator) Tj
+        /NegFontSizeHelv gs
+        (Helvetica -20 font size via gs operator) Tj
+        /ZeroFontSizeHelv gs
+        (Helvetica zero font size via gs operator) Tj
+    Q
+    1 Tr              % Text render mode = stroke
+    q
+        2 0 0 2 50 200 Tm
+        /PosFontSizeTimes gs
+        (Times-Roman +20 font size via gs operator) Tj
+        /NegFontSizeTimes gs
+        (Times-Roman -20 font size via gs operator) Tj
+        /ZeroFontSizeTimes gs
+        (Times-Roman zero font size via gs operator) Tj
+    Q
+ET Q
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f
+0000000198 00000 n
+0000000282 00000 n
+0000000395 00000 n
+0000001136 00000 n
+0000001278 00000 n
+0000001424 00000 n
+trailer
+<< /Root 1 0 R /Size 7 >>
+startxref
+2969
+%%EOF
