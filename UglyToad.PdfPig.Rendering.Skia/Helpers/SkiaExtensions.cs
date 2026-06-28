@@ -15,6 +15,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using SkiaSharp;
+using SkiaSharp.HarfBuzz;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Graphics.Core;
@@ -27,6 +28,79 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         private const float OneOver72 = (float)(1.0 / 72.0);
 
         private static readonly string DefaultFamilyName = SKTypeface.Default.FamilyName;
+
+        /// <summary>
+        /// Draw a shaped glyph run for the fallback (non-vector) text path. Horizontal text uses the
+        /// default shaper; vertical text is shaped top-to-bottom (see <see cref="ShapeVertical"/>) so
+        /// HarfBuzz substitutes the vertical presentation forms.
+        /// </summary>
+        public static void DrawShapedText(this SKCanvas canvas, SKShaper shaper, string text, SKFont skFont, SKPaint paint, bool vertical)
+        {
+            if (!vertical)
+            {
+                canvas.DrawShapedText(shaper, text, SKPoint.Empty, SKTextAlign.Left, skFont, paint);
+                return;
+            }
+
+            // See https://github.com/mono/SkiaSharp/issues/4273
+            var shaped = shaper.ShapeVertical(text, skFont);
+
+            using var builder = new SKTextBlobBuilder();
+            var run = builder.AllocateRawPositionedRun(skFont, shaped.Codepoints.Length);
+            var glyphs = run.Glyphs;
+            var positions = run.Positions;
+            for (int i = 0; i < shaped.Codepoints.Length; ++i)
+            {
+                glyphs[i] = (ushort)shaped.Codepoints[i];
+                positions[i] = shaped.Points[i];
+            }
+
+            using var blob = builder.Build();
+            if (blob is not null)
+            {
+                canvas.DrawText(blob, 0, 0, paint);
+            }
+            else
+            {
+                // Fallback to default
+                canvas.DrawShapedText(shaper, text, SKPoint.Empty, SKTextAlign.Left, skFont, paint);
+            }
+        }
+
+        /// <summary>
+        /// Shape <paramref name="text"/> for vertical writing mode, returning the vertical
+        /// presentation-form glyphs positioned with the horizontal layout.
+        /// <para>
+        /// Setting the buffer direction top-to-bottom makes HarfBuzz apply its default 'vert' feature,
+        /// substituting the vertical presentation forms (rotated brackets, repositioned punctuation, the
+        /// prolonged-sound mark, ...). We take only the substituted glyph ids from that pass and keep the
+        /// <em>horizontal</em> glyph positions: PdfPig already places the pen for vertical writing using
+        /// the font's position vector (W2/DW2), so HarfBuzz's vertical positions — which add the fallback
+        /// font's own vertical-origin offset on top — would shift every glyph off its bounding box. For
+        /// the single glyph PdfPig renders per character code the horizontal position is simply the origin.
+        /// </para>
+        /// </summary>
+        public static SKShaper.Result ShapeVertical(this SKShaper shaper, string text, SKFont skFont)
+        {
+            // See https://github.com/mono/SkiaSharp/issues/4273
+            using var buffer = new HarfBuzzSharp.Buffer();
+            buffer.AddUtf16(text);
+            buffer.GuessSegmentProperties();
+            buffer.Direction = HarfBuzzSharp.Direction.TopToBottom;
+            SKShaper.Result vertical = shaper.Shape(buffer, skFont);
+
+            SKShaper.Result horizontal = shaper.Shape(text, skFont);
+
+            // 'vert' is a one-to-one (GSUB single) substitution, so the horizontal and vertical passes
+            // produce the same glyph count in the same order. When that holds, draw the vertical glyphs
+            // at the horizontal positions; otherwise fall back to the vertical result unchanged.
+            if (horizontal.Codepoints.Length == vertical.Codepoints.Length)
+            {
+                return new SKShaper.Result(vertical.Codepoints, vertical.Clusters, horizontal.Points, horizontal.Width);
+            }
+
+            return vertical;
+        }
 
         public static bool IsDefault(this SKTypeface typeface)
         {
