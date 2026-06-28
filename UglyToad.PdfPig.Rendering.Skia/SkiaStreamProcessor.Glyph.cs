@@ -222,7 +222,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             // canvas matrix so cm/q/Q changes later in the same text object don't shift it.
             if (textRenderingMode.IsClip())
             {
-                using var glyphPath = GetPath(drawTypeface, renderUnicode);
+                using var glyphPath = GetPath(drawTypeface, renderUnicode, font.IsVertical);
                 if (!glyphPath.IsEmpty)
                 {
                     AppendGlyphToTextClipPath(glyphPath);
@@ -257,7 +257,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         throw new ArgumentNullException($"Expecting a {nameof(PatternColor)} but got '{nonStrokingColor.GetType()}'.");
                     }
 
-                    using (var path = GetPath(drawTypeface, renderUnicode))
+                    using (var path = GetPath(drawTypeface, renderUnicode, font.IsVertical))
                     {
                         ShowVectorFontGlyph(path, strokingColor, nonStrokingColor,
                             textRenderingMode, in TransformationMatrix.Identity, in TransformationMatrix.Identity);
@@ -270,7 +270,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     DrawWithSoftMask(softMask!, currentState.BlendMode, () =>
                     {
                         using var skFont = drawTypeface.Typeface.ToFont(1f);
-                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, SKPoint.Empty, SKTextAlign.Left, skFont, innerPaint);
+                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, skFont, innerPaint, font.IsVertical);
                     });
                 }
                 else
@@ -280,7 +280,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     using (var skFont = drawTypeface.Typeface.ToFont(1f))
                     {
-                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, SKPoint.Empty, SKTextAlign.Left, skFont, fillPaint);
+                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, skFont, fillPaint, font.IsVertical);
                     }
                 }
             }
@@ -310,7 +310,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     DrawWithSoftMask(softMask!, currentState.BlendMode, () =>
                     {
                         using var skFont = drawTypeface.Typeface.ToFont(1f);
-                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, SKPoint.Empty, SKTextAlign.Left, skFont, innerStrokePaint);
+                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, skFont, innerStrokePaint, font.IsVertical);
                     });
                 }
                 else
@@ -321,7 +321,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     using (var skFont = drawTypeface.Typeface.ToFont(1f))
                     {
-                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, SKPoint.Empty, SKTextAlign.Left, skFont, strokePaint);
+                        _canvas.DrawShapedText(drawTypeface.Shaper, renderUnicode, skFont, strokePaint, font.IsVertical);
                     }
                 }
             }
@@ -501,11 +501,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
             return SKRect.Create(-1000, -1000, 2000, 2000);
         }
         
-        private static SKPath GetPath(SkiaFontCacheItem fontItem, string unicode)
+        private static SKPath GetPath(SkiaFontCacheItem fontItem, string unicode, bool vertical)
         {
             using (var skFont = fontItem.Typeface.ToFont(1f))
             {
-                var shaped = fontItem.Shaper.Shape(unicode, skFont);
+                var shaped = vertical
+                    ? fontItem.Shaper.ShapeVertical(unicode, skFont)
+                    : fontItem.Shaper.Shape(unicode, skFont);
 
                 var combinedPath = new SKPath();
                 for (int i = 0; i < shaped.Codepoints.Length; ++i)
@@ -520,7 +522,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         combinedPath.AddPath(glyphPath, in matrix);
                     }
                 }
-
+                
                 return combinedPath;
             }
         }

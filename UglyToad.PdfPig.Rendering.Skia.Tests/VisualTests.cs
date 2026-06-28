@@ -28,7 +28,8 @@ public class VisualTests
     [
         "SPARC - v9 Architecture Manual.pdf",
         "TIKA-1552-0.pdf",
-        "Type3Test.pdf" // fails in 0.1.15
+        "Type3Test.pdf", // fails in 0.1.15
+        "DefaultColourSpaces.230802.pdf", // fails in 0.1.15
     ];
     
     public static IEnumerable<object[]> GetAllDocuments => Directory.EnumerateFiles(Helper.DocumentsFolder, "*.pdf")

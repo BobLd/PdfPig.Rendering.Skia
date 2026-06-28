@@ -796,8 +796,13 @@ public class TestRendering
             "TextClippingModeChanges_1.png",
             "TextClippingModeChanges.pdf", 1, 2
         },
+        new object[]
+        {
+            "VerticalText_1.png",
+            "VerticalText.pdf", 1, 2
+        },
         
-        // TODO - Add Type3Test.pdf test
+        // TODO - Add Type3Test.pdf + DefaultColourSpaces.230802.pdf test
     };
 
     [Theory]
