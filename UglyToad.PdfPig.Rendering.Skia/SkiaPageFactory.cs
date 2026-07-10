@@ -71,11 +71,16 @@ public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
             namedDestinations,
             ParsingOptions.Logger);
 
-        var context = new SkiaStreamProcessor(pageNumber, ResourceStore, PdfScanner, PageContentParser,
-            FilterProvider, cropBox, userSpaceUnit, rotation, initialMatrix, ParsingOptions,
-            annotationProvider, _fontCache, CurrentToken);
+        // Keep the font cache alive while this page renders: Dispose() waits for in-flight
+        // renders to finish before tearing down the native resources they are drawing with.
+        using (_fontCache.BeginUse())
+        {
+            var context = new SkiaStreamProcessor(pageNumber, ResourceStore, PdfScanner, PageContentParser,
+                FilterProvider, cropBox, userSpaceUnit, rotation, initialMatrix, ParsingOptions,
+                annotationProvider, _fontCache, CurrentToken);
 
-        return context.Process(pageNumber, operations);
+            return context.Process(pageNumber, operations);
+        }
     }
 
     /// <inheritdoc />

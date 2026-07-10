@@ -27,6 +27,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 {
     internal sealed partial class SkiaFontCache : IDisposable
     {
+        private static readonly object FontManagerLock = new();
+
+        // Font family names known to the font manager, sorted ordinally so character-coverage
+        // scanning is deterministic. Built lazily because the installed font set is stable for
+        // the lifetime of the (document-scoped) cache.
+        private static string[]? _sortedFontFamilies;
+
         /// <summary>
         /// The "Noto" families are tried first. They're purpose-built as the universal "no tofu" fallback
         /// and are present across the Linux/macOS runners, so the choice is both good quality and consistent.
@@ -39,10 +46,6 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         private readonly ConcurrentDictionary<string, List<SkiaFontCacheItem>> _typefaces = new();
 
-        private readonly ReaderWriterLockSlim _lock = new();
-
-        private readonly SKFontManager _skFontManager = SKFontManager.CreateDefault();
-        
         public SkiaFontCacheItem GetTypefaceOrFallback(IFont font, string unicode)
         {
             if (IsDisposed())
@@ -50,25 +53,29 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 throw new ObjectDisposedException(nameof(SkiaFontCache));
             }
 
-            _lock.EnterReadLock();
-            try
+            string fontKey = GetFontKey(font);
+            int codepoint = GetCodepoint(unicode);
+
+            if (TryGetFontCacheItem(fontKey, unicode, codepoint, out var item))
             {
-                if (IsDisposed())
-                {
-                    throw new ObjectDisposedException(nameof(SkiaFontCache));
-                }
+                return item!;
+            }
 
-                string fontKey = GetFontKey(font);
-                int codepoint = GetCodepoint(unicode);
+            // Cannot find font ZapfDingbats MOZILLA-LINK-5251-1
 
-                if (TryGetFontCacheItem(fontKey, unicode, codepoint, out var item))
+            // Serialize all access to the shared native font manager (see FontManagerLock), and
+            // keep resolve + publish atomic so two threads missing on the same (fontKey, codepoint)
+            // cannot both resolve and insert duplicates in a scheduling-dependent order.
+            lock (FontManagerLock)
+            {
+                // Double-check: another thread may have resolved this font while we waited.
+                if (TryGetFontCacheItem(fontKey, unicode, codepoint, out item))
                 {
                     return item!;
                 }
 
-                // Cannot find font ZapfDingbats MOZILLA-LINK-5251-1
-
                 SKTypeface? currentTypeface;
+
                 using (var style = font.Details.GetFontStyle())
                 {
                     // Try get font by name
@@ -92,11 +99,11 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     if (currentTypeface is null || (!string.IsNullOrWhiteSpace(unicode) && !currentTypeface.ContainsGlyph(codepoint)))
                     {
                         // If font cannot render the char
-                        var fallback = _skFontManager.MatchCharacter(codepoint); // Access violation here
+                        var fallback = SKFontManager.Default.MatchCharacter(codepoint); // Access violation here
                         if (fallback is not null)
                         {
                             currentTypeface?.Dispose();
-                            currentTypeface = _skFontManager.MatchFamily(fallback.FamilyName, style);
+                            currentTypeface = SKFontManager.Default.MatchFamily(fallback.FamilyName, style);
                             fallback.Dispose();
                         }
                     }
@@ -119,7 +126,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                         }
                     }
                 }
-                
+
                 // MOZILLA-LINK-625-0 ("BVNSKD+wasy10|0|0") ;
                 // test-2_so_74165171.pdf ("NHVBQA+NotoSansHK-Thin|0|0");
                 // cmap-parsing-exception;
@@ -129,19 +136,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 return SetFontCacheItem(fontKey, currentTypeface);
             }
-            finally
-            {
-                if (!IsDisposed())
-                {
-                    _lock.ExitReadLock();
-                }
-            }
         }
 
-        // Font family names known to the font manager, sorted ordinally so character-coverage
-        // scanning is deterministic. Built lazily because the installed font set is stable for
-        // the lifetime of the (document-scoped) cache.
-        private string[]? _sortedFontFamilies;
 
         /// <summary>
         /// Last-resort fallback used when <see cref="SKFontManager.MatchCharacter(int)"/> cannot supply a
@@ -149,8 +145,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         /// installed font families and returns the first whose typeface contains the glyph, or <c>null</c>
         /// if none can render it. The Noto fonts are prioritised. Within each pass families are visited in
         /// stable ordinal order so the result is deterministic across runs and architectures.
+        /// Must be called under <see cref="FontManagerLock"/>.
         /// </summary>
-        private SKTypeface? MatchCharacterByEnumeration(int codepoint, SKFontStyle style)
+        private static SKTypeface? MatchCharacterByEnumeration(int codepoint, SKFontStyle style)
         {
             string[] families = _sortedFontFamilies ??= BuildSortedFontFamilies();
 
@@ -158,7 +155,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                    ?? FindCoveringTypeface(families, codepoint, style, notoOnly: false);
         }
 
-        private SKTypeface? FindCoveringTypeface(string[] families, int codepoint, SKFontStyle style, bool notoOnly)
+        private static SKTypeface? FindCoveringTypeface(string[] families, int codepoint, SKFontStyle style, bool notoOnly)
         {
             foreach (string family in families)
             {
@@ -167,7 +164,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     continue;
                 }
 
-                SKTypeface? candidate = _skFontManager.MatchFamily(family, style);
+                SKTypeface? candidate = SKFontManager.Default.MatchFamily(family, style);
                 if (candidate is null)
                 {
                     continue;
@@ -184,9 +181,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return null;
         }
 
-        private string[] BuildSortedFontFamilies()
+        private static string[] BuildSortedFontFamilies()
         {
-            string[] families = _skFontManager.GetFontFamilies();
+            string[] families = SKFontManager.Default.GetFontFamilies();
             Array.Sort(families, StringComparer.Ordinal);
             return families;
         }
@@ -197,19 +194,31 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem>? skiaFontCacheItems))
             {
-                if (string.IsNullOrWhiteSpace(unicode))
+                // SetFontCacheItem mutates the list under the same per-list lock. Without it a
+                // concurrent Add can invalidate this enumeration ("collection was modified") or
+                // expose a torn internal state mid-resize.
+                lock (skiaFontCacheItems)
                 {
-                    item = skiaFontCacheItems[0];
-                    return true;
-                }
-
-                foreach (var cacheItem in skiaFontCacheItems)
-                {
-                    // Find first font that can render char
-                    if (cacheItem.Typeface.ContainsGlyph(codepoint))
+                    if (skiaFontCacheItems.Count == 0)
                     {
-                         item = cacheItem;
-                         return true;
+                        // Published by GetOrAdd but not yet filled by SetFontCacheItem.
+                        return false;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(unicode))
+                    {
+                        item = skiaFontCacheItems[0];
+                        return true;
+                    }
+
+                    foreach (var cacheItem in skiaFontCacheItems)
+                    {
+                        // Find first font that can render char
+                        if (cacheItem.Typeface.ContainsGlyph(codepoint))
+                        {
+                            item = cacheItem;
+                            return true;
+                        }
                     }
                 }
             }
@@ -217,9 +226,15 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return false;
         }
 
+        // Only called under FontManagerLock (writes are already serialised); the per-list lock is
+        // still required because TryGetFontCacheItem reads the list outside FontManagerLock.
         private SkiaFontCacheItem SetFontCacheItem(string fontKey, SKTypeface? typeface)
         {
-            if (_typefaces.TryGetValue(fontKey, out List<SkiaFontCacheItem>? skiaFontCacheItems))
+            // GetOrAdd (instead of racy TryGetValue + indexer assignment) so two threads can never
+            // publish two lists for the same key, losing one thread's item.
+            List<SkiaFontCacheItem> skiaFontCacheItems = _typefaces.GetOrAdd(fontKey, _ => new List<SkiaFontCacheItem>());
+
+            lock (skiaFontCacheItems)
             {
                 // Make sure the font is not already cached
                 SkiaFontCacheItem? skiaFontCacheItem = skiaFontCacheItems.FirstOrDefault(x => x.Typeface.Equals(typeface));
@@ -230,21 +245,30 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     // properly though (see MOZILLA-3136-0.pdf)
                     return skiaFontCacheItem;
                 }
+
+                // Check if we need to create cache item
+                var item = typeface is null || typeface.IsDefault()
+                    ? DefaultSkiaFontCacheItem.Value
+                    : new SkiaFontCacheItem(typeface);
+
+                if (!ReferenceEquals(item.Typeface, typeface))
+                {
+                    // The resolved wrapper was replaced by the shared default item: release it so it
+                    // doesn't leak its native reference. (Disposing SKTypeface.Default itself is a
+                    // protected no-op in SkiaSharp, so this is safe whichever instance we got.)
+                    typeface?.Dispose();
+                }
+
+                // The shared default item can be re-resolved for the same key by successive
+                // unmatched codepoints; without this check it gets appended once per codepoint and
+                // the list grows unboundedly.
+                if (!skiaFontCacheItems.Contains(item))
+                {
+                    skiaFontCacheItems.Add(item);
+                }
+
+                return item;
             }
-
-            // Check if we need to create cache item
-            var item = typeface is null || typeface.IsDefault()
-                ? DefaultSkiaFontCacheItem.Value
-                : new SkiaFontCacheItem(typeface);
-
-            if (skiaFontCacheItems is null)
-            {
-                skiaFontCacheItems = new List<SkiaFontCacheItem>();
-                _typefaces[fontKey] = skiaFontCacheItems;
-            }
-
-            skiaFontCacheItems.Add(item);
-            return item;
         }
 
         private static string? GetTrueTypeFontFontName(string? fontName)
@@ -265,6 +289,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         private static int GetCodepoint(string unicode)
         {
+            // Null/empty reaches here (callers only filter control characters) and produces an
+            // empty byte array, which BitConverter.ToInt32 rejects. Callers treat such input via
+            // the IsNullOrWhiteSpace paths, so any sentinel value works; 0 is never a real glyph.
+            if (string.IsNullOrEmpty(unicode))
+            {
+                return 0;
+            }
+
             return BitConverter.ToInt32(Encoding.UTF32.GetBytes(unicode), 0);
         }
 
@@ -275,75 +307,120 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         private long _isDisposed;
 
+        // Number of page renders currently in flight (see BeginUse/EndUse).
+        private int _activeUses;
+
+        /// <summary>
+        /// Marks the start of a page render so <see cref="Dispose"/> waits for it to finish instead
+        /// of freeing native typefaces/paths/pictures that are still being drawn with. Dispose the
+        /// returned scope when the render completes (see SkiaPageFactory.ProcessPage).
+        /// </summary>
+        public UsageScope BeginUse()
+        {
+            Interlocked.Increment(ref _activeUses);
+
+            if (IsDisposed())
+            {
+                // Disposed before (or while) registering: unregister and refuse the render.
+                Interlocked.Decrement(ref _activeUses);
+                throw new ObjectDisposedException(nameof(SkiaFontCache));
+            }
+
+            return new UsageScope(this);
+        }
+
+        /// <summary>
+        /// Marks the end of a page render started with <see cref="BeginUse"/> when disposed.
+        /// </summary>
+        public readonly struct UsageScope : IDisposable
+        {
+            private readonly SkiaFontCache? _fontCache;
+
+            internal UsageScope(SkiaFontCache fontCache)
+            {
+                _fontCache = fontCache;
+            }
+
+            public void Dispose()
+            {
+                if (_fontCache is not null)
+                {
+                    Interlocked.Decrement(ref _fontCache._activeUses);
+                }
+            }
+        }
+
         public void Dispose()
         {
-            _lock.EnterWriteLock();
-
-            try
+            // Atomic test-and-set
+            if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
             {
-                if (IsDisposed())
+                return;
+            }
+
+            // No new render can start now (BeginUse throws once the flag is set); wait for the
+            // in-flight ones to finish before freeing the native resources they are drawing with.
+            // Both BeginUse's increment and the flag set above are full fences, so a render that
+            // passed its disposed check is always visible to this read.
+            SpinWait spinWait = default;
+            while (Volatile.Read(ref _activeUses) > 0)
+            {
+                spinWait.SpinOnce();
+            }
+
+            foreach (IFont? key in _cache.Keys)
+            {
+                if (!_cache.TryRemove(key, out var fontCache))
                 {
-                    return;
+                    continue;
                 }
 
-                Interlocked.Increment(ref _isDisposed);
-
-                _skFontManager.Dispose();
-
-                foreach (IFont? key in _cache.Keys)
+                foreach (var value in fontCache.Values)
                 {
-                    if (!_cache.TryRemove(key, out var fontCache))
-                    {
-                        continue;
-                    }
-
-                    foreach (var value in fontCache.Values)
-                    {
-                        value?.Value?.Dispose();
-                    }
-
-                    fontCache.Clear();
+                    value?.Value?.Dispose();
                 }
 
-                _cache.Clear();
+                fontCache.Clear();
+            }
 
-                foreach (IType3Font key in _type3Cache.Keys)
+            _cache.Clear();
+
+            foreach (IType3Font key in _type3Cache.Keys)
+            {
+                if (!_type3Cache.TryRemove(key, out var perFont))
                 {
-                    if (!_type3Cache.TryRemove(key, out var perFont))
-                    {
-                        continue;
-                    }
-
-                    foreach (var value in perFont.Values)
-                    {
-                        value?.Value?.Dispose();
-                    }
-
-                    perFont.Clear();
+                    continue;
                 }
 
-                _type3Cache.Clear();
-
-                foreach (string key in _typefaces.Keys)
+                foreach (var value in perFont.Values)
                 {
-                    if (!_typefaces.TryRemove(key, out var typeface))
-                    {
-                        continue;
-                    }
+                    value?.Value?.Dispose();
+                }
 
-                    foreach (SkiaFontCacheItem item in typeface)
+                perFont.Clear();
+            }
+
+            _type3Cache.Clear();
+
+            foreach (string key in _typefaces.Keys)
+            {
+                if (!_typefaces.TryRemove(key, out var skiaFontCacheItems))
+                {
+                    continue;
+                }
+
+                // The per-list lock is the documented guard for these lists (see
+                // TryGetFontCacheItem); without it a render racing this dispose can Add mid-foreach.
+                lock (skiaFontCacheItems)
+                {
+                    foreach (SkiaFontCacheItem item in skiaFontCacheItems)
                     {
                         item.Dispose();
                     }
                 }
+            }
 
-                _typefaces.Clear();
-            }
-            finally
-            {
-                _lock.ExitWriteLock();
-                _lock.Dispose();
-            }
+            _typefaces.Clear();
         }
     }
 }
