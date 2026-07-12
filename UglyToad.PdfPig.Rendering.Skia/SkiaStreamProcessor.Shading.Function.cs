@@ -150,73 +150,20 @@ internal partial class SkiaStreamProcessor
             .PreConcat(bitmapToDomain);
 
         var currentState = GetCurrentState();
+        double alpha = isStroke ? currentState.AlphaConstantStroking : currentState.AlphaConstantNonStroking;
 
-        // PDF 1.7 §8.7.4.3: the shading's BBox is a temporary clip in the shading's target
-        // coordinate space. patternTransformMatrix already maps that space into canvas
-        // input coords (identity for the direct `sh` operator).
-        bool bboxClipPushed = false;
-        if (shading.BBox.HasValue)
-        {
-            using var bboxPath = new SKPath();
-            bboxPath.AddRect(shading.BBox.Value.ToSKRect());
-            bboxPath.Transform(patternTransformMatrix);
-            _canvas.Save();
-            _canvas.ClipPath(bboxPath, SKClipOperation.Intersect, true);
-            bboxClipPushed = true;
-        }
-
+        bool bboxClipPushed = TryClipToShadingBBox(shading, in patternTransformMatrix);
         try
         {
             // PDF 1.7 §8.7.4.5.4: paint the Background colour over the area first so that
             // pixels outside the rasterised Domain rectangle (Decal-clipped to transparent)
             // fall through to the declared Background instead of the page beneath.
-            if (shading.Background is not null && shadingColorSpace is not null)
-            {
-                using var bgPaint = new SKPaint();
-                bgPaint.IsAntialias = shading.AntiAlias;
-                bgPaint.Color = shadingColorSpace.GetColor(shading.Background)
-                    .ToSKColor(currentState.AlphaConstantNonStroking);
-                bgPaint.BlendMode = currentState.BlendMode.ToSKBlendMode();
-                if (path is null)
-                {
-                    _canvas.DrawPaint(bgPaint);
-                }
-                else
-                {
-                    _canvas.DrawPath(path, bgPaint);
-                }
-            }
+            PaintShadingBackground(shading, alpha, currentState.BlendMode.ToSKBlendMode(), path);
 
-            using (var shader = SKShader.CreateBitmap(shaderBitmap, SKShaderTileMode.Decal, SKShaderTileMode.Decal, finalShadingMatrix))
-            using (var paint = new SKPaint())
-            {
-                paint.IsAntialias = shading.AntiAlias;
-                paint.Shader = shader;
-                paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
-
-                SKPathEffect? dash = null;
-                if (isStroke)
-                {
-                    // TODO - To Check
-                    paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = (float)currentState.LineWidth;
-                    paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
-                    paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    dash = currentState.LineDashPattern.ToSKPathEffect();
-                    paint.PathEffect = dash;
-                }
-
-                if (path is null)
-                {
-                    _canvas.DrawPaint(paint);
-                }
-                else
-                {
-                    _canvas.DrawPath(path, paint);
-                }
-
-                dash?.Dispose();
-            }
+            // The raster is opaque (alpha byte hardcoded to 255 above), so the constant
+            // alpha (CA/ca) is applied by modulating the shader through the paint's alpha.
+            using var shader = SKShader.CreateBitmap(shaderBitmap, SKShaderTileMode.Decal, SKShaderTileMode.Decal, finalShadingMatrix);
+            DrawShadingShader(shader, shading, currentState, isStroke, path, (alpha * 255.0).ToByte());
         }
         finally
         {
