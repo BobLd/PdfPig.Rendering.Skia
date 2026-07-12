@@ -22,8 +22,12 @@ internal class NuGetPackageConfig : ManualConfig
 {
     public NuGetPackageConfig()
     {
-        var baseJob = Job.Default;
-
+        // Use InvocationCount of 512 for proper benchmark, use lower number when iterating
+        const int unrollFactor = 16;
+        var baseJob = Job.Default
+            .WithInvocationCount(32 * unrollFactor)
+            .WithUnrollFactor(unrollFactor);
+        
         var localJob = baseJob
             .WithMsBuildArguments("/p:PdfPigSkiaVersion=Local")
             .WithId("Local");

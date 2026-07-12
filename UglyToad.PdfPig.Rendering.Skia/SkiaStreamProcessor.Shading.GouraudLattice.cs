@@ -43,6 +43,13 @@ internal partial class SkiaStreamProcessor
             return;
         }
 
+        // UInt16 indices bound a row pair at 2 × 32 768 vertices. A wider lattice would be
+        // megabytes per row — treat it as malformed rather than overflow the index space.
+        if (verticesPerRow > short.MaxValue + 1)
+        {
+            return;
+        }
+
         var currentState = GetCurrentState();
         int bitsPerCoordinate = shading.BitsPerCoordinate;
         int bitsPerComponent = shading.BitsPerComponent;
@@ -55,13 +62,19 @@ internal partial class SkiaStreamProcessor
         double yMin = decode[2], yMax = decode[3];
 
         // Stream the lattice row by row: hold only the previous and current row of
-        // vertices, and submit each row-pair (2·(verticesPerRow − 1) triangles) via its
-        // own DrawVertices call. Peak memory stays bounded — no full-mesh accumulation.
-        int rowPairVertexCount = (verticesPerRow - 1) * 6;
+        // vertices, and submit each row-pair (2·(verticesPerRow − 1) indexed triangles)
+        // via its own DrawVertices call. Peak memory stays bounded — no full-mesh
+        // accumulation.
         var rowA = new (SKPoint pt, SKColor col)[verticesPerRow];
         var rowB = new (SKPoint pt, SKColor col)[verticesPerRow];
-        var outPositions = new SKPoint[rowPairVertexCount];
-        var outColors = new SKColor[rowPairVertexCount];
+
+        // Row-pair vertex arrays (rowA at [0, vpr), rowB at [vpr, 2·vpr)) plus the index
+        // buffer triangulating them. Both depend only on verticesPerRow, so they are
+        // built once and reused for every row pair; DrawVertices takes the vertex and
+        // index counts from Array.Length, so the arrays are exact-size.
+        var pairPositions = new SKPoint[2 * verticesPerRow];
+        var pairColors = new SKColor[2 * verticesPerRow];
+        ushort[] pairIndices = BuildRowPairIndices(verticesPerRow);
 
         // Reusable per-vertex buffer — Eval() needs a heap double[], but it doesn't keep
         // the reference (it returns it directly when no Function is present, otherwise
@@ -97,9 +110,9 @@ internal partial class SkiaStreamProcessor
                        xMin, xMax, yMin, yMax, in patternTransformMatrix,
                        shading, currentState, colorBuffer))
             {
-                EmitRowPairTriangles(rowA, rowB, verticesPerRow, outPositions, outColors);
-                _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
-                    SKBlendMode.Modulate, null, paint);
+                FillRowPairVertices(rowA, rowB, pairPositions, pairColors);
+                _canvas.DrawVertices(SKVertexMode.Triangles, pairPositions, null, pairColors,
+                    SKBlendMode.Modulate, pairIndices, paint);
 
                 (rowA, rowB) = (rowB, rowA);
             }
@@ -170,32 +183,47 @@ internal partial class SkiaStreamProcessor
     }
 
     /// <summary>
-    /// Emits 2·(verticesPerRow − 1) triangles for the row-pair (<paramref name="rowA"/>,
-    /// <paramref name="rowB"/>) into the supplied exact-size output arrays.
-    /// Cell c connects vertices at (rowA[c], rowA[c+1], rowB[c], rowB[c+1]).
+    /// Copies the row-pair vertices into the flat arrays DrawVertices consumes:
+    /// <paramref name="rowA"/> at [0, verticesPerRow), <paramref name="rowB"/> at
+    /// [verticesPerRow, 2·verticesPerRow).
     /// </summary>
-    private static void EmitRowPairTriangles(
+    private static void FillRowPairVertices(
         (SKPoint pt, SKColor col)[] rowA,
         (SKPoint pt, SKColor col)[] rowB,
-        int verticesPerRow,
-        SKPoint[] outPositions, SKColor[] outColors)
+        SKPoint[] positions, SKColor[] colors)
     {
+        int verticesPerRow = rowA.Length;
+        for (int c = 0; c < verticesPerRow; c++)
+        {
+            positions[c] = rowA[c].pt;
+            colors[c] = rowA[c].col;
+            positions[verticesPerRow + c] = rowB[c].pt;
+            colors[verticesPerRow + c] = rowB[c].col;
+        }
+    }
+
+    /// <summary>
+    /// Builds the index buffer triangulating a row pair laid out as in
+    /// <see cref="FillRowPairVertices"/>: cell c connects rowA[c], rowA[c+1], rowB[c],
+    /// rowB[c+1] into two triangles, with rowB offset by verticesPerRow in the combined
+    /// vertex array. Winding matches the expanded triangle list this replaces.
+    /// </summary>
+    private static ushort[] BuildRowPairIndices(int verticesPerRow)
+    {
+        var indices = new ushort[(verticesPerRow - 1) * 6];
         int w = 0;
         for (int c = 0; c < verticesPerRow - 1; c++)
         {
-            var v00 = rowA[c];
-            var v10 = rowA[c + 1];
-            var v01 = rowB[c];
-            var v11 = rowB[c + 1];
+            indices[w++] = (ushort)c;
+            indices[w++] = (ushort)(c + 1);
+            indices[w++] = (ushort)(verticesPerRow + c);
 
-            outPositions[w] = v00.pt; outColors[w] = v00.col; w++;
-            outPositions[w] = v10.pt; outColors[w] = v10.col; w++;
-            outPositions[w] = v01.pt; outColors[w] = v01.col; w++;
-
-            outPositions[w] = v10.pt; outColors[w] = v10.col; w++;
-            outPositions[w] = v11.pt; outColors[w] = v11.col; w++;
-            outPositions[w] = v01.pt; outColors[w] = v01.col; w++;
+            indices[w++] = (ushort)(c + 1);
+            indices[w++] = (ushort)(verticesPerRow + c + 1);
+            indices[w++] = (ushort)(verticesPerRow + c);
         }
+
+        return indices;
     }
 
     /// <summary>
