@@ -87,38 +87,7 @@ internal partial class SkiaStreamProcessor
     /// <inheritdoc/>
     public override void PaintShading(NameToken shadingNameToken)
     {
-        Shading shading = ResourceStore.GetShading(shadingNameToken);
-
-        switch (shading.ShadingType)
-        {
-            case ShadingType.Axial:
-                RenderAxialShading(shading as AxialShading, in SKMatrix.Identity);
-                break;
-
-            case ShadingType.Radial:
-                RenderRadialShading(shading as RadialShading, in SKMatrix.Identity);
-                break;
-
-            case ShadingType.FunctionBased:
-                RenderFunctionBasedShading(shading as FunctionBasedShading, in SKMatrix.Identity);
-                break;
-
-            case ShadingType.FreeFormGouraud:
-                RenderFreeFormGouraudShading(shading as FreeFormGouraudShading, in SKMatrix.Identity);
-                break;
-
-            case ShadingType.LatticeFormGouraud:
-                RenderLatticeFormGouraudShading(shading as LatticeFormGouraudShading, in SKMatrix.Identity);
-                break;
-
-            case ShadingType.CoonsPatch:
-                RenderCoonsPatchShading(shading as CoonsPatchMeshesShading, in SKMatrix.Identity);
-                break;
-
-            case ShadingType.TensorProductPatch:
-                RenderTensorProductPatchShading(shading as TensorProductPatchMeshesShading, in SKMatrix.Identity);
-                break;
-        }
+        RenderShading(ResourceStore.GetShading(shadingNameToken), in SKMatrix.Identity, false, null);
     }
 
     private void RenderShadingPattern(SKPath path, ShadingPatternColor pattern, bool isStroke)
@@ -133,35 +102,142 @@ internal partial class SkiaStreamProcessor
             .PreConcat(_currentStreamOriginalTransforms.Peek())
             .PreConcat(pattern.Matrix.ToSkMatrix());
 
-        switch (pattern.Shading.ShadingType)
+        RenderShading(pattern.Shading, in patternTransform, isStroke, path);
+    }
+
+    /// <summary>
+    /// Shared dispatch for the direct `sh` operator (identity transform, non-stroking) and
+    /// shading patterns (pattern transform, optional stroke, clipped to the painted path).
+    /// </summary>
+    private void RenderShading(Shading shading, in SKMatrix patternTransformMatrix, bool isStroke, SKPath? path)
+    {
+        switch (shading)
         {
-            case ShadingType.Axial:
-                RenderAxialShading(pattern.Shading as AxialShading, in patternTransform, isStroke, path);
+            case AxialShading axial:
+                RenderAxialShading(axial, in patternTransformMatrix, isStroke, path);
                 break;
 
-            case ShadingType.Radial:
-                RenderRadialShading(pattern.Shading as RadialShading, in patternTransform, isStroke, path);
+            case RadialShading radial:
+                RenderRadialShading(radial, in patternTransformMatrix, isStroke, path);
                 break;
 
-            case ShadingType.FunctionBased:
-                RenderFunctionBasedShading(pattern.Shading as FunctionBasedShading, in patternTransform, isStroke, path);
+            case FunctionBasedShading functionBased:
+                RenderFunctionBasedShading(functionBased, in patternTransformMatrix, isStroke, path);
                 break;
 
-            case ShadingType.FreeFormGouraud:
-                RenderFreeFormGouraudShading(pattern.Shading as FreeFormGouraudShading, in patternTransform, isStroke, path);
+            case FreeFormGouraudShading freeForm:
+                RenderFreeFormGouraudShading(freeForm, in patternTransformMatrix, isStroke, path);
                 break;
 
-            case ShadingType.LatticeFormGouraud:
-                RenderLatticeFormGouraudShading(pattern.Shading as LatticeFormGouraudShading, in patternTransform, path);
+            case LatticeFormGouraudShading lattice:
+                RenderLatticeFormGouraudShading(lattice, in patternTransformMatrix, path);
                 break;
 
-            case ShadingType.CoonsPatch:
-                RenderCoonsPatchShading(pattern.Shading as CoonsPatchMeshesShading, in patternTransform, path);
+            case CoonsPatchMeshesShading coons:
+                RenderCoonsPatchShading(coons, in patternTransformMatrix, path);
                 break;
 
-            case ShadingType.TensorProductPatch:
-                RenderTensorProductPatchShading(pattern.Shading as TensorProductPatchMeshesShading, in patternTransform, path);
+            case TensorProductPatchMeshesShading tensor:
+                RenderTensorProductPatchShading(tensor, in patternTransformMatrix, path);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// PDF 1.7 §8.7.4.3: the shading's BBox is a temporary clipping boundary in the shading's
+    /// target coordinate space, applied on top of the current clipping path. For a Type 2
+    /// (shading) pattern that space is pattern space, so the rect is pushed through
+    /// <paramref name="patternTransformMatrix"/> to bring it into canvas input coordinates
+    /// (identity for the direct `sh` operator, where the BBox is already in user space).
+    /// Returns <see langword="true"/> when a canvas save/clip was pushed — the caller must
+    /// then <see cref="SKCanvas.Restore"/> once its drawing is done.
+    /// </summary>
+    private bool TryClipToShadingBBox(Shading shading, in SKMatrix patternTransformMatrix)
+    {
+        if (!shading.BBox.HasValue)
+        {
+            return false;
+        }
+
+        using var bboxPath = new SKPath();
+        bboxPath.AddRect(shading.BBox.Value.ToSKRect());
+        bboxPath.Transform(patternTransformMatrix);
+        _canvas.Save();
+        _canvas.ClipPath(bboxPath, SKClipOperation.Intersect, true);
+        return true;
+    }
+
+    /// <summary>
+    /// PDF 1.7 §8.7.4.5.4: when Background is present, paint that colour over the shading
+    /// object's painted area before drawing the gradient, so that areas the gradient leaves
+    /// unpainted (Extend=false, or outside a Type 1 Domain rectangle) show the declared
+    /// Background instead of the page beneath. Callers skip the call when the gradient is
+    /// guaranteed to cover everything (both Extend flags true).
+    /// </summary>
+    private void PaintShadingBackground(Shading shading, double alpha, SKBlendMode blendMode, SKPath? path)
+    {
+        if (shading.Background is null || shading.ColorSpace is null)
+        {
+            return;
+        }
+
+        using var bgPaint = new SKPaint();
+        bgPaint.IsAntialias = shading.AntiAlias;
+        bgPaint.Color = shading.ColorSpace.GetColor(shading.Background).ToSKColor(alpha);
+        bgPaint.BlendMode = blendMode;
+
+        if (path is null)
+        {
+            _canvas.DrawPaint(bgPaint);
+        }
+        else
+        {
+            _canvas.DrawPath(path, bgPaint);
+        }
+    }
+
+    /// <summary>
+    /// Shared epilogue of the axial / radial / function-based shading renderers: fills — or,
+    /// when <paramref name="isStroke"/> is set, strokes with the current pen state
+    /// (width / join / cap / dash) — the target with <paramref name="shader"/>.
+    /// Draws <paramref name="path"/> when given, else paints the whole clip region (`sh`).
+    /// <paramref name="paintAlpha"/> modulates the shader output (Skia multiplies the shader
+    /// by the paint's alpha); pass 255 when alpha is already baked into the shader's colours.
+    /// </summary>
+    private void DrawShadingShader(SKShader shader, Shading shading, CurrentGraphicsState currentState,
+        bool isStroke, SKPath? path, byte paintAlpha = byte.MaxValue)
+    {
+        using var paint = new SKPaint();
+        paint.IsAntialias = shading.AntiAlias;
+        paint.Shader = shader;
+        paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
+        paint.Color = SKColors.White.WithAlpha(paintAlpha);
+
+        SKPathEffect? dash = null;
+        try
+        {
+            if (isStroke)
+            {
+                paint.Style = SKPaintStyle.Stroke;
+                paint.StrokeWidth = (float)currentState.LineWidth;
+                paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
+                paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
+                dash = currentState.LineDashPattern.ToSKPathEffect();
+                paint.PathEffect = dash;
+            }
+
+            if (path is null)
+            {
+                _canvas.DrawPaint(paint);
+            }
+            else
+            {
+                _canvas.DrawPath(path, paint);
+            }
+        }
+        finally
+        {
+            dash?.Dispose();
         }
     }
 
@@ -899,5 +975,20 @@ internal partial class SkiaStreamProcessor
         }
 
         return underlying.GetColor(components);
+    }
+
+    private static SKShaderTileMode GetSKShaderTileMode(bool[] extend)
+    {
+        // PDF Extend controls whether the gradient continues past the start/end circles.
+        // Skia's tile mode on a two-point conical gradient is the closest equivalent:
+        //   Both true   → Clamp  (t=0/t=1 colours bleed to infinity)
+        //   Both false  → Decal  (areas outside the gradient are transparent)
+        // Mixed extends have no exact tile-mode counterpart; Decal keeps at least the
+        // non-extending side correct, and the extending side is rare enough in practice
+        // that we accept the imperfection rather than rasterising by hand.
+
+        return extend[0] && extend[1]
+            ? SKShaderTileMode.Clamp
+            : SKShaderTileMode.Decal;
     }
 }

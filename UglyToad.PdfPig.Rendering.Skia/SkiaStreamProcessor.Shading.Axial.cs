@@ -37,16 +37,6 @@ internal partial class SkiaStreamProcessor
         float t0 = (float)domain[0];
         float t1 = (float)domain[1];
 
-        if (shading.BBox.HasValue)
-        {
-            // TODO
-        }
-
-        if (shading.Background is not null)
-        {
-            // TODO
-        }
-
         // Number of stops to sample from the colour function. The gradient line goes from
         // (x0, y0) to (x1, y1) in shading space — map that vector into device pixels and
         // aim for one stop per device pixel. Lower densities work for smooth functions
@@ -62,7 +52,8 @@ internal partial class SkiaStreamProcessor
 
         Span<double> evalIn = stackalloc double[1];
         Span<double> evalOut = stackalloc double[ShadingEvalBufferSize];
-        double alpha = currentState.AlphaConstantNonStroking;
+        double alpha = isStroke ? currentState.AlphaConstantStroking : currentState.AlphaConstantNonStroking;
+        SKBlendMode blendMode = currentState.BlendMode.ToSKBlendMode();
         ColorSpaceDetails axialColorSpace = shading.ColorSpace;
         for (int t = 0; t <= factor; t++)
         {
@@ -76,7 +67,7 @@ internal partial class SkiaStreamProcessor
 
             FixIncorrectValues(v, domain); // This is a hack, this should never happen, see GHOSTSCRIPT-693154-0
 
-            colors[t] = axialColorSpace.GetSKColor(v, alpha); // TODO - is it non stroking??
+            colors[t] = axialColorSpace.GetSKColor(v, alpha);
             // Skia expects colorPos in [0,1] along the gradient line. The previous form
             // passed raw domain values (e.g. 0..161) which Skia then clamped to [0,1],
             // collapsing every intermediate stop onto position 1 and rendering the gradient
@@ -85,36 +76,30 @@ internal partial class SkiaStreamProcessor
             colorPos[t] = (float)frac;
         }
 
-        using (var shader = SKShader.CreateLinearGradient(new SKPoint(x0, y0), new SKPoint(x1, y1), colors, colorPos, SKShaderTileMode.Clamp, patternTransformMatrix))
-        using (var paint = new SKPaint())
+        bool bboxClipPushed = TryClipToShadingBBox(shading, in patternTransformMatrix);
+        try
         {
-            paint.IsAntialias = shading.AntiAlias;
-            paint.Shader = shader;
-            paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
-
-            // check if bbox not null
-
-            SKPathEffect? dash = null;
-            if (isStroke)
+            // PDF 1.7 §8.7.4.5.4: paint Background over the shading area first so it shows
+            // through wherever the (non-extended) gradient leaves pixels unpainted. Skipped
+            // when both Extend flags are true because the gradient covers everything.
+            bool[] extend = shading.Extend;
+            if (!(extend[0] && extend[1]))
             {
-                paint.Style = SKPaintStyle.Stroke;
-                paint.StrokeWidth = (float)currentState.LineWidth;
-                paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
-                paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                dash = currentState.LineDashPattern.ToSKPathEffect();
-                paint.PathEffect = dash;
+                PaintShadingBackground(shading, alpha, blendMode, path);
             }
 
-            if (path is null)
-            {
-                _canvas.DrawPaint(paint);
-            }
-            else
-            {
-                _canvas.DrawPath(path, paint);
-            }
+            SKShaderTileMode tileMode = GetSKShaderTileMode(extend);
 
-            dash?.Dispose();
+            using var shader = SKShader.CreateLinearGradient(new SKPoint(x0, y0), new SKPoint(x1, y1),
+                colors, colorPos, tileMode, patternTransformMatrix);
+            DrawShadingShader(shader, shading, currentState, isStroke, path);
+        }
+        finally
+        {
+            if (bboxClipPushed)
+            {
+                _canvas.Restore();
+            }
         }
     }
 }

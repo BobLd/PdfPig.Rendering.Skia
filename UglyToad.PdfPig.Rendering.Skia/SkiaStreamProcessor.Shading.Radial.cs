@@ -58,7 +58,8 @@ internal partial class SkiaStreamProcessor
 
         Span<double> evalIn = stackalloc double[1];
         Span<double> evalOut = stackalloc double[ShadingEvalBufferSize];
-        double alpha = currentState.AlphaConstantNonStroking;
+        double alpha = isStroke ? currentState.AlphaConstantStroking : currentState.AlphaConstantNonStroking;
+        SKBlendMode blendMode = currentState.BlendMode.ToSKBlendMode();
         ColorSpaceDetails radialColorSpace = shading.ColorSpace;
         for (int t = 0; t <= factor; t++)
         {
@@ -74,94 +75,27 @@ internal partial class SkiaStreamProcessor
             FixIncorrectValues(v, domain); // This is a hack, this should never happen
 
             colors[t] = radialColorSpace.GetSKColor(v, alpha);
-            // TODO - is it non stroking??
             colorPos[t] = (float)frac;
         }
 
-        // PDF 1.7 §8.7.4.3: BBox is a temporary clipping boundary applied on top of the
-        // current clipping path. For a Type 2 (shading) pattern it is given in pattern
-        // space, so we push it through patternTransformMatrix to bring it into the canvas
-        // input coordinate space (the same space the path is drawn in). For the direct
-        // `sh` operator the matrix is identity and the BBox is already in user space.
-        bool bboxClipPushed = false;
-        if (shading.BBox.HasValue)
-        {
-            using var bboxPath = new SKPath();
-            bboxPath.AddRect(shading.BBox.Value.ToSKRect());
-            bboxPath.Transform(patternTransformMatrix);
-            _canvas.Save();
-            _canvas.ClipPath(bboxPath, SKClipOperation.Intersect, true);
-            bboxClipPushed = true;
-        }
-
+        bool bboxClipPushed = TryClipToShadingBBox(shading, in patternTransformMatrix);
         try
         {
-            // PDF 1.7 §8.7.4.5.4: when Background is present, paint that colour over the
-            // shading-object's painted area before drawing the gradient. Without this the
-            // page shows through the bounded gradient (when Extend is false) instead of the
-            // declared Background colour. Skipped when both Extend flags are true because the
-            // gradient covers everything and the background would never be visible.
+            // PDF 1.7 §8.7.4.5.4: paint Background over the shading area first so it shows
+            // through wherever the (non-extended) gradient leaves pixels unpainted. Skipped
+            // when both Extend flags are true because the gradient covers everything and the
+            // background would never be visible.
             bool[] extend = shading.Extend;
-            if (shading.Background is not null && !(extend[0] && extend[1]))
+            if (!(extend[0] && extend[1]))
             {
-                using var bgPaint = new SKPaint();
-                bgPaint.IsAntialias = shading.AntiAlias;
-                bgPaint.Color = shading.ColorSpace.GetColor(shading.Background)
-                    .ToSKColor(currentState.AlphaConstantNonStroking);
-                bgPaint.BlendMode = currentState.BlendMode.ToSKBlendMode();
-
-                if (path is null)
-                {
-                    _canvas.DrawPaint(bgPaint);
-                }
-                else
-                {
-                    _canvas.DrawPath(path, bgPaint);
-                }
+                PaintShadingBackground(shading, alpha, blendMode, path);
             }
 
-            // PDF Extend controls whether the gradient continues past the start/end circles.
-            // Skia's tile mode on a two-point conical gradient is the closest equivalent:
-            //   Both true   → Clamp  (t=0/t=1 colours bleed to infinity)
-            //   Both false  → Decal  (areas outside the gradient are transparent)
-            // Mixed extends have no exact tile-mode counterpart; Decal keeps at least the
-            // non-extending side correct, and the extending side is rare enough in practice
-            // that we accept the imperfection rather than rasterising by hand.
-            SKShaderTileMode tileMode = (extend[0] && extend[1])
-                ? SKShaderTileMode.Clamp
-                : SKShaderTileMode.Decal;
+            SKShaderTileMode tileMode = GetSKShaderTileMode(extend);
 
-            using (var shader = SKShader.CreateTwoPointConicalGradient(new SKPoint(x0, y0), r0, new SKPoint(x1, y1),
-                       r1, colors, colorPos, tileMode, patternTransformMatrix))
-            using (var paint = new SKPaint())
-            {
-                paint.IsAntialias = shading.AntiAlias;
-                paint.Shader = shader;
-                paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
-
-                SKPathEffect? dash = null;
-                if (isStroke)
-                {
-                    // TODO - To finish
-                    paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = (float)currentState.LineWidth;
-                    paint.StrokeJoin = currentState.JoinStyle.ToSKStrokeJoin();
-                    paint.StrokeCap = currentState.CapStyle.ToSKStrokeCap();
-                    dash = currentState.LineDashPattern.ToSKPathEffect();
-                    paint.PathEffect = dash;
-                }
-
-                if (path is null)
-                {
-                    _canvas.DrawPaint(paint);
-                }
-                else
-                {
-                    _canvas.DrawPath(path, paint);
-                }
-
-                dash?.Dispose();
-            }
+            using var shader = SKShader.CreateTwoPointConicalGradient(new SKPoint(x0, y0), r0,
+                new SKPoint(x1, y1), r1, colors, colorPos, tileMode, patternTransformMatrix);
+            DrawShadingShader(shader, shading, currentState, isStroke, path);
         }
         finally
         {
