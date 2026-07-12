@@ -454,19 +454,91 @@ internal partial class SkiaStreamProcessor
     }
 
     /// <summary>
-    /// Emits the n×n quad grid as a triangle list and submits it in a single DrawVertices call.
-    /// The vertex arrays are allocated at exactly n²×6 (n is the adaptive subdivision count, so
-    /// typically only a handful) — DrawVertices/SKVertices copy the whole array, so a fixed
-    /// max-size buffer would record thousands of stale triangles and bloat the picture.
+    /// Submits the (n+1)² colour grid as an indexed triangle list (two triangles per cell)
+    /// in a single DrawVertices call. The index buffer depends only on <paramref name="n"/>
+    /// and comes from the shared cache. The vertex arrays must be exactly (n+1)² long:
+    /// DrawVertices takes the vertex count from Array.Length, so an oversized scratch
+    /// buffer would copy stale vertices into the recorded picture.
     /// </summary>
     private void DrawGridTriangles(SKPoint[] grid, SKColor[] gridCol, int n, SKPaint paint)
     {
-        int vertexCount = n * n * 6;
-        var positions = new SKPoint[vertexCount];
-        var colors = new SKColor[vertexCount];
-        EmitTrianglesFromGrid(grid, gridCol, n, positions, colors);
-        _canvas.DrawVertices(SKVertexMode.Triangles, positions, null, colors,
-            SKBlendMode.Modulate, null, paint);
+        _canvas.DrawVertices(SKVertexMode.Triangles, grid, null, gridCol,
+            SKBlendMode.Modulate, GetGridTriangleIndices(n), paint);
+    }
+
+    // Index buffers for the (n+1)² grid triangulation and the matching texture-coordinate
+    // grids depend only on the subdivision count — never on the patch geometry — so they are
+    // built once per n and shared process-wide. The unsynchronised publish is a benign race:
+    // the content is deterministic and never mutated after creation, and .NET reference
+    // stores have release semantics, so a racing reader either sees null (and rebuilds the
+    // identical array) or a fully initialised one.
+    private static readonly ushort[]?[] GridTriangleIndexCache = new ushort[PatchSubdivisions + 1][];
+    private static readonly SKPoint[]?[] PatchTexCoordCache = new SKPoint[PatchSubdivisions + 1][];
+
+    /// <summary>
+    /// Returns the index buffer triangulating an (n+1)×(n+1) vertex grid (row-major, index
+    /// <c>j·(n+1) + i</c>) into two triangles per cell: cell (i,j) connects vertices at
+    /// (i, j), (i+1, j), (i, j+1), (i+1, j+1). Winding matches the expanded triangle list
+    /// this replaces, so rendering is triangle-for-triangle identical.
+    /// </summary>
+    private static ushort[] GetGridTriangleIndices(int n)
+    {
+        ushort[]? indices = GridTriangleIndexCache[n];
+        if (indices is not null)
+        {
+            return indices;
+        }
+
+        indices = new ushort[n * n * 6];
+        int stride = n + 1;
+        int w = 0;
+        for (int j = 0; j < n; j++)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                int i00 = j * stride + i;
+                int i10 = i00 + 1;
+                int i01 = i00 + stride;
+                int i11 = i01 + 1;
+
+                indices[w++] = (ushort)i00; indices[w++] = (ushort)i10; indices[w++] = (ushort)i01;
+                indices[w++] = (ushort)i10; indices[w++] = (ushort)i11; indices[w++] = (ushort)i01;
+            }
+        }
+
+        GridTriangleIndexCache[n] = indices;
+        return indices;
+    }
+
+    /// <summary>
+    /// Returns the (n+1)² texture-coordinate grid mapping (u,v) ∈ [0,1]² onto the
+    /// [0, <see cref="PatchTextureSize"/>−1]² texel space used by the textured patch path.
+    /// Identical for every patch at a given subdivision count, hence cached.
+    /// </summary>
+    private static SKPoint[] GetPatchTexCoords(int n)
+    {
+        SKPoint[]? texCoords = PatchTexCoordCache[n];
+        if (texCoords is not null)
+        {
+            return texCoords;
+        }
+
+        int axisLen = n + 1;
+        texCoords = new SKPoint[axisLen * axisLen];
+        float invN = 1f / n;
+        const float texScale = PatchTextureSize - 1;
+        for (int j = 0; j < axisLen; j++)
+        {
+            float v = j * invN * texScale;
+            int rowOffset = j * axisLen;
+            for (int i = 0; i < axisLen; i++)
+            {
+                texCoords[rowOffset + i] = new SKPoint(i * invN * texScale, v);
+            }
+        }
+
+        PatchTexCoordCache[n] = texCoords;
+        return texCoords;
     }
 
     /// <summary>
@@ -505,37 +577,6 @@ internal partial class SkiaStreamProcessor
 
         int written = shading.Eval(interpBuffer.Slice(0, components), evalBuffer);
         return shading.ColorSpace.GetSKColor(evalBuffer.Slice(0, written), alpha);
-    }
-
-    /// <summary>
-    /// Writes two triangles per grid cell into the supplied exact-size output arrays.
-    /// Cell (i,j) connects vertices at (i, j), (i+1, j), (i, j+1), (i+1, j+1).
-    /// The output arrays must have length ≥ n² × 6; the first n² × 6 entries are
-    /// overwritten in scan order, matching the contract DrawVertices expects.
-    /// </summary>
-    private static void EmitTrianglesFromGrid(SKPoint[] grid, SKColor[] gridCol, int n,
-        SKPoint[] outPositions, SKColor[] outColors)
-    {
-        int stride = n + 1;
-        int w = 0;
-        for (int j = 0; j < n; j++)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                int i00 = j * stride + i;
-                int i10 = i00 + 1;
-                int i01 = i00 + stride;
-                int i11 = i01 + 1;
-
-                outPositions[w] = grid[i00]; outColors[w] = gridCol[i00]; w++;
-                outPositions[w] = grid[i10]; outColors[w] = gridCol[i10]; w++;
-                outPositions[w] = grid[i01]; outColors[w] = gridCol[i01]; w++;
-
-                outPositions[w] = grid[i10]; outColors[w] = gridCol[i10]; w++;
-                outPositions[w] = grid[i11]; outColors[w] = gridCol[i11]; w++;
-                outPositions[w] = grid[i01]; outColors[w] = gridCol[i01]; w++;
-            }
-        }
     }
 
     /// <summary>
@@ -655,41 +696,15 @@ internal partial class SkiaStreamProcessor
     }
 
     /// <summary>
-    /// Expands the (n+1)² grid of <paramref name="positions"/> / <paramref name="texCoords"/>
-    /// into flat triangle vertex arrays — two triangles per cell, three vertices each.
-    /// </summary>
-    private static void BuildPatchTriangleArrays(SKPoint[] positions, SKPoint[] texCoords, int n,
-        SKPoint[] posArray, SKPoint[] texArray)
-    {
-        int stride = n + 1;
-        int t = 0;
-        for (int j = 0; j < n; j++)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                int i00 = j * stride + i;
-                int i10 = i00 + 1;
-                int i01 = i00 + stride;
-                int i11 = i01 + 1;
-
-                posArray[t] = positions[i00]; texArray[t++] = texCoords[i00];
-                posArray[t] = positions[i10]; texArray[t++] = texCoords[i10];
-                posArray[t] = positions[i01]; texArray[t++] = texCoords[i01];
-
-                posArray[t] = positions[i10]; texArray[t++] = texCoords[i10];
-                posArray[t] = positions[i11]; texArray[t++] = texCoords[i11];
-                posArray[t] = positions[i01]; texArray[t++] = texCoords[i01];
-            }
-        }
-    }
-
-    /// <summary>
-    /// Submits the texture-mapped triangle list to the canvas with a nearest-neighbour
-    /// bitmap shader. Nearest sampling preserves sharp step-function transitions stored
-    /// in the colour texture (linear filtering would smear them into a multi-pixel band).
+    /// Submits the texture-mapped patch grid as an indexed triangle list with a
+    /// nearest-neighbour bitmap shader. Nearest sampling preserves sharp step-function
+    /// transitions stored in the colour texture (linear filtering would smear them into a
+    /// multi-pixel band). <paramref name="positions"/> / <paramref name="texCoords"/> must
+    /// be exactly (n+1)² long (DrawVertices takes the vertex count from Array.Length);
+    /// <paramref name="indices"/> comes from <see cref="GetGridTriangleIndices"/>.
     /// </summary>
     private void DrawTexturedPatchVertices(Shading shading, CurrentGraphicsState currentState,
-        SKBitmap bitmap, SKPoint[] posArray, SKPoint[] texArray)
+        SKBitmap bitmap, SKPoint[] positions, SKPoint[] texCoords, ushort[] indices)
     {
         // The image / shader / paint are disposed at the end of this method, while it still runs
         // inside the mesh-picture recording (DrawCoonsMeshUnclipped / DrawTensorMeshUnclipped).
@@ -706,8 +721,8 @@ internal partial class SkiaStreamProcessor
         paint.IsAntialias = shading.AntiAlias;
         paint.BlendMode = currentState.BlendMode.ToSKBlendMode();
 
-        _canvas.DrawVertices(SKVertexMode.Triangles, posArray, texArray, null,
-            SKBlendMode.SrcOver, null, paint);
+        _canvas.DrawVertices(SKVertexMode.Triangles, positions, texCoords, null,
+            SKBlendMode.SrcOver, indices, paint);
     }
 
     /// <summary>

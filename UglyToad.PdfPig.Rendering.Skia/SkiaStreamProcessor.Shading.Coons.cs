@@ -13,7 +13,6 @@
 // limitations under the License.
 
 using System;
-using System.Buffers;
 using System.Runtime.CompilerServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Graphics;
@@ -71,19 +70,14 @@ internal partial class SkiaStreamProcessor
         // and texture-coordinate mapping, getting per-pixel function output.
         bool hasFunction = shading.Functions is { Length: > 0 };
 
-        // Per-shading scratch for the no-function (vertex-colour Gouraud) path. Each
-        // patch tessellates into the same fixed-size triangle arrays and is submitted
-        // via its own DrawVertices call, so memory stays bounded regardless of mesh size.
-        const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
-        SKPoint[]? grid = null;
-        SKColor[]? gridCol = null;
+        // Per-shading scratch for the no-function (vertex-colour Gouraud) path. Each patch
+        // is submitted via its own indexed DrawVertices call with exact-size vertex arrays,
+        // so memory stays bounded regardless of mesh size.
         double[]? interpBuffer = null;
         SKPaint? gouraudPaint = null;
 
         if (!hasFunction)
         {
-            grid = new SKPoint[gridCount];
-            gridCol = new SKColor[gridCount];
             interpBuffer = new double[numStreamColorComponents];
             gouraudPaint = new SKPaint
             {
@@ -213,7 +207,7 @@ internal partial class SkiaStreamProcessor
                 else
                 {
                     TessellateAndDrawCoonsPatch(shading, currentState, points, cornerColors,
-                        grid!, gridCol!, interpBuffer!, gouraudPaint!);
+                        interpBuffer!, gouraudPaint!);
                 }
 
                 prevPts = points;
@@ -230,20 +224,18 @@ internal partial class SkiaStreamProcessor
     }
 
     /// <summary>
-    /// Samples a Coons patch surface on a (PatchSubdivisions+1)² UV grid, builds the
-    /// triangle list into the supplied exact-size buffers, and submits a single
-    /// DrawVertices call. Corner-colour bilinear interpolation matches PDFBox:
-    /// cornerColors[0..3] correspond to (u,v) = (0,0), (1,0), (1,1), (0,1).
+    /// Samples a Coons patch surface on an adaptive (n+1)² UV grid and submits it as a
+    /// single indexed DrawVertices call. Corner-colour bilinear interpolation matches
+    /// PDFBox: cornerColors[0..3] correspond to (u,v) = (0,0), (1,0), (1,1), (0,1).
     /// <para>
-    /// All scratch (<paramref name="grid"/>, <paramref name="gridCol"/>,
-    /// <paramref name="interpBuffer"/>) and output buffers are owned by the caller and
-    /// reused across every patch in the mesh, so the per-patch loop runs without
-    /// allocations.
+    /// The vertex arrays are allocated at exactly (n+1)² per patch — DrawVertices takes
+    /// the vertex count from Array.Length, so an oversized shared scratch would record
+    /// stale vertices into the picture. The triangulation itself is the shared cached
+    /// index buffer (see <see cref="GetGridTriangleIndices"/>).
     /// </para>
     /// </summary>
     private void TessellateAndDrawCoonsPatch(Shading shading, CurrentGraphicsState currentState,
-        ReadOnlySpan<SKPoint> pts, double[][] cornerColors,
-        SKPoint[] grid, SKColor[] gridCol, double[] interpBuffer,
+        ReadOnlySpan<SKPoint> pts, double[][] cornerColors, double[] interpBuffer,
         SKPaint paint)
     {
         // Subdivide proportionally to the patch size — a fine mesh of tiny patches needs only
@@ -252,7 +244,9 @@ internal partial class SkiaStreamProcessor
         System.Diagnostics.Debug.Assert(n <= PatchSubdivisions);
 
         int axisLen = n + 1;
-        SampleCoonsPatchGrid(pts, n, grid.AsSpan(0, axisLen * axisLen));
+        var grid = new SKPoint[axisLen * axisLen];
+        var gridCol = new SKColor[axisLen * axisLen];
+        SampleCoonsPatchGrid(pts, n, grid);
 
         float invN = 1f / n;
         double alpha = currentState.AlphaConstantNonStroking;
@@ -351,50 +345,19 @@ internal partial class SkiaStreamProcessor
     {
         using var bitmap = BuildPatchTexture(shading, currentState, cornerColors, PatchTextureSize, lut, domainLo, domainHi);
 
-        // Subdivide proportionally to the patch size, matching the Gouraud path. Previously this
-        // path always used the full 32×32 grid regardless of patch size, so a mesh of many tiny
-        // function-based patches emitted ~32²×6 triangles per patch — the exact blow-up
-        // ComputePatchSubdivisions exists to avoid. See ComputePatchSubdivisions.
+        // Subdivide proportionally to the patch size, matching the Gouraud path.
+        // See ComputePatchSubdivisions.
         int n = ComputePatchSubdivisions(pts);
         System.Diagnostics.Debug.Assert(n <= PatchSubdivisions);
 
+        // Exact-size positions (DrawVertices takes the vertex count from Array.Length);
+        // texture coordinates and the triangulation depend only on n and come from the
+        // shared caches.
         int axisLen = n + 1;
-        int gridLen = axisLen * axisLen;
-        int triVertexCount = n * n * 6;
-        float texScale = PatchTextureSize - 1;
-
-        // The (n+1)² grid arrays are scratch — rent from the shared pool to avoid the per-patch
-        // heap allocation. Triangle arrays are passed straight to DrawVertices which uses
-        // Array.Length as the vertex count, so they must be allocated to the exact size.
-        var pool = ArrayPool<SKPoint>.Shared;
-        SKPoint[] positions = pool.Rent(gridLen);
-        SKPoint[] texCoords = pool.Rent(gridLen);
-        try
-        {
-            SampleCoonsPatchGrid(pts, n, positions.AsSpan(0, gridLen));
-
-            float invN = 1f / n;
-            for (int j = 0; j < axisLen; j++)
-            {
-                float v = j * invN;
-                int rowOffset = j * axisLen;
-                for (int i = 0; i < axisLen; i++)
-                {
-                    float u = i * invN;
-                    texCoords[rowOffset + i] = new SKPoint(u * texScale, v * texScale);
-                }
-            }
-
-            var posArray = new SKPoint[triVertexCount];
-            var texArray = new SKPoint[triVertexCount];
-            BuildPatchTriangleArrays(positions, texCoords, n, posArray, texArray);
-            DrawTexturedPatchVertices(shading, currentState, bitmap, posArray, texArray);
-        }
-        finally
-        {
-            pool.Return(positions);
-            pool.Return(texCoords);
-        }
+        var positions = new SKPoint[axisLen * axisLen];
+        SampleCoonsPatchGrid(pts, n, positions);
+        DrawTexturedPatchVertices(shading, currentState, bitmap,
+            positions, GetPatchTexCoords(n), GetGridTriangleIndices(n));
     }
 
     /// <summary>De Casteljau evaluation of a cubic Bézier curve at parameter <paramref name="t"/>.</summary>
