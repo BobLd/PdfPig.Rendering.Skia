@@ -84,17 +84,15 @@ internal partial class SkiaStreamProcessor
         // function's non-linear behaviour.
         bool hasFunction = shading.Functions is { Length: > 0 };
 
-        // Output buffer for batched DrawVertices calls. In the function path each parent
-        // triangle subdivides into n² sub-triangles and the buffer is sized to fit exactly
-        // one parent's output, so EmitGouraudTriangle flushes after every emit. The
-        // no-function path packs 3-vertex triangles into the buffer and flushes when full
-        // or when the patch loop ends. Sub-vertex scratch and the bilinear scratch buffer
-        // are likewise hoisted out of the per-emit hot path.
-        const int functionPerParentVerts = GouraudFunctionSubdivisions * GouraudFunctionSubdivisions * 3;
+        // Output buffer for batched DrawVertices calls on the no-function path: 3-vertex
+        // triangles are packed in and flushed when the buffer fills or the loop ends.
+        // The function path draws each subdivided parent triangle directly from the
+        // sub-vertex grid via a cached index buffer, so it needs no output buffer.
+        // Sub-vertex scratch and the bilinear scratch buffer are likewise hoisted out of
+        // the per-emit hot path.
         const int gouraudNoFunctionBatchVerts = 4096 * 3;
-        int outCapacity = hasFunction ? functionPerParentVerts : gouraudNoFunctionBatchVerts;
-        var outPositions = new SKPoint[outCapacity];
-        var outColors = new SKColor[outCapacity];
+        var outPositions = hasFunction ? Array.Empty<SKPoint>() : new SKPoint[gouraudNoFunctionBatchVerts];
+        var outColors = hasFunction ? Array.Empty<SKColor>() : new SKColor[gouraudNoFunctionBatchVerts];
         int outCount = 0;
 
         // Barycentric sub-vertex grid for the function path; reused across all parent
@@ -187,11 +185,16 @@ internal partial class SkiaStreamProcessor
                 double x = xMin + (rawX / maxCoordRaw) * (xMax - xMin);
                 double y = yMin + (rawY / maxCoordRaw) * (yMax - yMin);
 
-                // Evaluate optional function and convert to an SKColor through the colour space
-                // for the no-function fast path. When subdivision is needed the raw components
-                // are used instead.
-                int vertexWritten = shading.Eval(colorComponents, vertexEvalOut);
-                SKColor skColor = freeFormColorSpace.GetSKColor(vertexEvalOut.Slice(0, vertexWritten), vertexAlpha);
+                // Pre-evaluate the SKColor for the no-function fast path only. The function
+                // path never reads it — colours are evaluated per sub-vertex during
+                // subdivision — so skipping the Eval + colour-space conversion here saves a
+                // wasted per-vertex function evaluation on function-based meshes.
+                SKColor skColor = default;
+                if (!hasFunction)
+                {
+                    int vertexWritten = shading.Eval(colorComponents, vertexEvalOut);
+                    skColor = freeFormColorSpace.GetSKColor(vertexEvalOut.Slice(0, vertexWritten), vertexAlpha);
+                }
 
                 // Transform the vertex from shading/pattern space to canvas space.
                 SKPoint pt = patternTransformMatrix.MapPoint(new SKPoint((float)x, (float)y));
@@ -272,9 +275,9 @@ internal partial class SkiaStreamProcessor
     /// when the next 3-vertex append would overflow the buffer it is first flushed via
     /// DrawVertices (the buffer capacity is a multiple of 3 so this means the buffer is
     /// exactly full). When <paramref name="hasFunction"/> is true the triangle is
-    /// subdivided to capture non-linear function output, the n² sub-triangles fill
-    /// <paramref name="outPositions"/> / <paramref name="outColors"/> exactly, and a
-    /// single DrawVertices call is made before resetting <paramref name="outCount"/>.
+    /// subdivided to capture non-linear function output and the sub-vertex grid is drawn
+    /// directly via one indexed DrawVertices call (see
+    /// <see cref="GetGouraudSubTriangleIndices"/>); the out buffers are not used.
     /// </summary>
     /// <param name="interpBuffer">
     /// Reusable buffer for the barycentric component blend; must have length ≥
@@ -351,38 +354,62 @@ internal partial class SkiaStreamProcessor
             }
         }
 
-        // Stitch the sub-grid into 2 triangles per "rhombus" cell, plus boundary
-        // triangles along the diagonal. For each row i (0..n-1), column j (0..n-1-i):
-        //   upper-tri: (i,j), (i+1,j), (i,j+1)
-        //   lower-tri: (i+1,j), (i+1,j+1), (i,j+1) — only when i+j < n-1
-        // The writes fill outPositions/outColors exactly (length = n² × 3).
-        int w = 0;
-        for (int i = 0; i < GouraudFunctionSubdivisions; i++)
+        // The sub-grid triangulation (2 triangles per "rhombus" cell plus the boundary
+        // triangles along the diagonal) depends only on the constant subdivision count,
+        // so the grid is drawn directly with a shared cached index buffer — ~3× less
+        // data copied into the recorded picture than the expanded per-triangle vertex
+        // list this replaces.
+        _canvas.DrawVertices(SKVertexMode.Triangles, subPts!, null, subCols!,
+            SKBlendMode.Modulate, GetGouraudSubTriangleIndices(), paint);
+    }
+
+    // Index buffer for the barycentric sub-grid triangulation at GouraudFunctionSubdivisions.
+    // Depends only on that constant, so it is built once and shared process-wide. The
+    // unsynchronised publish is a benign race: the content is deterministic and never mutated
+    // after creation, and .NET reference stores have release semantics, so a racing reader
+    // either sees null (and rebuilds the identical array) or a fully initialised one.
+    private static ushort[]? _gouraudSubTriangleIndices;
+
+    /// <summary>
+    /// Returns the index buffer stitching the (n+1)(n+2)/2 barycentric sub-vertex grid
+    /// into n² triangles: for each row i (0..n−1), column j (0..n−1−i):
+    ///   upper-tri: (i,j), (i+1,j), (i,j+1)
+    ///   lower-tri: (i+1,j), (i+1,j+1), (i,j+1) — only when i+j &lt; n−1.
+    /// Winding matches the expanded triangle list this replaces. The largest vertex index
+    /// (8 384 at n = 128) fits comfortably in the UInt16 index space.
+    /// </summary>
+    private static ushort[] GetGouraudSubTriangleIndices()
+    {
+        ushort[]? indices = _gouraudSubTriangleIndices;
+        if (indices is not null)
         {
-            int rowOffset = i * (GouraudFunctionSubdivisions + 1) - i * (i - 1) / 2;
-            int nextRowOffset = (i + 1) * (GouraudFunctionSubdivisions + 1) - (i + 1) * i / 2;
-            for (int j = 0; j < GouraudFunctionSubdivisions - i; j++)
+            return indices;
+        }
+
+        const int n = GouraudFunctionSubdivisions;
+        indices = new ushort[n * n * 3];
+        int w = 0;
+        for (int i = 0; i < n; i++)
+        {
+            int rowOffset = i * (n + 1) - i * (i - 1) / 2;
+            int nextRowOffset = (i + 1) * (n + 1) - (i + 1) * i / 2;
+            for (int j = 0; j < n - i; j++)
             {
                 int v0 = rowOffset + j;
                 int v1 = nextRowOffset + j;
                 int v2 = rowOffset + j + 1;
-                outPositions[w] = subPts![v0]; outColors[w] = subCols![v0]; w++;
-                outPositions[w] = subPts[v1]; outColors[w] = subCols[v1]; w++;
-                outPositions[w] = subPts[v2]; outColors[w] = subCols[v2]; w++;
+                indices[w++] = (ushort)v0; indices[w++] = (ushort)v1; indices[w++] = (ushort)v2;
 
-                if (i + j < GouraudFunctionSubdivisions - 1)
+                if (i + j < n - 1)
                 {
                     int v3 = nextRowOffset + j + 1;
-                    outPositions[w] = subPts[v1]; outColors[w] = subCols[v1]; w++;
-                    outPositions[w] = subPts[v3]; outColors[w] = subCols[v3]; w++;
-                    outPositions[w] = subPts[v2]; outColors[w] = subCols[v2]; w++;
+                    indices[w++] = (ushort)v1; indices[w++] = (ushort)v3; indices[w++] = (ushort)v2;
                 }
             }
         }
 
-        _canvas.DrawVertices(SKVertexMode.Triangles, outPositions, null, outColors,
-            SKBlendMode.Modulate, null, paint);
-        outCount = 0;
+        _gouraudSubTriangleIndices = indices;
+        return indices;
     }
 
     /// <summary>

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 using System;
-using System.Buffers;
 using System.Runtime.CompilerServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Graphics;
@@ -73,17 +72,12 @@ internal partial class SkiaStreamProcessor
         bool hasFunction = shading.Functions is { Length: > 0 };
 
         // Per-shading scratch for the no-function (vertex-colour Gouraud) path. See
-        // RenderCoonsPatchShading for the per-patch-DrawVertices rationale.
-        const int gridCount = (PatchSubdivisions + 1) * (PatchSubdivisions + 1);
-        SKPoint[]? grid = null;
-        SKColor[]? gridCol = null;
+        // RenderCoonsPatchShading for the per-patch indexed-DrawVertices rationale.
         double[]? interpBuffer = null;
         SKPaint? gouraudPaint = null;
 
         if (!hasFunction)
         {
-            grid = new SKPoint[gridCount];
-            gridCol = new SKColor[gridCount];
             interpBuffer = new double[numStreamColorComponents];
             gouraudPaint = new SKPaint
             {
@@ -198,7 +192,7 @@ internal partial class SkiaStreamProcessor
                 else
                 {
                     TessellateAndDrawTensorPatch(shading, currentState, points, cornerColors,
-                        grid!, gridCol!, interpBuffer!, gouraudPaint!);
+                        interpBuffer!, gouraudPaint!);
                 }
 
                 prevPts = points;
@@ -214,15 +208,13 @@ internal partial class SkiaStreamProcessor
     }
 
     /// <summary>
-    /// Samples a Tensor-product patch surface on a (PatchSubdivisions+1)² UV grid,
-    /// builds the triangle list into the supplied exact-size buffers, and submits a
-    /// single DrawVertices call. The 4×4 control grid follows the PDFBox layout:
-    /// rows indexed by v, columns by u. See <see cref="TessellateAndDrawCoonsPatch"/>
-    /// for the buffer-ownership rationale.
+    /// Samples a Tensor-product patch surface on an adaptive (n+1)² UV grid and submits
+    /// it as a single indexed DrawVertices call. The 4×4 control grid follows the PDFBox
+    /// layout: rows indexed by v, columns by u. See <see cref="TessellateAndDrawCoonsPatch"/>
+    /// for the exact-size vertex-array rationale.
     /// </summary>
     private void TessellateAndDrawTensorPatch(Shading shading, CurrentGraphicsState currentState,
-        SKPoint[] tcp, double[][] cornerColors,
-        SKPoint[] grid, SKColor[] gridCol, Span<double> interpBuffer,
+        SKPoint[] tcp, double[][] cornerColors, double[] interpBuffer,
         SKPaint paint)
     {
         // Map the 16 stream points into a 4×4 grid stored row-major in a stackalloc
@@ -237,7 +229,9 @@ internal partial class SkiaStreamProcessor
         System.Diagnostics.Debug.Assert(n <= PatchSubdivisions);
 
         int axisLen = n + 1;
-        SampleTensorPatchGrid(p, n, grid.AsSpan(0, axisLen * axisLen));
+        var grid = new SKPoint[axisLen * axisLen];
+        var gridCol = new SKColor[axisLen * axisLen];
+        SampleTensorPatchGrid(p, n, grid);
 
         float invN = 1f / n;
         double alpha = currentState.AlphaConstantNonStroking;
@@ -304,46 +298,19 @@ internal partial class SkiaStreamProcessor
         Span<SKPoint> p = stackalloc SKPoint[16];
         BuildTensorControlGrid(tcp, p);
 
-        // Subdivide proportionally to the patch size, matching the Gouraud path (was previously
-        // always the full 32×32 regardless of patch size). See ComputePatchSubdivisions.
+        // Subdivide proportionally to the patch size, matching the Gouraud path.
+        // See ComputePatchSubdivisions.
         int n = ComputePatchSubdivisions(p);
         System.Diagnostics.Debug.Assert(n <= PatchSubdivisions);
 
+        // Exact-size positions (DrawVertices takes the vertex count from Array.Length);
+        // texture coordinates and the triangulation depend only on n and come from the
+        // shared caches.
         int axisLen = n + 1;
-        int gridLen = axisLen * axisLen;
-        int triVertexCount = n * n * 6;
-        float texScale = PatchTextureSize - 1;
-
-        var pool = ArrayPool<SKPoint>.Shared;
-        SKPoint[] positions = pool.Rent(gridLen);
-        SKPoint[] texCoords = pool.Rent(gridLen);
-
-        try
-        {
-            SampleTensorPatchGrid(p, n, positions.AsSpan(0, gridLen));
-
-            float invN = 1f / n;
-            for (int j = 0; j < axisLen; j++)
-            {
-                float v = j * invN;
-                int rowOffset = j * axisLen;
-                for (int i = 0; i < axisLen; i++)
-                {
-                    float u = i * invN;
-                    texCoords[rowOffset + i] = new SKPoint(u * texScale, v * texScale);
-                }
-            }
-
-            var posArray = new SKPoint[triVertexCount];
-            var texArray = new SKPoint[triVertexCount];
-            BuildPatchTriangleArrays(positions, texCoords, n, posArray, texArray);
-            DrawTexturedPatchVertices(shading, currentState, bitmap, posArray, texArray);
-        }
-        finally
-        {
-            pool.Return(positions);
-            pool.Return(texCoords);
-        }
+        var positions = new SKPoint[axisLen * axisLen];
+        SampleTensorPatchGrid(p, n, positions);
+        DrawTexturedPatchVertices(shading, currentState, bitmap,
+            positions, GetPatchTexCoords(n), GetGridTriangleIndices(n));
     }
 
     /// <summary>
