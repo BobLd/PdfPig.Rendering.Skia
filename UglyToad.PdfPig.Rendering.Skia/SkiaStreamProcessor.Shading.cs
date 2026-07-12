@@ -401,7 +401,7 @@ internal partial class SkiaStreamProcessor
 
             double x = xMin + rawX * xScale;
             double y = yMin + rawY * yScale;
-            dest[destOffset + i] = patternTransformMatrix.MapPoint(new SKPoint((float)x, (float)y));
+            dest[destOffset + i] = MapPointAffine(in patternTransformMatrix, (float)x, (float)y);
         }
         return true;
     }
@@ -451,6 +451,218 @@ internal partial class SkiaStreamProcessor
     private static double DecodeComponent(long raw, double invMaxRaw, double lo, double hi)
     {
         return lo + (raw * invMaxRaw) * (hi - lo);
+    }
+
+    /// <summary>
+    /// Apply an affine matrix to a point without going through the P/Invoke
+    /// <see cref="SKMatrix.MapPoint(float,float)"/>. Safe because every matrix we feed
+    /// the shading pipeline (CTM, pattern transform, shading.Matrix) is constructed from
+    /// PDF 2D transforms that have no perspective row.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static SKPoint MapPointAffine(in SKMatrix m, float x, float y)
+    {
+        return new SKPoint(
+            m.ScaleX * x + m.SkewX * y + m.TransX,
+            m.SkewY * x + m.ScaleY * y + m.TransY);
+    }
+
+    /// <summary>
+    /// Shared stream-reading loop for Type 6 (Coons, 12 boundary points per full patch) and
+    /// Type 7 (Tensor, 16 control points) meshes. The record layout, the edge-continuation
+    /// flag rules and the corner-colour bookkeeping are identical for the two types: a
+    /// continuation patch (flag 1–3) reuses four boundary points and two corner colours of
+    /// the previous patch, then reads the remaining <c>pointsPerPatch − 4</c> points and
+    /// 2 colours (for Type 7 the four interior control points, indices 12–15, are always
+    /// new). Only the per-patch tessellation differs, so the loop lives here once and
+    /// dispatches on <paramref name="isTensor"/>.
+    /// <para>
+    /// When a Function is present, the colour is non-linear in the bilinear-interpolated
+    /// parameter (most visibly: stitched Type-3 functions and Type-2 N=0 step functions).
+    /// Per-vertex Gouraud interpolation can't represent these correctly inside a cell — a
+    /// cell straddling a step boundary smears the two output colours together — so the
+    /// Function path draws each patch with a pre-evaluated colour texture and
+    /// texture-coordinate mapping, getting per-pixel function output.
+    /// </para>
+    /// </summary>
+    private void DrawPatchMeshUnclipped(Shading shading, in SKMatrix patternTransformMatrix,
+        ReadOnlySpan<byte> data, int bitsPerCoordinate, int bitsPerComponent, int bitsPerFlag,
+        double[] decode, bool isTensor)
+    {
+        var currentState = GetCurrentState();
+
+        int numStreamColorComponents = (decode.Length - 4) / 2;
+        double maxCoordRaw = (1L << bitsPerCoordinate) - 1.0;
+        double maxColorRaw = (1L << bitsPerComponent) - 1.0;
+        double xMin = decode[0], xMax = decode[1];
+        double yMin = decode[2], yMax = decode[3];
+
+        bool hasFunction = shading.Functions is { Length: > 0 };
+
+        // Per-shading scratch for the no-function (vertex-colour Gouraud) path. Each patch
+        // is submitted via its own indexed DrawVertices call with exact-size vertex arrays,
+        // so memory stays bounded regardless of mesh size.
+        double[]? interpBuffer = null;
+        SKPaint? gouraudPaint = null;
+
+        if (!hasFunction)
+        {
+            interpBuffer = new double[numStreamColorComponents];
+            gouraudPaint = new SKPaint
+            {
+                IsAntialias = shading.AntiAlias,
+                BlendMode = currentState.BlendMode.ToSKBlendMode(),
+                Color = SKColors.White,
+            };
+        }
+
+        // Function path: the per-vertex stream carries a single parametric value, so the colour is
+        // a 1-D function of it. Pre-evaluate that mapping once into a shading-global LUT and reuse
+        // it for every patch texture instead of calling the Function per texel. See BuildPatchTexture.
+        uint[]? patchLut = null;
+        double domainLo = 0d, domainHi = 0d;
+        if (hasFunction && numStreamColorComponents == 1)
+        {
+            domainLo = decode[4];
+            domainHi = decode[5];
+            patchLut = BuildParametricColorLut(shading, currentState, domainLo, domainHi);
+        }
+
+        int pointsPerPatch = isTensor ? 16 : 12;
+
+        try
+        {
+            // Patch buffers are alternated between the current and previous patch via a
+            // two-slot pool: the implicit-edge flags (1/2/3) require keeping the previous
+            // patch alive, but at most one previous and one current patch are live at a
+            // time. Pre-allocating both pairs lifts the point slots + 4 component arrays
+            // out of the per-patch hot loop.
+            var ptsBufA = new SKPoint[pointsPerPatch];
+            var ptsBufB = new SKPoint[pointsPerPatch];
+            var colorsBufA = new double[4][];
+            var colorsBufB = new double[4][];
+            for (int i = 0; i < 4; i++)
+            {
+                colorsBufA[i] = new double[numStreamColorComponents];
+                colorsBufB[i] = new double[numStreamColorComponents];
+            }
+
+            SKPoint[] points = ptsBufA;
+            double[][] cornerColors = colorsBufA;
+            SKPoint[]? prevPts = null;
+            double[][]? prevColors = null;
+            var bitReader = new GouraudBitReader(data);
+
+            while (bitReader.HasData)
+            {
+                int flag;
+                try
+                {
+                    flag = (int)(bitReader.ReadBits(bitsPerFlag) & 3);
+                }
+                catch
+                {
+                    break;
+                }
+
+                int newPointCount = flag == 0 ? pointsPerPatch : pointsPerPatch - 4;
+                int newColorCount = flag == 0 ? 4 : 2;
+
+                if (flag == 0)
+                {
+                    if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
+                            in patternTransformMatrix, points, 0, newPointCount))
+                    {
+                        break;
+                    }
+                    if (!ReadPatchColorsInto(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
+                            cornerColors, 0, newColorCount))
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    if (prevPts is null || prevColors is null)
+                    {
+                        // No previous patch — malformed stream; bail out gracefully.
+                        break;
+                    }
+
+                    // Per PDF spec Table 90: the implicit edge of the new patch is the C2 curve of the
+                    // previous patch, the right curve, or the left curve, depending on the flag value.
+                    int p11Idx, p12Idx, p13Idx, p14Idx;        // previous patch boundary points re-used as new patch corners
+                    int newC1ColorIdx, newC2ColorIdx;          // previous patch corner colours that become new patch corner colours
+                    switch (flag)
+                    {
+                        case 1: p11Idx = 3; p12Idx = 4; p13Idx = 5; p14Idx = 6; newC1ColorIdx = 1; newC2ColorIdx = 2;
+                            break;
+                        case 2: p11Idx = 6; p12Idx = 7; p13Idx = 8; p14Idx = 9; newC1ColorIdx = 2; newC2ColorIdx = 3;
+                            break;
+                        default: // flag is masked to two bits and 0 is handled above, so this is exactly flag == 3.
+                            p11Idx = 9; p12Idx = 10; p13Idx = 11; p14Idx = 0; newC1ColorIdx = 3; newC2ColorIdx = 0;
+                            break;
+                    }
+
+                    points[0] = prevPts[p11Idx];
+                    points[1] = prevPts[p12Idx];
+                    points[2] = prevPts[p13Idx];
+                    points[3] = prevPts[p14Idx];
+
+                    // Copy component values from prev's slot into current's slot — the
+                    // destination array is already owned by `cornerColors`, so we don't
+                    // reassign the slot reference (that would alias prev's buffer and the
+                    // next patch would overwrite both).
+                    Array.Copy(prevColors[newC1ColorIdx], cornerColors[0], numStreamColorComponents);
+                    Array.Copy(prevColors[newC2ColorIdx], cornerColors[1], numStreamColorComponents);
+
+                    if (!ReadPatchPoints(ref bitReader, bitsPerCoordinate, maxCoordRaw, xMin, xMax, yMin, yMax,
+                            in patternTransformMatrix, points, 4, newPointCount))
+                    {
+                        break;
+                    }
+                    if (!ReadPatchColorsInto(ref bitReader, bitsPerComponent, maxColorRaw, decode, numStreamColorComponents,
+                            cornerColors, 2, newColorCount))
+                    {
+                        break;
+                    }
+                }
+
+                bitReader.AlignToByte();
+
+                if (hasFunction)
+                {
+                    if (isTensor)
+                    {
+                        DrawTensorPatchTextured(shading, currentState, points, cornerColors, patchLut, domainLo, domainHi);
+                    }
+                    else
+                    {
+                        DrawCoonsPatchTextured(shading, currentState, points, cornerColors, patchLut, domainLo, domainHi);
+                    }
+                }
+                else if (isTensor)
+                {
+                    TessellateAndDrawTensorPatch(shading, currentState, points, cornerColors,
+                        interpBuffer!, gouraudPaint!);
+                }
+                else
+                {
+                    TessellateAndDrawCoonsPatch(shading, currentState, points, cornerColors,
+                        interpBuffer!, gouraudPaint!);
+                }
+
+                prevPts = points;
+                prevColors = cornerColors;
+                // Alternate the active buffer so prev stays valid while we fill current.
+                points = ReferenceEquals(points, ptsBufA) ? ptsBufB : ptsBufA;
+                cornerColors = ReferenceEquals(cornerColors, colorsBufA) ? colorsBufB : colorsBufA;
+            }
+        }
+        finally
+        {
+            gouraudPaint?.Dispose();
+        }
     }
 
     /// <summary>

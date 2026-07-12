@@ -58,7 +58,7 @@ PdfDocument.Open(path, SkiaRenderingParsingOptions.Instance)
   - `.Glyph.cs` — text/glyph rendering via HarfBuzz
   - `.Path.cs` — fill/stroke path operations
   - `.Image.cs` — image and image-mask rendering
-  - `.Shading.cs` — shared shading infrastructure + dispatch (`PaintShading`, `RenderShadingPattern`, the mesh-picture cache, the bit-stream reader, patch tessellation/texture helpers). Per-type rendering lives in sibling partials: `.Shading.Axial.cs`, `.Shading.Radial.cs`, `.Shading.Function.cs`, `.Shading.GouraudFree.cs` (Type 4), `.Shading.GouraudLattice.cs` (Type 5), `.Shading.Coons.cs` (Type 6), `.Shading.Tensor.cs` (Type 7).
+  - `.Shading.cs` — shared shading infrastructure: the single `RenderShading` dispatch (serves both the `sh` operator and shading patterns; stroke patterns use the *stroking* alpha constant), the BBox-clip / Background / shader-draw / tile-mode helpers shared by the Axial/Radial/Function renderers, the mesh-picture cache, the bit-stream reader, the shared Type 6/7 stream-reading driver (`DrawPatchMeshUnclipped` — the record layout and edge-continuation rules are identical for Coons and Tensor), patch tessellation/texture helpers, `MapPointAffine`, and the static per-subdivision index/texcoord caches. Per-type rendering (samplers/tessellators) lives in sibling partials: `.Shading.Axial.cs`, `.Shading.Radial.cs`, `.Shading.Function.cs`, `.Shading.GouraudFree.cs` (Type 4), `.Shading.GouraudLattice.cs` (Type 5), `.Shading.Coons.cs` (Type 6), `.Shading.Tensor.cs` (Type 7). Review status and remaining known shading issues: `docs/SHADING-CODE-REVIEW.md`.
   - `.Annotations.cs` — annotation rendering
 
 - **`PageSizeFactory`** — Lightweight `IPageFactory<PdfPageSize>` that extracts page dimensions without full rendering (handles MediaBox, CropBox, rotation, UserUnit).
@@ -85,6 +85,8 @@ A page often paints the same mesh shading many times (a chart re-invoking `sh`),
 
 - **The cache is intentionally CTM-independent.** The mesh geometry is recorded in *pattern space* (control points mapped only by the pattern transform) and the canvas CTM is applied at replay. The key is `(Shading, pattern-space transform, alpha, blend)` — **not** the device/canvas CTM. For `sh` the pattern transform is always identity, so every `sh` of one shading shares a single picture regardless of CTM. ⚠️ Keying on the CTM, or scaling `ComputePatchSubdivisions` by the device scale, turns every differently-scaled paint into a cache miss (re-tessellate every time) and saturates subdivision back toward the full 32×32 grid — both reintroduce the multi-second-per-page slowness this cache exists to kill. `PatchCellSize` is deliberately measured in pattern-space units. Alpha/blend *are* in the key (baked into recorded colours/paint, rarely vary per paint). Verify any change here with `dotnet test … -c Release --filter "DisplayName~0000851"` (≈5 s, not minutes).
 
+- **Mesh geometry is drawn as *indexed* triangle lists with exact-size vertex arrays.** The `UInt16[]` index buffers and texture-coordinate grids depend only on the subdivision count and are cached process-wide as statics (`GetGridTriangleIndices`, `GetPatchTexCoords`, `GetGouraudSubTriangleIndices`) — deterministic content, benign-race publish, so parallel renders stay byte-identical. ⚠️ SkiaSharp's `DrawVertices` takes vertex/index counts from `Array.Length`: never pass an oversized or pooled scratch buffer as vertices, it would copy stale entries into the recorded picture.
+
 - **Disposal relies on Skia native ref-counting.** `Cleanup()` (in `Process()`'s `finally`) disposes the cached mesh pictures, and the textured-patch path disposes its image/shader/paint mid-recording. This is safe only because the parent page picture (and the recorded `DrawVertices`/`DrawPicture` ops) hold their own native refs after `EndRecording()` — disposing the managed wrappers just drops *our* ref. `MeshShadingDisposalTests` enforces this (rasterises the page picture after disposal; asserts non-blank + stable replay). Don't dispose mesh resources before `EndRecording`, and don't assume "reasoned safe" without that test.
 
 ### Configuration
@@ -104,6 +106,7 @@ A page often paints the same mesh shading many times (a chart re-invoking `sh`),
 
 - **Text clip modes** (`FillClip`, `StrokeClip`, etc.): operator is recognised but clipping is not applied.
 - **Image mask alpha**: ignores `colour.Alpha` (hardcoded to 255) in `SkiaStreamProcessor.Image.cs`.
+- **Mesh shadings (Types 4–7) as stroke patterns**: clipped to the path's fill interior, not the stroke outline (`isStroke` is not plumbed into the mesh renderers). See `docs/SHADING-CODE-REVIEW.md` #4.
 - 
 ## Thread Safety (`SkiaFontCache`)
 
