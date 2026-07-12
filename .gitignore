@@ -366,3 +366,4 @@ FodyWeavers.xsd
 TemplateEngineHost/
 /.claude/settings.local.json
 /.idea
+/docs

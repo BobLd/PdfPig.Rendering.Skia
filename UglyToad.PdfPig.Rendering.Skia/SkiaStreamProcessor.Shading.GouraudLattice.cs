@@ -13,7 +13,6 @@
 // limitations under the License.
 
 using System;
-using System.Runtime.CompilerServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
@@ -76,9 +75,9 @@ internal partial class SkiaStreamProcessor
         var pairColors = new SKColor[2 * verticesPerRow];
         ushort[] pairIndices = BuildRowPairIndices(verticesPerRow);
 
-        // Reusable per-vertex buffer — Eval() needs a heap double[], but it doesn't keep
-        // the reference (it returns it directly when no Function is present, otherwise
-        // returns a fresh array), so reusing is safe.
+        // Reusable per-vertex component buffer. Eval reads it and writes its (converted)
+        // output into a separate buffer without retaining the input span, so one buffer
+        // safely serves every vertex in the lattice.
         Span<double> colorBuffer = new double[numStreamColorComponents];
         var bitReader = new GouraudBitReader(shading.Data.Span);
 
@@ -224,19 +223,5 @@ internal partial class SkiaStreamProcessor
         }
 
         return indices;
-    }
-
-    /// <summary>
-    /// Apply an affine matrix to a point without going through the P/Invoke
-    /// <see cref="SKMatrix.MapPoint(float,float)"/>. Safe because every matrix we feed
-    /// the shading pipeline (CTM, pattern transform, shading.Matrix) is constructed from
-    /// PDF 2D transforms that have no perspective row.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static SKPoint MapPointAffine(in SKMatrix m, float x, float y)
-    {
-        return new SKPoint(
-            m.ScaleX * x + m.SkewX * y + m.TransX,
-            m.SkewY * x + m.ScaleY * y + m.TransY);
     }
 }

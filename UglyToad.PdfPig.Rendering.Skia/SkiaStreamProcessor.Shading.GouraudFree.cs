@@ -197,7 +197,7 @@ internal partial class SkiaStreamProcessor
                 }
 
                 // Transform the vertex from shading/pattern space to canvas space.
-                SKPoint pt = patternTransformMatrix.MapPoint(new SKPoint((float)x, (float)y));
+                SKPoint pt = MapPointAffine(in patternTransformMatrix, (float)x, (float)y);
                 var vertex = new GouraudVertex(
                     pt,
                     hasFunction ? colorComponents : [],
