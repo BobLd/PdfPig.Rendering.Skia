@@ -13,7 +13,6 @@
 // limitations under the License.
 
 using System.Collections.Generic;
-using System.Linq;
 using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Tokens;
@@ -55,11 +54,10 @@ internal sealed class PatternAwareColorSpaceContext : IColorSpaceContext
         _inner.SetNonStrokingColorspace(colorspace, dictionary);
     }
 
-    public void SetStrokingColor(IReadOnlyList<double> operands, NameToken? patternName = null)
+    public void SetStrokingColor(double[] operands, NameToken? patternName = null)
     {
-        LastStrokingPatternOperands = patternName is not null && operands?.Count > 0
-            ? operands.ToArray()
-            : null;
+        LastStrokingPatternOperands = patternName is not null && operands?.Length > 0
+            ? operands : null;
         _inner.SetStrokingColor(operands, patternName);
     }
 
@@ -81,11 +79,10 @@ internal sealed class PatternAwareColorSpaceContext : IColorSpaceContext
         _inner.SetStrokingColorCmyk(c, m, y, k);
     }
 
-    public void SetNonStrokingColor(IReadOnlyList<double> operands, NameToken? patternName = null)
+    public void SetNonStrokingColor(double[] operands, NameToken? patternName = null)
     {
-        LastNonStrokingPatternOperands = patternName is not null && operands?.Count > 0
-            ? operands.ToArray()
-            : null;
+        LastNonStrokingPatternOperands = patternName is not null && operands?.Length > 0
+            ? operands : null;
         _inner.SetNonStrokingColor(operands, patternName);
     }
 
