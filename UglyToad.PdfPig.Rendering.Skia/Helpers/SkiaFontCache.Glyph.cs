@@ -79,18 +79,18 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         public bool TryGetPath(IFont font, int code, out SKPath? path)
         {
-            ConcurrentDictionary<int, Lazy<SKPath?>> fontCache = _cache.GetOrAdd(font, new ConcurrentDictionary<int, Lazy<SKPath?>>());
-
-            Lazy<SKPath?> glyph = fontCache.GetOrAdd(code, c => new Lazy<SKPath?>(() => GetPathInternal(font, c)));
-
-            if (glyph.Value is null)
+            if (!_cache.TryGetValue(font, out ConcurrentDictionary<int, Lazy<SKPath?>>? fontCache))
             {
-                path = null;
-                return false;
+                fontCache = _cache.GetOrAdd(font, static _ => new ConcurrentDictionary<int, Lazy<SKPath?>>());
+            }
+
+            if (!fontCache.TryGetValue(code, out Lazy<SKPath?>? glyph))
+            {
+                glyph = fontCache.GetOrAdd(code, c => new Lazy<SKPath?>(() => GetPathInternal(font, c)));
             }
 
             path = glyph.Value;
-            return true;
+            return path is not null;
         }
     }
 }
