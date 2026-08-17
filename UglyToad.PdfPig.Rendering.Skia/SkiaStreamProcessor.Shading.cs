@@ -21,6 +21,7 @@ using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics;
 using UglyToad.PdfPig.Graphics.Colors;
+using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 using UglyToad.PdfPig.Tokens;
 
@@ -108,8 +109,42 @@ internal partial class SkiaStreamProcessor
     /// <summary>
     /// Shared dispatch for the direct `sh` operator (identity transform, non-stroking) and
     /// shading patterns (pattern transform, optional stroke, clipped to the painted path).
+    /// <para>
+    /// PDF 1.7 §11.6.5.2: a soft mask in the graphics state applies to every painting operation
+    /// while it is in scope, and `sh` / a shading fill are painting operations like any other.
+    /// </para>
     /// </summary>
     private void RenderShading(Shading shading, in SKMatrix patternTransformMatrix, bool isStroke, SKPath? path)
+    {
+        // Without this, a shading painted under an SMask covers its whole clip region at full
+        // opacity, e.g. 0000851.pdf paints its title drop-shadow as a Separation-white `sh`
+        // shaped entirely by the mask, which unmasked wipes out the sky behind it.
+        if (!TryGetActiveSoftMask(out SoftMask? softMask))
+        {
+            RenderShadingUnmasked(shading, in patternTransformMatrix, isStroke, path);
+            return;
+        }
+
+        // The gs blend mode is applied once, when DrawWithSoftMask composites the masked layer
+        // back onto the backdrop; the shading itself draws with Normal blend inside that layer.
+        // The per-type renderers all read the blend mode off the current state, so neutralise it
+        // there for the duration of the inner draw rather than threading a flag through each one.
+        CurrentGraphicsState currentState = GetCurrentState();
+        BlendMode blendMode = currentState.BlendMode;
+        SKMatrix transform = patternTransformMatrix;
+        currentState.BlendMode = BlendMode.Normal;
+        try
+        {
+            DrawWithSoftMask(softMask!, blendMode,
+                () => RenderShadingUnmasked(shading, in transform, isStroke, path));
+        }
+        finally
+        {
+            currentState.BlendMode = blendMode;
+        }
+    }
+
+    private void RenderShadingUnmasked(Shading shading, in SKMatrix patternTransformMatrix, bool isStroke, SKPath? path)
     {
         switch (shading)
         {
