@@ -15,8 +15,7 @@ jobs:
       matrix: |
         {
           "include": [
-            { "runner": "macos-latest", "os": "macos", "arch": "arm64", "framework": "net6.0" },
             { "runner": "macos-latest", "os": "macos", "arch": "arm64", "framework": "net8.0" },
-            { "runner": "macos-latest", "os": "macos", "arch": "arm64", "framework": "net9.0" }
+            { "runner": "macos-latest", "os": "macos", "arch": "arm64", "framework": "net10.0" }
           ]
         }

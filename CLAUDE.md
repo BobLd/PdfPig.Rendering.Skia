@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -13,15 +13,21 @@ dotnet build UglyToad.PdfPig.Rendering.Skia/UglyToad.PdfPig.Rendering.Skia.cspro
 
 ### Test
 ```bash
-# All tests
+# All tests (fans out over net472 + net8.0 + net10.0, run in parallel)
 dotnet test UglyToad.PdfPig.Rendering.Skia.sln
 
 # Single test class or method
 dotnet test --filter "FullyQualifiedName~ClassName" UglyToad.PdfPig.Rendering.Skia.sln
-dotnet test --filter "FullyQualifiedName~ClassName.MethodName" UglyToad.PdfPig.Rendering.Skia.sln
+dotnet test --filter-class "*ClassName*" UglyToad.PdfPig.Rendering.Skia.sln
+dotnet test --filter-method "*ClassName.MethodName*" UglyToad.PdfPig.Rendering.Skia.sln
+
+# The test project is a self-contained MTP app - run it directly, no `dotnet test` needed
+./UglyToad.PdfPig.Rendering.Skia.Tests/bin/Release/net10.0/UglyToad.PdfPig.Rendering.Skia.Tests.exe --help
 ```
 
-Test framework: **xUnit**. Test PDFs live in `UglyToad.PdfPig.Rendering.Skia.Tests/Documents/`.
+Test framework: **xUnit.net v3** (`xunit.v3` 4.x) on **Microsoft.Testing.Platform** (MTP).
+
+Test PDFs live in `UglyToad.PdfPig.Rendering.Skia.Tests/Documents/`.
 
 > **Binary test assets must stay binary in git.** `.gitattributes` has `* text=auto`, but uncompressed PDFs contain no NUL bytes, so git's heuristic misdetects them as *text* and strips CR bytes on storage. A PDF's xref uses absolute byte offsets, so dropping CRs shifts the layout and breaks them: the file checks out fine on Windows (`autocrlf` restores CRLF) but corrupt on Linux/macOS (LF), giving `IndexOutOfRangeException` in `MemoryInputBytes.Seek` / `PdfTokenScanner.TryReadStream`. The bug is byte-based, not OS-based — feeding the LF blob to the renderer fails on any OS. `.gitattributes` therefore force-marks `*.pdf` (and `*.png/jpg/jpeg/gif/ico/snk`) as `binary`. After adding a new test PDF, confirm `git check-attr -a <file>` reports `binary: set`; if it was committed before the rule, run `git add --renormalize .`.
 
@@ -29,10 +35,10 @@ Test framework: **xUnit**. Test PDFs live in `UglyToad.PdfPig.Rendering.Skia.Tes
 
 The bulk of the suite renders a PDF page and compares it pixel-by-pixel against a committed golden PNG. Things to know before touching the renderer:
 
-- **Must run in Release.** `PdfPigSkiaTest` `throw`s in `#if DEBUG` — image hinting/quality differs, so golden images are only valid in Release. Run `dotnet test … -c Release`. (The pure unit tests — `ParametricShadingTextureTests`, `MeshShadingDisposalTests` — run in any config.)
+- **Must run in Release.** Image hinting/quality differs under DEBUG, so the golden images are only valid in Release. `PdfPigSkiaTest` is gated with `[Theory(SkipUnless = nameof(IsReleaseBuild), Skip = …)]`, so a DEBUG run reports 151 *skipped* cases with a reason instead of a wall of failures — it is not a green run. Run `dotnet test … -c Release`. (The pure unit tests — `ParametricShadingTextureTests`, `MeshShadingDisposalTests` — run in any config.)
 - **Tolerance, not exact match.** `PdfToImageHelper` allows a per-channel delta of `_threshold = 2` and up to `_maxDifferingPixelRatio = 0.001` (0.1 %) of pixels to differ, absorbing cross-platform AA/sub-pixel jitter. A failing comparison writes a diff PNG to `ErrorImages/`.
 - **Golden images are committed** under `ExpectedImages/pdfpig_skia/`, with optional per-OS overrides in `ExpectedImages/{windows,linux,macos}/` (the OS-specific file wins when present, else the default is used). **Any intentional change to rendering output (e.g. tessellation, AA) means the affected goldens must be regenerated** — a green diff is not automatic.
-- **Iterate fast:** add `-f net8.0` to run one TFM instead of the full matrix, and `--filter "DisplayName~<pdfname>"` to target a single document/page (e.g. `DisplayName~0000851`).
+- **Iterate fast:** add `-f net8.0` to run one TFM instead of the full matrix, and `--filter-display-name "*<pdfname>*"` to target a single document/page (e.g. `--filter-display-name "*0000851*"`). The VSTest form `--filter "DisplayName~0000851"` still works.
 
 ## Architecture
 
