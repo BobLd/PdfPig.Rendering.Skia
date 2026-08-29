@@ -1,26 +1,19 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>net462;net6.0;net8.0;net9.0</TargetFrameworks>
+		<TargetFrameworks>net472;net8.0;net10.0</TargetFrameworks>
 		<LangVersion>12</LangVersion>
 		<Nullable>enable</Nullable>
 		<IsPackable>false</IsPackable>
-		<RuntimeFrameworkVersion Condition="'$(TargetFramework)'=='netcoreapp2.1'">2.1.30</RuntimeFrameworkVersion>
+		<OutputType>Exe</OutputType>
+		<UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.1" />
 		<PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="8.3.1.2" />
-		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-		<PackageReference Include="xunit" Version="2.4.1" />
-		<PackageReference Include="xunit.runner.visualstudio" Version="2.4.3">
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-			<PrivateAssets>all</PrivateAssets>
-		</PackageReference>
-		<PackageReference Include="coverlet.collector" Version="6.0.4">
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-			<PrivateAssets>all</PrivateAssets>
-		</PackageReference>
+		<PackageReference Include="xunit.v3" Version="4.0.0" />
+		<PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="2.3.3" />
 	</ItemGroup>
 
 	<ItemGroup>

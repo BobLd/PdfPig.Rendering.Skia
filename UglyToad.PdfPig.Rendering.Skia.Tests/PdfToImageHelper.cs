@@ -15,6 +15,7 @@
 using System;
 using System.IO;
 using SkiaSharp;
+using Xunit;
 
 #if NET
 using System.Runtime.InteropServices;
@@ -130,6 +131,12 @@ public static class PdfToImageHelper
         }
 
         return diff.DifferingRatio <= maxDifferingPixelRatio;
+    }
+
+    private static void ReportDifference(string expectedFile, int pageNumber, in DiffResult diff, double maxDifferingPixelRatio)
+    {
+        string message = $"{expectedFile} (page {pageNumber}): {diff.DifferingPixels} of {diff.ComparedPixels} pixels differ ({diff.DifferingRatio:P3}), tolerance {maxDifferingPixelRatio:P3}.";
+        TestContext.Current.TestOutputHelper?.WriteLine(message);
     }
 
     /// <summary>
@@ -295,8 +302,7 @@ public static class PdfToImageHelper
                                 return true;
                             }
 
-                            Console.WriteLine(
-                                $"{expectedFile} (page {pageNumber}): {diff.DifferingPixels} of {diff.ComparedPixels} pixels differ ({diff.DifferingRatio:P3}), tolerance {maxDifferingPixelRatio:P3}.");
+                            ReportDifference(expectedFile, pageNumber, diff, maxDifferingPixelRatio);
 
                             // Save error
                             string rootName = expectedFile.Substring(0, expectedFile.Length - 4);
@@ -348,26 +354,21 @@ public static class PdfToImageHelper
                         return true;
                     }
 
-                    Console.WriteLine(
-                        $"{expectedFile} (page {pageNumber}): {diff.DifferingPixels} of {diff.ComparedPixels} pixels differ ({diff.DifferingRatio:P3}), tolerance {maxDifferingPixelRatio:P3}.");
+                    ReportDifference(expectedFile, pageNumber, diff, maxDifferingPixelRatio);
 
                     // Save error
                     string rootName = expectedFile.Substring(0, expectedFile.Length - 4);
 
-                    string errorToSaveFile = Path.Combine(ErrorFolder, $"{rootName}_diff.png");
+                    Directory.CreateDirectory(ErrorFolder);
 
-                    Directory.CreateDirectory(Path.GetDirectoryName(errorToSaveFile));
-                    using (var fs = new FileStream(errorToSaveFile, FileMode.Create))
+                    using (var fs = new FileStream(Path.Combine(ErrorFolder, $"{rootName}_diff.png"), FileMode.Create))
                     {
                         bim3?.Encode(fs, SKEncodedImageFormat.Png, 100);
                     }
 
                     bim3?.Dispose();
 
-                    string renderToSaveFile = Path.Combine(ErrorFolder, $"{rootName}_rendered.png");
-
-                    Directory.CreateDirectory(Path.GetDirectoryName(renderToSaveFile));
-                    using (var fs = new FileStream(renderToSaveFile, FileMode.Create))
+                    using (var fs = new FileStream(Path.Combine(ErrorFolder, $"{rootName}_rendered.png"), FileMode.Create))
                     {
                         actual.Encode(fs, SKEncodedImageFormat.Png, 100);
                     }
