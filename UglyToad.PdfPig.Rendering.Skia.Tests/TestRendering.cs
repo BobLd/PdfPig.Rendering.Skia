@@ -52,7 +52,6 @@ public class TestRendering
             "caly-issues-58-2.pdf", 1, 2
         },
         {
-            // Output image is wrong - but renders JPX image
             "68-1990-01_A_1.png",
             "68-1990-01_A.pdf", 1, 2
         },
@@ -398,17 +397,14 @@ public class TestRendering
         },
 
         {
-            // Not completely correct but good start
             "0000190_1.png",
             "0000190.pdf", 1, 2
         },
         {
-            // Not completely correct but good start
             "0000190_3.png",
             "0000190.pdf", 3, 2
         },
         {
-            // Rendering not correct
             "0000190_cropped_1.png",
             "0000190_cropped.pdf", 1, 2
         },
@@ -649,8 +645,222 @@ public class TestRendering
             "VerticalText_1.png",
             "VerticalText.pdf", 1, 2
         },
-        
+        {
+            "DeviceN_CS_test_3.png",
+            "DeviceN_CS_test.pdf", 3, 2
+        },
+        {
+            "version4pdf_1.png",
+            "version4pdf.pdf", 1, 2
+        },
+        {
+            "GHOSTSCRIPT-702013-1_1.png",
+            "GHOSTSCRIPT-702013-1.pdf", 1, 2
+        },
+        {
+            "color_icc_based_1.png",
+            "color_icc_based.pdf", 1, 2
+        },
+        {
+            "2_color_indexed_1.png",
+            "2_color_indexed.pdf", 1, 2
+        },
+        {
+            "2_color_calrgb_1.png",
+            "2_color_calrgb.pdf", 1, 2
+        },
+        {
+            "2_color_lab_1.png",
+            "2_color_lab.pdf", 1, 2
+        },
+        {
+            "color_calgray_1.png",
+            "color_calgray.pdf", 1, 2
+        },
+        {
+            "color_calrgb_1.png",
+            "color_calrgb.pdf", 1, 2
+        },
+        {
+            "color_lab_1.png",
+            "color_lab.pdf", 1, 2
+        },
+        {
+            "color_separation_1.png",
+            "color_separation.pdf", 1, 2
+        },
+        {
+            "GWG130_ICC_Source_Profile_x4_1.png",
+            "GWG130_ICC_Source_Profile_x4.pdf", 1, 2
+        },
+        {
+            // The rendering-intent fixtures again, rendered with no IccProfileService configured. The
+            // ICCBased space then falls back to its alternate, where intent cannot change anything, so
+            // these goldens are the flat reference the `_icc` ones are read against: all four bands
+            // identical here, and separated there.
+            "icc_shading_rendering_intent_1.png",
+            "icc_shading_rendering_intent.pdf", 1, 2
+        },
+        {
+            "icc_mesh_shading_rendering_intent_1.png",
+            "icc_mesh_shading_rendering_intent.pdf", 1, 2
+        },
+
         // TODO - Add Type3Test.pdf + DefaultColourSpaces.230802.pdf test
+    };
+
+    public static readonly TheoryData<string, string, int, int> DocumentsPdfPigIcc = new()
+    {
+        {
+            "0000190_3_icc.png",
+            "0000190.pdf", 3, 2
+        },
+        {
+            "2_color_indexed_1_icc.png",
+            "2_color_indexed.pdf", 1, 2
+        },
+        {
+            "cat-genetics_bobld_1_icc.png",
+            "cat-genetics_bobld.pdf", 1, 2
+        },
+        {
+            "cat-genetics_1_icc.png",
+            "cat-genetics.pdf", 1, 2
+        },
+        {
+            "color_icc_based_1_icc.png",
+            "color_icc_based.pdf", 1, 2
+        },
+        {
+            "DeviceN_CS_test_6_icc.png",
+            "DeviceN_CS_test.pdf", 6, 2
+        },
+        {
+            "DeviceN_CS_test_3_icc.png",
+            "DeviceN_CS_test.pdf", 3, 2
+        },
+        {
+            "GHOSTSCRIPT-702013-1_1_icc.png",
+            "GHOSTSCRIPT-702013-1.pdf", 1, 2
+        },
+        {
+            "GWG130_ICC_Source_Profile_x4_1_icc.png",
+            "GWG130_ICC_Source_Profile_x4.pdf", 1, 2
+        },
+        {
+            "version4pdf_1_icc.png",
+            "version4pdf.pdf", 1, 2
+        },
+        {
+            // The same one-patch Coons (type 6) mesh painted four times under different `ri`. Mesh
+            // shadings are tessellated once and replayed from _meshPictureCache with their vertex
+            // colours already baked in, so this pins two things at once: that the intent reaches the
+            // patch colour path, and that it is part of the cache key. Drop it from the key and all
+            // four bands collapse onto the first one's cached picture.
+            "icc_mesh_shading_rendering_intent_1_icc.png",
+            "icc_mesh_shading_rendering_intent.pdf", 1, 2
+        },
+        {
+            // Four axial shadings in one ICCBased colour space, each painted under a different `ri`.
+            // The colour space is the only kind whose output rendering intent can change
+            // (RenderingIntentAffectsOutput), and a shading has no /Intent of its own, so this is what
+            // pins the graphics state's intent reaching the shading colour path. Rendered without the
+            // intent the four bands collapse onto the RelativeColorimetric one - a quarter of the page.
+            "icc_shading_rendering_intent_1_icc.png",
+            "icc_shading_rendering_intent.pdf", 1, 2
+        }
+    };
+
+    public static readonly TheoryData<string, string, int, int> DocumentsPdfPigIccOutputIntent = new()
+    {
+        {
+            "0000190_1_icc_intent.png",
+            "0000190.pdf", 1, 2
+        },
+        {
+            "0000190_cropped_1_icc_intent.png",
+            "0000190_cropped.pdf", 1, 2
+        },
+        {
+            "0000190_3_icc_intent.png",
+            "0000190.pdf", 3, 2
+        },
+        {
+            "0000851_1_icc_intent.png",
+            "0000851.pdf", 1, 2
+        },
+        {
+            "0000851_2_icc_intent.png",
+            "0000851.pdf", 2, 2
+        },
+        {
+            "0000851_3_icc_intent.png",
+            "0000851.pdf", 3, 2
+        },
+        {
+            "2_color_indexed_1_icc.png",
+            "2_color_indexed.pdf", 1, 2
+        },
+        {
+            "cat-genetics_bobld_1_icc.png",
+            "cat-genetics_bobld.pdf", 1, 2
+        },
+        {
+            "cat-genetics_1_icc.png",
+            "cat-genetics.pdf", 1, 2
+        },
+        {
+            "color_icc_based_1_icc.png",
+            "color_icc_based.pdf", 1, 2
+        },
+        {
+            "DeviceN_CS_test_6_icc.png",
+            "DeviceN_CS_test.pdf", 6, 2
+        },
+        {
+            "DeviceN_CS_test_3_icc.png",
+            "DeviceN_CS_test.pdf", 3, 2
+        },
+        {
+            "GHOSTSCRIPT-702013-1_1_icc.png",
+            "GHOSTSCRIPT-702013-1.pdf", 1, 2
+        },
+        {
+            "GHOSTSCRIPT-699375-5_1_icc_intent.png",
+            "GHOSTSCRIPT-699375-5.pdf", 1, 2
+        },
+        {
+            "GWG130_ICC_Source_Profile_x4_1_icc_intent.png",
+            "GWG130_ICC_Source_Profile_x4.pdf", 1, 2
+        },
+        {
+            "GWG1610_Softmasks_Text_part1_X4_1_icc_intent.png",
+            "GWG1610_Softmasks_Text_part1_X4.pdf", 1, 2
+        },
+        {
+            "GWG1611_Softmasks_Text_part2_X4_1_icc_intent.png",
+            "GWG1611_Softmasks_Text_part2_X4.pdf", 1, 2
+        },
+        {
+            "GWG166_Softmasks_Images_DeviceCMYK_X4_1_icc_intent.png",
+            "GWG166_Softmasks_Images_DeviceCMYK_X4.pdf", 1, 2
+        },
+        {
+            "GWG168_Softmasks_Vector_part1_X4_1_icc_intent.png",
+            "GWG168_Softmasks_Vector_part1_X4.pdf", 1, 2
+        },
+        {
+            "GWG169_Softmasks_Vector_part2_X4_1_icc_intent.png",
+            "GWG169_Softmasks_Vector_part2_X4.pdf", 1, 2
+        },
+        {
+            "GWG090_Font-Support_x3_1_icc_intent.png",
+            "GWG090_Font-Support_x3.pdf", 1, 5
+        },
+        {
+            "version4pdf_1_icc.png",
+            "version4pdf.pdf", 1, 2
+        },
     };
 
     public static bool IsReleaseBuild =>
@@ -666,6 +876,26 @@ public class TestRendering
     {
         expectedImage = Path.Combine("pdfpig_skia", expectedImage);
         bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale);
+        Assert.True(success);
+    }
+
+    [Theory(Skip = "Only valid in Release mode.", SkipUnless = nameof(IsReleaseBuild))]
+    [MemberData(nameof(DocumentsPdfPigIcc))]
+    public void PdfPigSkiaTestIcc(string expectedImage, string pdfFile, int pageNumber, int scale)
+    {
+        expectedImage = Path.Combine("pdfpig_skia", expectedImage);
+        bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale,
+            useIccProfile: true);
+        Assert.True(success);
+    }
+
+    [Theory(Skip = "Only valid in Release mode.", SkipUnless = nameof(IsReleaseBuild))]
+    [MemberData(nameof(DocumentsPdfPigIccOutputIntent))]
+    public void PdfPigSkiaTestIccOutputIntent(string expectedImage, string pdfFile, int pageNumber, int scale)
+    {
+        expectedImage = Path.Combine("pdfpig_skia", expectedImage);
+        bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale,
+            useIccProfile: true, useOutputIntent: true);
         Assert.True(success);
     }
 }
