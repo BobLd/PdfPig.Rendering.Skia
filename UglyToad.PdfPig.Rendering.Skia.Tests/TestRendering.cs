@@ -868,11 +868,6 @@ public class TestRendering
             "version4pdf_1_icc.png",
             "version4pdf.pdf", 1, 2
         },
-        {
-            "translucent-image_1.png",
-            "translucent-image.pdf", 1, 2
-        },
-        // TODO - Add Type3Test.pdf + DefaultColourSpaces.230802.pdf test
     };
 
     public static bool IsReleaseBuild =>
