@@ -74,7 +74,7 @@ internal partial class SkiaStreamProcessor
 
             FixIncorrectValues(v, domain); // This is a hack, this should never happen
 
-            colors[t] = radialColorSpace.GetSKColor(v, alpha);
+            colors[t] = radialColorSpace.GetSKColor(v, alpha, currentState.RenderingIntent);
             colorPos[t] = (float)frac;
         }
 
