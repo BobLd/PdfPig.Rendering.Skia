@@ -306,7 +306,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             // Complex / wrapped colour spaces — defer to IColor so the renderer keeps its
             // CMYK approximation when the underlying space resolves to CMYKColor.
-            return colorSpace.GetColor(components.ToArray()).ToSKColor(alpha);
+            return colorSpace.GetColor(components).ToSKColor(alpha);
         }
 
         public static SKColor ToSKColor(this IColor? pdfColor, double alpha = 1)
