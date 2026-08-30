@@ -81,9 +81,9 @@ internal partial class SkiaStreamProcessor
     // instead of re-tessellating patches each time. The geometry is recorded in pattern space and
     // the canvas CTM is applied at replay, so one picture serves every invocation under any CTM
     // that shares the same pattern-space transform — keying on the CTM here would defeat the
-    // reuse that makes repeated `sh` fast. Alpha and blend mode are part of the key because they
-    // are baked into the recorded colours / paint and cannot be re-applied at replay time.
-    private Dictionary<Shading, (SKMatrix Transform, double Alpha, SKBlendMode Blend, SKPicture Picture)>? _meshPictureCache;
+    // reuse that makes repeated `sh` fast. Alpha, blend mode and rendering intent are part of the key
+    // because they are baked into the recorded colours / paint and cannot be re-applied at replay time.
+    private Dictionary<Shading, (SKMatrix Transform, double Alpha, SKBlendMode Blend, RenderingIntent Intent, SKPicture Picture)>? _meshPictureCache;
 
     /// <inheritdoc/>
     public override void PaintShading(NameToken shadingNameToken)
@@ -218,7 +218,9 @@ internal partial class SkiaStreamProcessor
 
         using var bgPaint = new SKPaint();
         bgPaint.IsAntialias = shading.AntiAlias;
-        bgPaint.Color = shading.ColorSpace.GetColor(shading.Background).ToSKColor(alpha);
+        bgPaint.Color = shading.ColorSpace
+            .GetColor(shading.Background, GetCurrentState().RenderingIntent)
+            .ToSKColor(alpha);
         bgPaint.BlendMode = blendMode;
 
         if (path is null)
@@ -314,17 +316,20 @@ internal partial class SkiaStreamProcessor
     /// recording it via <paramref name="drawMesh"/> on first use. The picture stores the
     /// geometry in pattern space; the caller's canvas transform (and any clip) is applied when
     /// it is replayed, so one picture serves every invocation that shares the same transform,
-    /// alpha and blend mode. Alpha and blend are part of the key because they are baked into the
-    /// recorded picture (colours, paint blend) and cannot be re-applied at replay time.
+    /// alpha, blend mode and rendering intent. Those three are part of the key because they are baked
+    /// into the recorded picture (colours, paint blend) and cannot be re-applied at replay time - the
+    /// intent because every vertex colour was converted under it, so replaying a picture built under a
+    /// different one would paint the mesh in colours the page did not ask for.
     /// </summary>
     private SKPicture GetOrBuildMeshPicture(Shading shading, in SKMatrix transform,
-        double alpha, SKBlendMode blend, Action drawMesh)
+        double alpha, SKBlendMode blend, RenderingIntent intent, Action drawMesh)
     {
         if (_meshPictureCache is not null
             && _meshPictureCache.TryGetValue(shading, out var entry)
             && entry.Transform.Equals(transform)
             && entry.Alpha.Equals(alpha)
-            && entry.Blend == blend)
+            && entry.Blend == blend
+            && entry.Intent == intent)
         {
             return entry.Picture;
         }
@@ -344,14 +349,14 @@ internal partial class SkiaStreamProcessor
 
         SKPicture picture = recorder.EndRecording();
 
-        _meshPictureCache ??= new Dictionary<Shading, (SKMatrix, double, SKBlendMode, SKPicture)>();
+        _meshPictureCache ??= new Dictionary<Shading, (SKMatrix, double, SKBlendMode, RenderingIntent, SKPicture)>();
         if (_meshPictureCache.TryGetValue(shading, out var stale))
         {
-            // Same shading, different transform/alpha/blend: the old picture is now unreachable.
+            // Same shading, different transform/alpha/blend/intent: the old picture is now unreachable.
             stale.Picture.Dispose();
         }
 
-        _meshPictureCache[shading] = (transform, alpha, blend, picture);
+        _meshPictureCache[shading] = (transform, alpha, blend, intent, picture);
         return picture;
     }
 
@@ -799,7 +804,7 @@ internal partial class SkiaStreamProcessor
     /// </para>
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static SKColor EvaluatePatchColor(Shading shading, double alpha,
+    private static SKColor EvaluatePatchColor(Shading shading, double alpha, RenderingIntent intent,
         double[][] cornerColors, float u, float v, Span<double> interpBuffer, Span<double> evalBuffer)
     {
         // Cache the four corner arrays once per call so the inner k-loop walks four
@@ -823,7 +828,7 @@ internal partial class SkiaStreamProcessor
         }
 
         int written = shading.Eval(interpBuffer.Slice(0, components), evalBuffer);
-        return shading.ColorSpace.GetSKColor(evalBuffer.Slice(0, written), alpha);
+        return shading.ColorSpace.GetSKColor(evalBuffer.Slice(0, written), alpha, intent);
     }
 
     /// <summary>
@@ -837,6 +842,7 @@ internal partial class SkiaStreamProcessor
     {
         ColorSpaceDetails colorSpace = shading.ColorSpace;
         double alpha = currentState.AlphaConstantNonStroking;
+        RenderingIntent intent = currentState.RenderingIntent;
 
         // Heap scratch captured by the evaluator; only touched PatchTextureLutSize times total.
         double[] evalIn = new double[1];
@@ -846,7 +852,7 @@ internal partial class SkiaStreamProcessor
         {
             evalIn[0] = t;
             int written = shading.Eval(evalIn, evalOut);
-            return colorSpace.GetSKColor(new ReadOnlySpan<double>(evalOut, 0, written), alpha);
+            return colorSpace.GetSKColor(new ReadOnlySpan<double>(evalOut, 0, written), alpha, intent);
         }
 
         var lut = new uint[PatchTextureLutSize];
@@ -893,6 +899,7 @@ internal partial class SkiaStreamProcessor
         Span<double> interp = components <= 32 ? stackalloc double[components] : new double[components];
         float invDen = 1f / (texSize - 1);
         double alpha = currentState.AlphaConstantNonStroking;
+        RenderingIntent intent = currentState.RenderingIntent;
         ColorSpaceDetails colorSpace = shading.ColorSpace;
 
         // Hoist the 4 corner component arrays out of the inner loop — index per slot
@@ -929,7 +936,7 @@ internal partial class SkiaStreamProcessor
                 }
 
                 int written = shading.Eval(interp, patchEvalOut);
-                SKColor c = colorSpace.GetSKColor(patchEvalOut.Slice(0, written), alpha);
+                SKColor c = colorSpace.GetSKColor(patchEvalOut.Slice(0, written), alpha, intent);
 
                 int idx = rowOffset + i * 4;
                 pixelBytes[idx] = c.Red;
@@ -1064,7 +1071,9 @@ internal partial class SkiaStreamProcessor
         // - gs-bugzilla694385.pdf
 
         var operations = PageContentParser.Parse(PageNumber, new MemoryInputBytes(pattern.Data), ParsingOptions.Logger);
-        bool hasResources = pattern.PatternStream.StreamDictionary.TryGet(NameToken.Resources, PdfScanner, out DictionaryToken? resourcesDictionary);
+
+        var dictionary = pattern.PatternStream.StreamDictionary;
+        bool hasResources = dictionary.TryGet(NameToken.Resources, PdfScanner, out DictionaryToken? resourcesDictionary);
 
         if (hasResources)
         {
@@ -1075,9 +1084,17 @@ internal partial class SkiaStreamProcessor
         {
             TransformationMatrix initialMatrix = pattern.GetTilingPatterInitialMatrix();
 
+            // A tiling pattern's content belongs to the invoking page, so it is handed the output intent
+            // profile in effect at the point of use - the page-level override, and any soft-mask
+            // suppression - rather than resolving one of its own.
             var processor = new SkiaStreamProcessor(PageNumber, ResourceStore, PdfScanner, PageContentParser,
                 FilterProvider, new CropBox(pattern.BBox), UserSpaceUnit, default,
-                initialMatrix, ParsingOptions, null, _fontCache, _token);
+                initialMatrix, null, _fontCache, GetCurrentState().OutputIntentProfile, ParsingOptions, _token);
+
+            // Same reasoning for the rendering intent: the sub-processor starts from a default graphics
+            // state, so without this the pattern's content would convert its colours under
+            // RelativeColorimetric no matter what ri the page selected before painting with the pattern.
+            processor.GetCurrentState().RenderingIntent = GetCurrentState().RenderingIntent;
 
             if (pattern.PaintType == PatternPaintType.Uncoloured)
             {
@@ -1089,8 +1106,8 @@ internal partial class SkiaStreamProcessor
                 if (color is not null)
                 {
                     var subState = processor.GetCurrentState();
-                    subState.CurrentStrokingColor = color;
-                    subState.CurrentNonStrokingColor = color;
+                    subState.SetStrokingColor(color);
+                    subState.SetNonStrokingColor(color);
                 }
             }
 
@@ -1201,42 +1218,23 @@ internal partial class SkiaStreamProcessor
         return true;
     }
 
+    /// <summary>
+    /// The colour an uncoloured tiling pattern paints its content in, or <see langword="null"/> when the
+    /// current colour is not such a pattern (a coloured tiling pattern and a shading pattern supply their
+    /// own colours, so they have none) or the operands did not fit the underlying colour space.
+    /// <para>
+    /// The operands were selected by the <c>SCN</c>/<c>scn</c> that chose the pattern and the core keeps
+    /// them on the graphics state, so the colour is converted under the graphics state's rendering intent
+    /// exactly like every other colour - the renderer no longer has to track the operands or convert them.
+    /// </para>
+    /// </summary>
     private IColor? GetUncolouredPatternColor(bool isStroke)
     {
         var parentState = GetCurrentState();
 
-        if (parentState.ColorSpaceContext is not PatternAwareColorSpaceContext parentContext)
-        {
-            return null;
-        }
-
-        PatternColorSpaceDetails? patternCs;
-        IReadOnlyList<double>? operands;
-
-        if (isStroke)
-        {
-            patternCs = parentContext.CurrentStrokingColorSpace as PatternColorSpaceDetails;
-            operands = parentContext.LastStrokingPatternOperands;
-        }
-        else
-        {
-            patternCs = parentContext.CurrentNonStrokingColorSpace as PatternColorSpaceDetails;
-            operands = parentContext.LastNonStrokingPatternOperands;
-        }
-
-        ColorSpaceDetails? underlying = patternCs?.UnderlyingColourSpace;
-        if (underlying is null || underlying is UnsupportedColorSpaceDetails)
-        {
-            return null;
-        }
-
-        double[] components = operands?.ToArray() ?? Array.Empty<double>();
-        if (components.Length == 0)
-        {
-            return underlying.GetInitializeColor();
-        }
-
-        return underlying.GetColor(components);
+        return isStroke
+            ? parentState.CurrentStrokingUnderlyingColor
+            : parentState.CurrentNonStrokingUnderlyingColor;
     }
 
     private static SKShaderTileMode GetSKShaderTileMode(bool[] extend)

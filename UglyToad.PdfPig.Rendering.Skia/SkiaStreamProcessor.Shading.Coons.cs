@@ -43,7 +43,7 @@ internal partial class SkiaStreamProcessor
         double alpha = currentState.AlphaConstantNonStroking;
         SKBlendMode blend = currentState.BlendMode.ToSKBlendMode();
         SKMatrix transform = patternTransformMatrix;
-        SKPicture mesh = GetOrBuildMeshPicture(shading, in transform, alpha, blend,
+        SKPicture mesh = GetOrBuildMeshPicture(shading, in transform, alpha, blend, currentState.RenderingIntent,
             () => DrawCoonsMeshUnclipped(shading, transform));
         DrawCachedMesh(mesh, path);
     }
@@ -92,7 +92,8 @@ internal partial class SkiaStreamProcessor
             for (int i = 0; i < axisLen; i++)
             {
                 float u = i * invN;
-                gridCol[rowOffset + i] = EvaluatePatchColor(shading, alpha, cornerColors, u, v, interpBuffer, coonsEvalBuffer);
+                gridCol[rowOffset + i] = EvaluatePatchColor(shading, alpha, currentState.RenderingIntent, cornerColors, u, v, interpBuffer,
+                        coonsEvalBuffer);
             }
         }
 
