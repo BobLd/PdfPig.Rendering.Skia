@@ -16,6 +16,8 @@ using System;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Graphics;
+using UglyToad.PdfPig.Graphics.Colors;
+using UglyToad.PdfPig.Graphics.Colors.Icc;
 using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 using UglyToad.PdfPig.XObjects;
@@ -24,9 +26,20 @@ namespace UglyToad.PdfPig.Rendering.Skia
 {
     internal partial class SkiaStreamProcessor
     {
+        /// <summary>
+        /// The output-intent transform for this image's samples, if any. Which images are eligible is
+        /// decided in the core, alongside the vector path, so the two cannot drift apart; applying the
+        /// transform to the pixels is this renderer's job, in <c>SkiaImageExtensions.GetSKBitmap</c>.
+        /// </summary>
+        private IIccTransform? GetOutputIntentImageTransform(IPdfImage pdfImage)
+            => OutputIntentColorManagement.GetDeviceImageTransform(
+                pdfImage.ColorSpaceDetails,
+                pdfImage.RenderingIntent,
+                GetCurrentState().OutputIntentProfile);
+
         protected override void RenderXObjectImage(XObjectContentRecord xObjectContentRecord)
         {
-            RenderImage(XObjectFactory.ReadImage(xObjectContentRecord, PdfScanner, FilterProvider, ResourceStore));
+            RenderImage(XObjectFactory.ReadImage(xObjectContentRecord, PdfScanner, FilterProvider, ResourceStore, ParsingOptions));
         }
 
         protected override void RenderInlineImage(InlineImage inlineImage)
@@ -49,7 +62,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             try
             {
                 using SKAutoCanvasRestore skAutoCanvasRestore = new SKAutoCanvasRestore(_canvas, true);
-                using var bitmap = pdfImage.GetSKBitmap(ParsingOptions.Logger);
+                using var bitmap = pdfImage.GetSKBitmap(ParsingOptions.Logger, GetOutputIntentImageTransform(pdfImage));
 
                 if (bitmap is null)
                 {
