@@ -193,7 +193,8 @@ internal partial class SkiaStreamProcessor
                 if (!hasFunction)
                 {
                     int vertexWritten = shading.Eval(colorComponents, vertexEvalOut);
-                    skColor = freeFormColorSpace.GetSKColor(vertexEvalOut.Slice(0, vertexWritten), vertexAlpha);
+                    skColor = freeFormColorSpace.GetSKColor(vertexEvalOut.Slice(0, vertexWritten), vertexAlpha,
+                        currentState.RenderingIntent);
                 }
 
                 // Transform the vertex from shading/pattern space to canvas space.
@@ -346,7 +347,8 @@ internal partial class SkiaStreamProcessor
                 }
 
                 int subWritten = shading.Eval(interpBuffer.Slice(0, components), subEvalOut);
-                SKColor col = subColorSpace.GetSKColor(subEvalOut.Slice(0, subWritten), alpha);
+                SKColor col = subColorSpace.GetSKColor(subEvalOut.Slice(0, subWritten), alpha,
+                    currentState.RenderingIntent);
 
                 int idx = rowOffset + j;
                 subPts![idx] = pt;

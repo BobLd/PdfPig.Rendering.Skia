@@ -15,6 +15,7 @@
 using System;
 using SkiaSharp;
 using UglyToad.PdfPig.Graphics.Colors;
+using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
 
 namespace UglyToad.PdfPig.Rendering.Skia;
@@ -67,6 +68,10 @@ internal partial class SkiaStreamProcessor
         var raster = shaderBitmap.GetPixelSpan();
 
         ColorSpaceDetails? shadingColorSpace = shading.ColorSpace;
+
+        // The rendering intent is a graphics state parameter (ri / ExtGState /RI); a shading has no
+        // /Intent of its own, unlike an image XObject. Read once here rather than per pixel.
+        RenderingIntent intent = GetCurrentState().RenderingIntent;
         // Per-pixel scratch: input is (x, y), output is the remapped function result.
         // Both live on the stack so the up-to-2048² inner loop never touches the heap
         // for Eval; GetRgb's span overload also avoids the per-pixel IColor allocation.
@@ -110,7 +115,7 @@ internal partial class SkiaStreamProcessor
                 {
                     try
                     {
-                        shadingColorSpace.GetRgb(components, out rOut, out gOut, out bOut);
+                        shadingColorSpace.GetRgb(components, intent, out rOut, out gOut, out bOut);
                     }
                     catch (Exception e)
                     {
