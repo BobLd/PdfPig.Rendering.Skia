@@ -116,7 +116,7 @@ Rendering is **cancellable** via the `GetPageAsSKPicture(document, pageNumber, c
 
 - **`PageSizeFactory`** — Lightweight `IPageFactory<PdfPageSize>` that extracts page dimensions without full rendering (handles MediaBox, CropBox, rotation, UserUnit).
 
-- **`PatternAwareColorSpaceContext`** — Decorator over PdfPig's `IColorSpaceContext` that captures the colour operands supplied alongside a pattern name in `SCN`/`scn`. PdfPig's default context drops them; **uncoloured tiling patterns need them** to compute the underlying-space colour to paint with.
+- **Uncoloured tiling pattern colour** — the operands an uncoloured tiling pattern is selected with (`SCN`/`scn`) are kept by PdfPig on the graphics state and read back through `CurrentGraphicsState.Current{Stroking,NonStroking}UnderlyingColor` in `GetUncolouredPatternColor` (`SkiaStreamProcessor.Shading.cs`). The renderer used to wrap `IColorSpaceContext` in a `PatternAwareColorSpaceContext` decorator to capture them itself; that class is gone, and the colour is now converted under the graphics state's rendering intent like every other colour.
 
 - **`SkiaRenderingFilterProvider`** — Filter provider wired up by `SkiaRenderingParsingOptions`, adding the DCT / JBIG2 / JPX decoders that ship as separate `PdfPig.Filters.*` packages.
 
@@ -171,3 +171,4 @@ Font *fallback resolution* is serialised process-wide behind the static `FontMan
 - **Text clip modes** (`FillClip`, `StrokeClip`, etc.): operator is recognised but clipping is not applied.
 - **Image mask alpha**: ignores `colour.Alpha` (hardcoded to 255) in `SkiaStreamProcessor.Image.cs`.
 - **Mesh shadings (Types 4–7) as stroke patterns**: clipped to the path's fill interior, not the stroke outline (`isStroke` is not plumbed into the mesh renderers). See `docs/SHADING-CODE-REVIEW.md` #4.
+- **Blend modes composite in sRGB, not the group's device blending colour space.** Skia composites in RGB (`ToSKBlendMode` in `Helpers/SkiaExtensions.cs` maps `/Multiply`, `/ColorBurn`, … straight to `SKBlendMode.*`), and the renderer's output is a resolution-independent vector `SKPicture` whose blends are resolved by Skia at rasterisation time. The PDF transparency model requires blending in the transparency group's blending colour space (e.g. DeviceCMYK) *before* the output-intent conversion.

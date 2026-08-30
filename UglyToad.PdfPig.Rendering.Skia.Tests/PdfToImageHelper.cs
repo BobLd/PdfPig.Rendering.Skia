@@ -15,6 +15,7 @@
 using System;
 using System.IO;
 using SkiaSharp;
+using UglyToad.PdfPig.Rendering.Skia.Icc.Unicolour;
 using Xunit;
 
 #if NET
@@ -323,10 +324,43 @@ public static class PdfToImageHelper
     }
 
     public static bool TestSinglePage(string pdfFile, int pageNumber, string expectedFile, int scale = 1,
-        double maxDifferingPixelRatio = MaxDifferingPixelRatio)
+        double maxDifferingPixelRatio = MaxDifferingPixelRatio, bool useIccProfile = false, bool useOutputIntent = false)
     {
+        if (useOutputIntent && !useIccProfile)
+        {
+            throw new ArgumentException("'useIccProfile' needs to be true when 'useOutputIntent' is true. ", nameof(useOutputIntent));
+        }
+        
         string docPath = Path.Combine(Helper.DocumentsFolder, pdfFile);
         string expectedImage = ResolveExpectedImagePath(expectedFile);
+
+        string rootName = expectedFile.Substring(0, expectedFile.Length - 4);
+        string? errorFolder = Path.GetDirectoryName(Path.Combine(ErrorFolder, rootName));
+        if (!string.IsNullOrEmpty(errorFolder))
+        {
+            Directory.CreateDirectory(errorFolder);
+        }
+
+        // Several goldens are shared between the plain-ICC and output-intent theories (a page the output
+        // intent does not move renders the same either way), so the error images have to say which run
+        // wrote them or the second run silently overwrites the first one's evidence. A golden whose name
+        // already carries the suffix needs nothing added.
+        string suffix = string.Empty;
+        if (useIccProfile)
+        {
+            suffix = "_icc";
+            if (useOutputIntent)
+            {
+                suffix += "_intent";
+            }
+
+            if (rootName.EndsWith(suffix))
+            {
+                suffix = string.Empty;
+            }
+        }
+
+        rootName += suffix;
 
         using (SKBitmap expected = SKBitmap.Decode(expectedImage))
         {
@@ -335,7 +369,19 @@ public static class PdfToImageHelper
                 throw new NullReferenceException("Could not load expected image.");
             }
 
-            using (var document = PdfDocument.Open(docPath, SkiaRenderingParsingOptions.Instance))
+            var options = new ParsingOptions
+            {
+                UseLenientParsing = true,
+                SkipMissingFonts = true,
+                FilterProvider = SkiaRenderingFilterProvider.Instance,
+                IccProfileService = useIccProfile
+                    ? useOutputIntent
+                        ? UnicolourIccProfileService.InstanceWithIntent
+                        : UnicolourIccProfileService.Instance
+                    : null
+            };
+
+            using (var document = PdfDocument.Open(docPath, options))
             {
                 document.AddSkiaPageFactory();
                 using (var actual = document.GetPageAsSKBitmap(pageNumber, scale, SKColors.White))
@@ -357,9 +403,6 @@ public static class PdfToImageHelper
                     ReportDifference(expectedFile, pageNumber, diff, maxDifferingPixelRatio);
 
                     // Save error
-                    string rootName = expectedFile.Substring(0, expectedFile.Length - 4);
-
-                    Directory.CreateDirectory(ErrorFolder);
 
                     using (var fs = new FileStream(Path.Combine(ErrorFolder, $"{rootName}_diff.png"), FileMode.Create))
                     {
