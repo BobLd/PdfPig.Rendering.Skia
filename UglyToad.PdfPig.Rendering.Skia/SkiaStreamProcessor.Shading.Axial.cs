@@ -67,7 +67,7 @@ internal partial class SkiaStreamProcessor
 
             FixIncorrectValues(v, domain); // This is a hack, this should never happen, see GHOSTSCRIPT-693154-0
 
-            colors[t] = axialColorSpace.GetSKColor(v, alpha);
+            colors[t] = axialColorSpace.GetSKColor(v, alpha, currentState.RenderingIntent);
             // Skia expects colorPos in [0,1] along the gradient line. The previous form
             // passed raw domain values (e.g. 0..161) which Skia then clamped to [0,1],
             // collapsing every intermediate stop onto position 1 and rendering the gradient

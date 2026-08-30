@@ -13,11 +13,13 @@
 // limitations under the License.
 
 using System;
+using System.Buffers;
 using System.Linq;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Graphics.Colors;
+using UglyToad.PdfPig.Graphics.Colors.Icc;
 using UglyToad.PdfPig.Images;
 using UglyToad.PdfPig.Logging;
 using UglyToad.PdfPig.Tokens;
@@ -29,6 +31,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
     /// </summary>
     public static class SkiaImageExtensions
     {
+        /// <summary>
+        /// How many pixels the output-intent path colour-manages per block. Large enough that the
+        /// per-call overhead of <see cref="IIccTransform.Transform"/> is irrelevant, small enough that the
+        /// scratch buffer stays a fixed cost rather than one that scales with the image.
+        /// </summary>
+        private const int ManagedImageBlockPixels = 8192;
+
         private enum ImageAlphaType : byte
         {
             /// <summary>
@@ -113,7 +122,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return pdfImage.MaskImage is not null || pdfImage.ImageDictionary.ContainsKey(NameToken.Mask);
         }
 
-        private static bool TryGenerate(this IPdfImage pdfImage, out SKBitmap? skBitmap, ILog? log)
+        private static bool TryGenerate(this IPdfImage pdfImage, out SKBitmap? skBitmap, ILog? log, IIccTransform? outputIntentTransform)
         {
             skBitmap = null;
 
@@ -136,7 +145,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 int height = pdfImage.HeightInSamples;
 
                 imageSpan = ColorSpaceDetailsByteConverter.Convert(pdfImage.ColorSpaceDetails!, imageSpan,
-                    pdfImage.BitsPerComponent, width, height, pdfImage.Decode);
+                    pdfImage.BitsPerComponent, width, height, pdfImage.Decode, pdfImage.RenderingIntent);
 
                 var numberOfComponents = pdfImage.ColorSpaceDetails!.BaseNumberOfColorComponents;
 
@@ -151,7 +160,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                     imageSpan = imageSpan.Slice(0, requiredSize);
                 }
 
-                bool isRgba = numberOfComponents > 1 || pdfImage.HasAlphaChannel();
+                // Output-intent managed device images become interleaved sRGB (3 components), so they always
+                // need the RGBA raster even when the source was single-component DeviceGray.
+                bool isRgba = numberOfComponents > 1 || pdfImage.HasAlphaChannel() || outputIntentTransform is not null;
                 var colorSpace = isRgba ? SKColorType.Rgba8888 : SKColorType.Gray8;
 
                 // We apparently need SKAlphaType.Unpremul to avoid artifacts with transparency.
@@ -179,7 +190,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 bool compositeMaskImage = false;
                 if (pdfImage.MaskImage is not null)
                 {
-                    if (pdfImage.MaskImage.TryGenerate(out mask!, log) && !mask.IsEmpty)
+                    // A separate /SMask or stencil /Mask image is a greyscale alpha source, not a
+                    // colour to manage, so it is never routed through the output intent.
+                    if (pdfImage.MaskImage.TryGenerate(out mask!, log, null) && !mask.IsEmpty)
                     {
                         alphaMode = pdfImage.MaskImage.IsImageMask ? ImageAlphaType.MaskInv : ImageAlphaType.Mask;
                         compositeMaskImage = true;
@@ -240,7 +253,49 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 Span<byte> rasterSpan = skBitmap.GetPixelSpan();
                 int pixelCount = width * height;
 
-                if (numberOfComponents == 4)
+                if (outputIntentTransform is not null && alphaMode != ImageAlphaType.ColourKey)
+                {
+                    // Colour-manage the device samples through the output intent profile (PDF/X 14.11.5),
+                    // mirroring how device vector colours are managed. The colour-key path is left to the
+                    // built-in conversion below because its thresholds are computed unmanaged.
+                    //
+                    // The transform emits 3 bytes per pixel and the raster wants 4, so unlike the branches
+                    // below this one cannot convert in place and needs somewhere to put the managed samples.
+                    // A whole second image's worth of that is a lot to ask for on a large scan, so the work
+                    // is done a block at a time through one pooled buffer instead.
+                    byte[] managed = ArrayPool<byte>.Shared.Rent(Math.Min(pixelCount, ManagedImageBlockPixels) * 3);
+
+                    try
+                    {
+                        int dstIdx = 0;
+                        for (int start = 0; start < pixelCount; start += ManagedImageBlockPixels)
+                        {
+                            int blockPixels = Math.Min(ManagedImageBlockPixels, pixelCount - start);
+
+                            outputIntentTransform.Transform(
+                                imageSpan.Slice(start * numberOfComponents, blockPixels * numberOfComponents),
+                                managed.AsSpan(0, blockPixels * 3));
+
+                            for (int i = 0; i < blockPixels; i++)
+                            {
+                                byte r = managed[i * 3];
+                                byte g = managed[i * 3 + 1];
+                                byte b = managed[i * 3 + 2];
+
+                                rasterSpan[dstIdx] = r;
+                                rasterSpan[dstIdx + 1] = g;
+                                rasterSpan[dstIdx + 2] = b;
+                                rasterSpan[dstIdx + 3] = getImageAlphaChannel(start + i, maskSpan, r, g, b);
+                                dstIdx += 4;
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(managed);
+                    }
+                }
+                else if (numberOfComponents == 4)
                 {
                     int srcIdx = 0;
                     int dstIdx = 0;
@@ -440,6 +495,13 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         /// </summary>
         /// <param name="pdfImage">The PDF image to convert.</param>
         /// <param name="log"></param>
+        /// <param name="outputIntentTransform">
+        /// Colour-manages the image's device samples through the document's output intent, or
+        /// <see langword="null"/> to keep the built-in conversion (the default, and what 14.11.5 expects of
+        /// a consumer that is not previewing or proofing). Which images are eligible is decided by
+        /// <see cref="OutputIntentColorManagement.GetDeviceImageTransform"/>, alongside the vector colour
+        /// path, so pass what that returns rather than a transform chosen here.
+        /// </param>
         /// <returns>
         /// An <see cref="SKBitmap"/> representation of the provided <paramref name="pdfImage"/>.
         /// If the conversion fails, a fallback mechanism is used to create the image from raw bytes.
@@ -449,9 +511,9 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         /// This method attempts to generate an <see cref="SKBitmap"/> using the image's data and color space.
         /// If the generation fails, it falls back to creating the image using encoded or raw byte data.
         /// </remarks>
-        public static SKBitmap? GetSKBitmap(this IPdfImage pdfImage, ILog? log = null)
+        public static SKBitmap? GetSKBitmap(this IPdfImage pdfImage, ILog? log = null, IIccTransform? outputIntentTransform = null)
         {
-            if (pdfImage.TryGenerate(out var bitmap, log))
+            if (pdfImage.TryGenerate(out var bitmap, log, outputIntentTransform))
             {
                 return bitmap!;
             }

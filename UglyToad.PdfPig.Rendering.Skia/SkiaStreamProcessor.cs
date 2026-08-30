@@ -23,6 +23,7 @@ using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Filters;
 using UglyToad.PdfPig.Geometry;
 using UglyToad.PdfPig.Graphics;
+using UglyToad.PdfPig.Graphics.Colors.Icc;
 using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.Graphics.Operations;
 using UglyToad.PdfPig.Parser;
@@ -100,9 +101,10 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
         UserSpaceUnit userSpaceUnit,
         PageRotationDegrees rotation,
         TransformationMatrix initialMatrix,
-        ParsingOptions parsingOptions,
         AnnotationProvider? annotationProvider,
         SkiaFontCache fontCache,
+        IIccProfile? outputIntentProfile,
+        ParsingOptions parsingOptions,
         CancellationToken token)
         : base(pageNumber,
             resourceStore,
@@ -113,6 +115,7 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
             userSpaceUnit,
             rotation,
             initialMatrix,
+            outputIntentProfile,
             parsingOptions)
     {
         _renderAnnotations = annotationProvider is not null;
@@ -127,12 +130,6 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
         _yAxisInvertMatrix = SKMatrix.CreateScale(1, -1, 0, _height / 2f);
 
         _currentStreamOriginalTransforms.Push(initialMatrix.ToSkMatrix());
-
-        // Wrap the default IColorSpaceContext so we can capture operand colour components
-        // supplied alongside pattern names (PdfPig drops them otherwise). Required to render
-        // uncoloured tiling patterns.
-        var initialState = GetCurrentState();
-        initialState.ColorSpaceContext = new PatternAwareColorSpaceContext(initialState.ColorSpaceContext);
     }
 
     public override SKPicture Process(int pageNumberCurrent, IReadOnlyList<IGraphicsStateOperation> operations)

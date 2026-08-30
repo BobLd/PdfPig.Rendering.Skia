@@ -279,8 +279,19 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         /// path so colour spaces whose <c>GetColor</c> returns a <see cref="CMYKColor"/> still hit
         /// the same RGB approximation.
         /// </summary>
+        /// <param name="colorSpace">The colour space the components are in.</param>
+        /// <param name="components">The component values, in <paramref name="colorSpace"/>.</param>
+        /// <param name="alpha">The constant alpha to apply, in [0, 1].</param>
+        /// <param name="intent">
+        /// The graphics state's rendering intent (<c>ri</c> / <c>/RI</c>). Required rather than defaulted:
+        /// this is the shading path's only colour conversion, and a default here would silently pin every
+        /// shading to <see cref="RenderingIntent.RelativeColorimetric"/> no matter what the page asked for.
+        /// Only colour spaces reporting <see cref="ColorSpaceDetails.RenderingIntentAffectsOutput"/> can act
+        /// on it - for the device fast paths above it makes no difference.
+        /// </param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static SKColor GetSKColor(this ColorSpaceDetails colorSpace, ReadOnlySpan<double> components, double alpha)
+        public static SKColor GetSKColor(this ColorSpaceDetails colorSpace, ReadOnlySpan<double> components,
+            double alpha, RenderingIntent intent)
         {
             byte a = (alpha * 255.0).ToByte();
             if (colorSpace is DeviceCmykColorSpaceDetails && components.Length >= 4)
@@ -296,7 +307,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             if (colorSpace is DeviceRgbColorSpaceDetails || colorSpace is DeviceGrayColorSpaceDetails)
             {
-                colorSpace.GetRgb(components, out double rd, out double gd, out double bd);
+                colorSpace.GetRgb(components, intent, out double rd, out double gd, out double bd);
                 return new SKColor(
                     (rd * 255.0).ToByte(),
                     (gd * 255.0).ToByte(),
@@ -306,7 +317,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
             // Complex / wrapped colour spaces — defer to IColor so the renderer keeps its
             // CMYK approximation when the underlying space resolves to CMYKColor.
-            return colorSpace.GetColor(components).ToSKColor(alpha);
+            return colorSpace.GetColor(components, intent).ToSKColor(alpha);
         }
 
         public static SKColor ToSKColor(this IColor? pdfColor, double alpha = 1)
@@ -419,8 +430,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
         public static SKBlendMode ToSKBlendMode(this BlendMode blendMode)
         {
+            // Known limitation: Skia composites in sRGB, so these blends run in RGB, not the
+            // transparency group's declared *device* blending colour space (e.g. DeviceCMYK), which the
+            // PDF model requires *before* the output-intent conversion. For non-Normal modes over device
+            // colours the two diverge (see GWG221_OutputIntentChangeIndicator_x4). A correct fix needs
+            // per-pixel device-space compositing, incompatible with the vector SKPicture output model.
 
-            // https://pdfium.googlesource.com/pdfium/+/refs/heads/main/core/fxge/skia/fx_skia_device.cpp
             switch (blendMode)
             {
                 // 11.3.5.2 Separable blend modes
