@@ -1,0 +1,210 @@
+%PDF-1.7	
+
+1 0 obj		
+<<
+	/Type /Pages
+	/Kids [2 0 R]		
+	/Count 1
+>>
+endobj
+
+2 0 obj		
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 612 792]		
+	/Contents [4 0 R]	
+	/Resources <<
+		/Font <</F1 5 0 R /F2 10 0 R>>
+		/ColorSpace<</CS1 6 0 R /CS2 7 0 R /CS3 8 0 R>>
+		/ExtGState<</GS1 9 0 R>>
+	>>			
+	
+>>
+endobj
+
+3 0 obj		
+<<
+	/Type /Catalog
+	/Pages 1 0 R	
+>>
+endobj
+
+4 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+% Title
+q
+/CS2 cs 0.4 0.3 0.2 sc
+BT
+/F1 50 Tf
+180 700 TD 
+(CalRGB)Tj
+/F1 20 Tf
+-90 -60 TD
+(Gamma   Matrix   Device)Tj
+ET
+Q
+
+% calRGB .4 .3 .2
+q
+1 0 0 1 30 570 cm
+/CS1 cs 0.4 0.3 0.2 sc 0 0 50 50 re f
+/CS2 cs 0.4 0.3 0.2 sc 75 0 50 50 re f
+0.4 0.3 0.2 rg 225 0 50 50 re f
+/CS3 cs 0.4 0.3 0.2 sc 150 0 50 50 re f
+BT
+/F1 35 Tf 300 0 TD (.4 .3 .2)Tj
+ET
+Q
+
+% calRGB .5 .5 .5
+q
+1 0 0 1 30 500 cm
+/CS1 cs 0.5 0.5 0.5 sc 0 0 50 50 re f
+/CS2 cs 0.5 0.5 0.5 sc 75 0 50 50 re f
+0.5 0.5 0.5 rg 225 0 50 50 re f
+/CS3 cs 0.5 0.5 0.5 sc 150 0 50 50 re f
+BT
+/F1 35 Tf 300 0 TD (.5 .5 .5)Tj
+ET
+Q
+
+% calRGB .8 .3 .5
+q
+1 0 0 1 30 430 cm
+/CS1 cs .8 .3 .5 sc 0 0 50 50 re f
+/CS2 cs .8 .3 .5 sc 75 0 50 50 re f
+.8 .3 .5 rg 225 0 50 50 re f
+/CS3 cs .8 .3 .5 sc 150 0 50 50 re f
+BT
+/F1 35 Tf 300 0 TD (.8 .3 .5)Tj
+ET
+Q
+
+% calRGB .6 .5 .7
+q
+1 0 0 1 30 360 cm
+/CS1 cs .6 .5 .7 sc 0 0 50 50 re f
+/CS2 cs .6 .5 .7 sc 75 0 50 50 re f
+.6 .5 .7 rg 225 0 50 50 re f
+/CS3 cs .6 .5 .7 sc 150 0 50 50 re f
+BT
+/F1 35 Tf 300 0 TD (.6 .5 .7)Tj
+ET
+Q
+% calRGB R
+q
+1 0 0 1 30 220 cm
+/CS1 cs 1 0 0 sc 0 0 50 50 re f
+/CS2 cs 1 0 0 sc 50 0 50 50 re f
+1 0 0 rg 150 0 50 50 re f
+/CS3 cs 1 0 0 sc 100 0 50 50 re f
+BT 
+/F1 35 Tf 50 55 TD (Red)Tj
+ET
+Q
+
+% calRGB G
+q
+1 0 0 1 270 220 cm
+/CS1 cs 0 1 0 sc 0 0 50 50 re f
+/CS2 cs 0 1 0 sc 50 0 50 50 re f
+0 1 0 rg 150 0 50 50 re f
+/CS3 cs 0 1 0 sc 100 0 50 50 re f
+
+BT
+/F2 30 Tf 50 55 TD (Green)Tj
+ET
+Q
+
+% calRGB B
+q
+1 0 0 1 30 120 cm
+/CS3 CS 0 0 1 SC
+/CS1 cs 0 0 1 sc 0 0 50 50 re f
+/CS2 cs 0 0 1 sc 50 0 50 50 re f
+0 0 1 rg 150 0 50 50 re f
+/CS3 cs 0 0 1 sc 100 0 50 50 re f
+BT
+/F2 35 Tf 50 55 TD (Blue)Tj
+ET
+Q
+
+% calRGB B
+q
+1 0 0 1 270 120 cm
+/CS1 cs 0 0 0 sc 0 0 50 50 re b
+/CS2 cs 0 0 0 sc 50 0 50 50 re b
+0 0 0 rg 150 0 50 50 re b
+/CS3 cs 0 0 0 sc 100 0 50 50 re b
+BT
+/F1 35 Tf 50 55 TD (Black)Tj
+ET
+Q
+
+endstream
+endobj
+
+5 0 obj
+<<
+	/Type /Font
+	/Subtype /Type1
+	/BaseFont /Helvetica
+>>
+endobj
+
+10 0 obj
+<<
+	/Type /Font
+	/Subtype /Type1
+	/BaseFont /Courier
+>>
+endobj
+
+6 0 obj
+[/CalRGB <<%/WhitePoint [1.0 1.0 0.5 ]
+/WhitePoint [0.905 1.0 1.0890 ]
+>>
+]
+endobj
+
+7 0 obj
+[/CalRGB <<%/WhitePoint [1.0 1.0 0.5 ]
+/WhitePoint [0.905 1.0 1.0890 ]
+/Gamma [1.800000 1.800000 1.800000 ]
+>>
+]
+endobj
+
+8 0 obj
+[/CalRGB <<%/WhitePoint [1.0 1.0 0.5 ]
+/WhitePoint [0.905 1.0 1.0890 ]
+/Gamma [1.800000 1.800000 1.800000 ]
+/Matrix  [0.4497 0.2446 0.0252  0.3163 0.6720 0.1412 0.1845 0.0833 0.9227]
+>>
+]
+endobj
+
+9 0 obj
+<<
+/ca 0.5
+>>
+endobj
+
+xref	
+		
+
+trailer	
+<<
+	/Size 0		
+	/Root 3 0 R	
+>>
+
+startxref
+0		
+
+%%EOF	
+ 

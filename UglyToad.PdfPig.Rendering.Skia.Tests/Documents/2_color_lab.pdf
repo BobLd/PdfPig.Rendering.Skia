@@ -1,0 +1,150 @@
+%PDF-1.4	
+
+1 0 obj		
+<<
+	/Type /Pages
+	/Kids [2 0 R]		
+	/Count 1
+>>
+endobj
+
+2 0 obj		
+<<
+	/Type /Page 
+	/Parent 1 0 R				
+	/MediaBox [0 0 612 792]		
+	/Contents [4 0 R]	
+	/Resources <<
+		/Font <</F1 5 0 R>>
+		/ColorSpace<</CS1 6 0 R /CS2 7 0 R>>
+	>>			
+	
+>>
+endobj
+
+3 0 obj		
+<<
+	/Type /Catalog
+	/Pages 1 0 R	
+>>
+endobj
+
+4 0 obj		
+<<
+	/Length 0		 
+					
+>> stream
+
+% lab blue
+q
+1 0 0 1 10 650 cm
+/CS2 cs 0 0 -128 sc
+0 0 50 50 re f
+
+BT /F1 50 Tf 2 Tr 70 0 TD (lab blue)Tj
+ET
+Q
+
+% lab white
+q
+1 0 0 1 10 550 cm
+/CS2 cs 100 0 0 sc 
+0 0 50 50 re b
+BT
+/F1 50 Tf
+2 Tr
+70 0 TD 
+(lab white)Tj %; Yellow? No)Tj
+ET
+Q
+
+% lab green
+q
+1 0 0 1 10 450 cm
+/CS2 cs 100 -128 127 sc 
+0 0 50 50 re f
+BT
+/F1 50 Tf
+2 Tr
+70 0 TD 
+(lab green)Tj
+ET
+Q
+
+% lab red
+q
+1 0 0 1 10 350 cm
+/CS2 cs 100 127 127 sc 
+0 0 50 50 re f
+BT
+/F1 50 Tf
+2 Tr
+70 0 TD 
+(lab red)Tj
+ET
+Q
+
+% lab yellow
+q
+1 0 0 1 10 250 cm
+/CS2 cs 100 0 127 sc 
+0 0 50 50 re f
+BT
+/F1 50 Tf
+2 Tr
+70 0 TD 
+(lab yellow)Tj
+ET
+Q
+
+% lab black
+q
+1 0 0 1 10 150 cm
+/CS2 cs 0 0 0 sc 
+0 0 50 50 re f
+BT
+/F1 50 Tf
+2 Tr
+70 0 TD 
+(lab black)Tj
+ET
+Q
+
+endstream
+endobj
+
+5 0 obj
+<<
+	/Type /Font
+	/Subtype /Type1
+	/BaseFont /Helvetica
+>>
+endobj
+
+6 0 obj
+[/Lab <</WhitePoint [0.9505 1.000 1.0890 ]
+/Range [-128 127 -128 127 ]
+>>
+]
+endobj
+
+7 0 obj
+[ 
+/Lab << /WhitePoint [ 0.9642 1 0.82491 ] /Range [ -128 127 -128 127 ] >> 
+]
+endobj
+
+xref	
+		
+
+trailer	
+<<
+	/Size 0		
+	/Root 3 0 R	
+>>
+
+startxref
+0		
+
+%%EOF	
+ 
