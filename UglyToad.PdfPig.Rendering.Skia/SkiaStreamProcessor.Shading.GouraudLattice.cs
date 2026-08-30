@@ -173,7 +173,7 @@ internal partial class SkiaStreamProcessor
             double y = yMin + (rawY / maxCoordRaw) * (yMax - yMin);
 
             int written = shading.Eval(colorBuffer.Slice(0, numStreamColorComponents), evalOut);
-            SKColor skColor = colorSpace.GetSKColor(evalOut.Slice(0, written), alpha);
+            SKColor skColor = colorSpace.GetSKColor(evalOut.Slice(0, written), alpha, currentState.RenderingIntent);
             SKPoint pt = MapPointAffine(in patternTransformMatrix, (float)x, (float)y);
             row[c] = (pt, skColor);
         }

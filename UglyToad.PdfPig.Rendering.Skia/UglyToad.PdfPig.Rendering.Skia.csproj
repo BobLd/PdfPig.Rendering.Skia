@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.0;netstandard2.1;net462;net471;net6.0;net8.0;net9.0</TargetFrameworks>
-		<LangVersion>12</LangVersion>
+		<LangVersion>13</LangVersion>
 		<Version>0.1.16.2</Version>
 		<Nullable>enable</Nullable>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -44,6 +44,7 @@
 	<ItemGroup>
 		<PackageReference Include="SkiaSharp" Version="3.119.4" />
 		<PackageReference Include="SkiaSharp.HarfBuzz" Version="3.119.4" />
+		<PackageReference Include="Wacton.Unicolour" Version="8.0.0" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(TargetFramework)'=='net462'">
