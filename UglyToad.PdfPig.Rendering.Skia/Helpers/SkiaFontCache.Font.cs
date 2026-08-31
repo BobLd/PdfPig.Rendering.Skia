@@ -40,11 +40,21 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         /// </summary>
         private const string NotoFont = "Noto";
 
-        private readonly Lazy<SkiaFontCacheItem> DefaultSkiaFontCacheItem = new(() => new SkiaFontCacheItem(SKTypeface.Default)); // Do not make static
+        private readonly Lazy<SkiaFontCacheItem> DefaultSkiaFontCacheItem; // Do not make static
 
         private readonly ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath?>>> _cache = new();
 
         private readonly ConcurrentDictionary<string, List<SkiaFontCacheItem>> _typefaces = new();
+
+        internal SkiaFontCache()
+        {
+            DefaultSkiaFontCacheItem = new(() => new SkiaFontCacheItem(SKTypeface.Default));
+        }
+
+        internal SkiaFontCache(SKTypeface defaultSKTypeface)
+        {
+            DefaultSkiaFontCacheItem = new(() => new SkiaFontCacheItem(defaultSKTypeface));
+        }
 
         public SkiaFontCacheItem GetTypefaceOrFallback(IFont font, string unicode)
         {
