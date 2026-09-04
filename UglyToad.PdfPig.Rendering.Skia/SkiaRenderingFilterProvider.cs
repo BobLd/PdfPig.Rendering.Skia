@@ -50,6 +50,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var flate = new FlateFilter();
             var runLength = new RunLengthFilter();
             var lzw = new LzwFilter();
+            var brotli = new BrotliFilter();
 
             return new Dictionary<string, IFilter>
             {
@@ -68,7 +69,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 { NameToken.RunLengthDecode.Data, runLength },
                 { NameToken.RunLengthDecodeAbbreviation.Data, runLength },
                 { NameToken.LzwDecode.Data, lzw },
-                { NameToken.LzwDecodeAbbreviation.Data, lzw }
+                { NameToken.LzwDecodeAbbreviation.Data, lzw },
+                { NameToken.BrotliDecode.Data, brotli },
             };
         }
     }
