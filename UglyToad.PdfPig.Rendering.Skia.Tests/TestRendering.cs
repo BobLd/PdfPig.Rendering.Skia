@@ -593,6 +593,10 @@ public class TestRendering
             "0966203.pdf", 1, 2
         },
         {
+            "0966320_2.png",
+            "0966320.pdf", 2, 2
+        },
+        {
             "Rotation 45_1.png",
             "Rotation 45.pdf", 1, 2
         },
