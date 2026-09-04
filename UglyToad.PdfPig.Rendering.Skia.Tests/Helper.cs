@@ -28,13 +28,30 @@ internal static class Helper
 
     public static string SpecificTestDocumentsFolder => Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "SpecificTestDocuments"));
 
+    /// <summary>
+    /// Whether the document can be opened by the current target framework.
+    /// <para>
+    /// PdfPig only implements the <c>BrotliDecode</c> filter on .NET Standard 2.1, .NET Core and
+    /// .NET 5.0 or greater targets - opening a document that uses it on .NET Framework throws
+    /// <see cref="NotSupportedException"/>.
+    /// </para>
+    /// </summary>
+    public static bool IsSupportedOnCurrentFramework(string name)
+    {
+#if NET
+        return true;
+#else
+        return !name.StartsWith("Brotli-", StringComparison.Ordinal);
+#endif
+    }
+
     public static TheoryData<string> EnumerateDocuments(ICollection<string> exclude)
     {
         var data = new TheoryData<string>();
 
         foreach (string name in Directory.EnumerateFiles(DocumentsFolder, "*.pdf")
                      .Select(Path.GetFileName)
-                     .Where(name => name is not null && !exclude.Contains(name))
+                     .Where(name => name is not null && !exclude.Contains(name) && IsSupportedOnCurrentFramework(name))
                      .OrderBy(name => name, StringComparer.Ordinal)!)
         {
             data.Add(name);
