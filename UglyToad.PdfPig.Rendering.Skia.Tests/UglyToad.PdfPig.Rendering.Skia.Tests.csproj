@@ -60,6 +60,9 @@
 		<None Update="Documents\0966260.pdf">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
+		<None Update="Documents\0966320.pdf">
+			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
 		<None Update="Documents\0966681.pdf">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
@@ -761,6 +764,9 @@
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\0966260_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\pdfpig_skia\0966320_2.png">
+			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\0966761_1.png">
 		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
