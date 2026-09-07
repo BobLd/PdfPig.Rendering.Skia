@@ -403,7 +403,6 @@ public static class PdfToImageHelper
                     ReportDifference(expectedFile, pageNumber, diff, maxDifferingPixelRatio);
 
                     // Save error
-                    string rootName = expectedFile.Substring(0, expectedFile.Length - 4);
                     string diffPath = Path.Combine(ErrorFolder, $"{rootName}_diff.png");
                     string renderedPath = Path.Combine(ErrorFolder, $"{rootName}_rendered.png");
                     Directory.CreateDirectory(Path.GetDirectoryName(diffPath)!);
