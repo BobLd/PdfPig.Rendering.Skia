@@ -306,10 +306,10 @@ public static class PdfToImageHelper
 
                             // Save error
                             string rootName = expectedFile.Substring(0, expectedFile.Length - 4);
-                            Directory.CreateDirectory(ErrorFolder);
-                            using (var fs = new FileStream(
-                                       Path.Combine(ErrorFolder, $"{rootName}_{pageNumber}_diff.png"),
-                                       FileMode.Create))
+                            string diffPath = Path.Combine(ErrorFolder, $"{rootName}_{pageNumber}_diff.png");
+                            Directory.CreateDirectory(Path.GetDirectoryName(diffPath)!);
+
+                            using (var fs = new FileStream(diffPath, FileMode.Create))
                             {
                                 bim3?.Encode(fs, SKEncodedImageFormat.Png, 100);
                             }
@@ -358,17 +358,18 @@ public static class PdfToImageHelper
 
                     // Save error
                     string rootName = expectedFile.Substring(0, expectedFile.Length - 4);
+                    string diffPath = Path.Combine(ErrorFolder, $"{rootName}_diff.png");
+                    string renderedPath = Path.Combine(ErrorFolder, $"{rootName}_rendered.png");
+                    Directory.CreateDirectory(Path.GetDirectoryName(diffPath)!);
 
-                    Directory.CreateDirectory(ErrorFolder);
-
-                    using (var fs = new FileStream(Path.Combine(ErrorFolder, $"{rootName}_diff.png"), FileMode.Create))
+                    using (var fs = new FileStream(diffPath, FileMode.Create))
                     {
                         bim3?.Encode(fs, SKEncodedImageFormat.Png, 100);
                     }
 
                     bim3?.Dispose();
 
-                    using (var fs = new FileStream(Path.Combine(ErrorFolder, $"{rootName}_rendered.png"), FileMode.Create))
+                    using (var fs = new FileStream(renderedPath, FileMode.Create))
                     {
                         actual.Encode(fs, SKEncodedImageFormat.Png, 100);
                     }
