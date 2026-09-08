@@ -14,9 +14,9 @@ jobs:
       matrix: |
         {
           "include": [
-            { "runner": "windows-latest", "os": "windows", "arch": "x64",   "framework": "net472" },
-            { "runner": "windows-latest", "os": "windows", "arch": "x64",   "framework": "net8.0" },
-            { "runner": "windows-latest", "os": "windows", "arch": "x64",   "framework": "net10.0" },
+            { "runner": "windows-2022", "os": "windows", "arch": "x64",   "framework": "net472" },
+            { "runner": "windows-2022", "os": "windows", "arch": "x64",   "framework": "net8.0" },
+            { "runner": "windows-2022", "os": "windows", "arch": "x64",   "framework": "net10.0" },
             { "runner": "windows-11-arm", "os": "windows", "arch": "arm64", "framework": "net8.0" },
             { "runner": "windows-11-arm", "os": "windows", "arch": "arm64", "framework": "net10.0" }
           ]
