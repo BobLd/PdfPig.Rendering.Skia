@@ -14,7 +14,6 @@
 
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using Xunit;
 
 namespace UglyToad.PdfPig.Rendering.Skia.Tests;
@@ -27,10 +26,7 @@ public class PageSizeTests
         "DefaultColourSpaces.230802.pdf", // fails in 0.1.15
     ];
 
-    public static IEnumerable<object[]> GetAllDocuments => Directory.EnumerateFiles(Helper.DocumentsFolder, "*.pdf")
-        .Select(Path.GetFileName)
-        .Where(p => !_documentsToIgnore.Contains(p))
-        .Select(p => new object[] { p });
+    public static TheoryData<string> GetAllDocuments => Helper.EnumerateDocuments(_documentsToIgnore);
 
     [Theory]
     [MemberData(nameof(GetAllDocuments))]

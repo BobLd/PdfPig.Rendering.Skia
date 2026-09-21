@@ -90,7 +90,7 @@ internal partial class SkiaStreamProcessor
     }
 
     private static StreamToken BuildTextIconAppearance(Annotation annotation,
-        float width, float height, byte[] content, DictionaryToken? resources)
+        float width, float height, Memory<byte> content, DictionaryToken? resources)
     {
         PdfRectangle original = annotation.Rectangle;
         PdfRectangle rect = new PdfRectangle(
@@ -186,7 +186,7 @@ internal partial class SkiaStreamProcessor
         }
 
         FillPathNonZeroWindingAndStroke.Value.Write(ms);
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static StreamToken DrawInsertIcon(Annotation annotation, double[] color)
@@ -203,7 +203,7 @@ internal partial class SkiaStreamProcessor
         new AppendStraightLineSegment(width - 2f, 1).Write(ms);
         CloseFillPathNonZeroWindingAndStroke.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static StreamToken DrawCircleIcon(Annotation annotation, double[] color)
@@ -219,7 +219,7 @@ internal partial class SkiaStreamProcessor
         WriteCircle(ms, width / 2f, height / 2f, 9.756, false);
         FillPathNonZeroWindingAndStroke.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static StreamToken DrawRightArrowIcon(Annotation annotation, double[] color)
@@ -243,7 +243,7 @@ internal partial class SkiaStreamProcessor
         new AppendStraightLineSegment(10.5, 14.5).Write(ms);
         StrokePathOp.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static StreamToken DrawUpArrowIcon(Annotation annotation, double[] color)
@@ -257,7 +257,7 @@ internal partial class SkiaStreamProcessor
         WriteUpArrowPath(ms);
         CloseFillPathNonZeroWindingAndStroke.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static StreamToken DrawUpLeftArrowIcon(Annotation annotation, double[] color)
@@ -274,7 +274,7 @@ internal partial class SkiaStreamProcessor
         WriteUpArrowPath(ms);
         CloseFillPathNonZeroWindingAndStroke.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static void WriteUpArrowPath(MemoryStream ms)
@@ -302,7 +302,7 @@ internal partial class SkiaStreamProcessor
         new AppendStraightLineSegment(4, height - 4).Write(ms);
         StrokePathOp.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static StreamToken DrawStarIcon(Annotation annotation, double[] color)
@@ -334,7 +334,7 @@ internal partial class SkiaStreamProcessor
         CloseSubpathOp.Value.Write(ms);
         FillPathNonZeroWinding.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static StreamToken DrawCheckIcon(Annotation annotation, double[] color)
@@ -350,7 +350,7 @@ internal partial class SkiaStreamProcessor
         new AppendStraightLineSegment(16.5, 16).Write(ms);
         StrokePathOp.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static StreamToken DrawRightPointerIcon(Annotation annotation, double[] color)
@@ -371,7 +371,7 @@ internal partial class SkiaStreamProcessor
         CloseSubpathOp.Value.Write(ms);
         FillPathNonZeroWinding.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static StreamToken DrawCrossHairsIcon(Annotation annotation, double[] color)
@@ -391,7 +391,7 @@ internal partial class SkiaStreamProcessor
         new AppendStraightLineSegment(width - 1, height / 2f).Write(ms);
         StrokePathOp.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static StreamToken DrawHelpIcon(Annotation annotation, double[] color)
@@ -407,7 +407,7 @@ internal partial class SkiaStreamProcessor
 
         WriteGlyphText(ms, [1.0], new byte[] { 0x3F }, 14, 5.8, 4.5); // "?"
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), CreateHelveticaResources());
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), CreateHelveticaResources());
     }
 
     private static StreamToken DrawParagraphIcon(Annotation annotation, double[] color)
@@ -427,7 +427,7 @@ internal partial class SkiaStreamProcessor
         WriteCircle(ms, width / 2f, height / 2f, width / 2f - 1f, true);
         StrokePathOp.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), CreateHelveticaResources());
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), CreateHelveticaResources());
     }
 
     private static StreamToken DrawNewParagraphIcon(Annotation annotation, double[] color)
@@ -445,7 +445,7 @@ internal partial class SkiaStreamProcessor
 
         WriteGlyphText(ms, color, new byte[] { 0x4E, 0x50 }, 7, 1.65, 1.4); // "NP"
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), CreateHelveticaResources());
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), CreateHelveticaResources());
     }
 
     private static StreamToken DrawCommentIcon(Annotation annotation, double[] color)
@@ -481,7 +481,7 @@ internal partial class SkiaStreamProcessor
         new AppendStraightLineSegment(inset + side, bottom).Write(ms);
         CloseFillPathNonZeroWindingAndStroke.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 
     private static StreamToken DrawKeyIcon(Annotation annotation, double[] color)
@@ -525,6 +525,6 @@ internal partial class SkiaStreamProcessor
         new AppendDualControlPointBezierCurve(3441, 4847, 3253, 4658, 3253, 4425).Write(ms);
         FillPathNonZeroWindingAndStroke.Value.Write(ms);
 
-        return BuildTextIconAppearance(annotation, width, height, ms.ToArray(), null);
+        return BuildTextIconAppearance(annotation, width, height, ms.AsMemory(), null);
     }
 }

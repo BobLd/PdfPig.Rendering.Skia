@@ -225,7 +225,7 @@ public static class PdfPigExtensions
     /// <summary>
     /// Evaluates a shading's colour function(s) and remaps each output linearly from its
     /// declared Range to [0,1]. Functions without a Range entry fall back to plain [0,1]
-    /// clamping, matching <see cref="Shading.Eval"/>'s behaviour. Handles both the
+    /// clamping, matching Shading.Eval's behaviour. Handles both the
     /// "single n-out function" and "n separate 1-out functions" forms allowed by
     /// PDF 1.7 §8.7.4.5 for Type 1 / Type 4 / Type 6 / Type 7 shadings.
     /// Allocation-free for the common single-function and multi-function fan-out forms.

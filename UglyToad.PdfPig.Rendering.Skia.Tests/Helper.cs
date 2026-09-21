@@ -13,7 +13,10 @@
 // limitations under the License.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using Xunit;
 
 namespace UglyToad.PdfPig.Rendering.Skia.Tests;
 
@@ -24,4 +27,19 @@ internal static class Helper
     public static string ExpectedImagesFolder => Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "ExpectedImages"));
 
     public static string SpecificTestDocumentsFolder => Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "SpecificTestDocuments"));
+
+    public static TheoryData<string> EnumerateDocuments(ICollection<string> exclude)
+    {
+        var data = new TheoryData<string>();
+
+        foreach (string name in Directory.EnumerateFiles(DocumentsFolder, "*.pdf")
+                     .Select(Path.GetFileName)
+                     .Where(name => name is not null && !exclude.Contains(name))
+                     .OrderBy(name => name, StringComparer.Ordinal)!)
+        {
+            data.Add(name);
+        }
+
+        return data;
+    }
 }

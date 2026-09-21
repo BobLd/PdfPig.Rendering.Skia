@@ -377,7 +377,19 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
                 }
 
-                var newAppearance = new StreamToken(appearanceStream.StreamDictionary, ms.ToArray());
+                var content = ms.AsMemory();
+
+                // The rewritten content is the *decoded* operations written back out, but the source
+                // dictionary still declares the encoding the original data had. Leave /Filter (and its
+                // /DecodeParms) in place and ProcessFormXObject decodes the plain content again, which
+                // yields nothing and the annotation silently disappears. /Length is restated for the
+                // same reason: nothing about this stream is the encoded one any more.
+                var dict = appearanceStream.StreamDictionary
+                    .Without(NameToken.Filter)
+                    .Without(NameToken.DecodeParms)
+                    .With(NameToken.Length, new NumericToken(content.Length));
+
+                var newAppearance = new StreamToken(dict, content);
 
                 //var contentStreamTest = newAppearance.Decode(FilterProvider, PdfScanner);
                 //var operationsTest = PageContentParser
@@ -520,7 +532,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     var dict = setTransformationMatrix(annotation.AnnotationDictionary, annotation.Rectangle);
 
-                    return new StreamToken(dict, ms.ToArray());
+                    return new StreamToken(dict, ms.AsMemory());
                 }
             }
             catch (Exception ex)
@@ -708,7 +720,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     var dict = setTransformationMatrix(annotation.AnnotationDictionary, annotation.Rectangle);
 
-                    return new StreamToken(dict, ms.ToArray());
+                    return new StreamToken(dict, ms.AsMemory());
                 }
             }
             catch (Exception ex)
@@ -825,7 +837,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                     var dict = setTransformationMatrix(annotation.AnnotationDictionary, annotation.Rectangle);
 
-                    return new StreamToken(dict, ms.ToArray());
+                    return new StreamToken(dict, ms.AsMemory());
                 }
             }
             catch (Exception ex)
@@ -968,7 +980,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     
                     var dict = setTransformationMatrix(annotation.AnnotationDictionary, annotation.Rectangle);
 
-                    return new StreamToken(dict, ms.ToArray());
+                    return new StreamToken(dict, ms.AsMemory());
                 }
             }
             catch (Exception ex)
@@ -1045,7 +1057,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 var dict = setTransformationMatrix(annotation.AnnotationDictionary, annotation.Rectangle);
 
-                return new StreamToken(dict, ms.ToArray());
+                return new StreamToken(dict, ms.AsMemory());
             }
         }
 

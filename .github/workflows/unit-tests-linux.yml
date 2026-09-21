@@ -14,11 +14,9 @@ jobs:
       matrix: |
         {
           "include": [
-            { "runner": "ubuntu-latest",    "os": "linux", "arch": "x64",   "framework": "net6.0" },
             { "runner": "ubuntu-latest",    "os": "linux", "arch": "x64",   "framework": "net8.0" },
-            { "runner": "ubuntu-latest",    "os": "linux", "arch": "x64",   "framework": "net9.0" },
-            { "runner": "ubuntu-24.04-arm", "os": "linux", "arch": "arm64", "framework": "net6.0" },
+            { "runner": "ubuntu-latest",    "os": "linux", "arch": "x64",   "framework": "net10.0" },
             { "runner": "ubuntu-24.04-arm", "os": "linux", "arch": "arm64", "framework": "net8.0" },
-            { "runner": "ubuntu-24.04-arm", "os": "linux", "arch": "arm64", "framework": "net9.0" }
+            { "runner": "ubuntu-24.04-arm", "os": "linux", "arch": "arm64", "framework": "net10.0" }
           ]
         }

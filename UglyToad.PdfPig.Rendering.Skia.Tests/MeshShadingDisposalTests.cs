@@ -31,14 +31,14 @@ namespace UglyToad.PdfPig.Rendering.Skia.Tests;
 /// </summary>
 public class MeshShadingDisposalTests
 {
-    public static readonly object[][] MeshDocuments =
-    [
+    public static readonly TheoryData<string, int> MeshDocuments = new()
+    {
         // Type 6 Coons-patch mesh — exercises _meshPictureCache and, where the shading carries a
         // Function, the textured path (image shader recorded then disposed mid-recording).
-        new object[] { "2_shading_type_6_001.pdf", 1 },
+        { "2_shading_type_6_001.pdf", 1 },
         // Mesh-heavy document that paints its shading many times per page (cache hit + replay).
-        new object[] { "0000851.pdf", 1 }, new object[] { "0000851.pdf", 2 }, new object[] { "0000851.pdf", 3 }
-    ];
+        { "0000851.pdf", 1 }, { "0000851.pdf", 2 }, { "0000851.pdf", 3 }
+    };
 
     [Theory]
     [MemberData(nameof(MeshDocuments))]
@@ -51,7 +51,7 @@ public class MeshShadingDisposalTests
 
         // Process() builds the mesh-picture cache, records every patch (and its texture shader)
         // into the page picture, then disposes the cache in its finally — all before returning.
-        using SKPicture picture = document.GetPageAsSKPicture(pageNumber);
+        using SKPicture picture = document.GetPageAsSKPicture(pageNumber, TestContext.Current.CancellationToken);
 
         byte[] first = Rasterize(picture);
         byte[] second = Rasterize(picture);
