@@ -36,12 +36,6 @@ namespace UglyToad.PdfPig.Rendering.Skia;
 /// </summary>
 public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
 {
-    /// <summary>
-    /// Replace default font with specific from this file path
-    /// </summary>
-    public static string? ReplaceDefaultFontPath { get; set; } // TODO: use Skia options (not PdfPig related)?
-    private readonly SKTypeface? _defaultSKTypeface;
-
     private readonly SkiaFontCache _fontCache;
 
     private static readonly AsyncLocal<CancellationToken> _currentToken = new();
@@ -63,17 +57,15 @@ public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
         ParsingOptions parsingOptions)
         : base(pdfScanner, resourceStore, filterProvider, pageContentParser, parsingOptions)
     {
-        if (ReplaceDefaultFontPath != null)
-        {
-            if (!File.Exists(ReplaceDefaultFontPath))
-            {
-                throw new FileNotFoundException($"{nameof(ReplaceDefaultFontPath)} file does not exist: '{ReplaceDefaultFontPath}'.");
-            }
+        _fontCache = new SkiaFontCache();
+    }
 
-            _defaultSKTypeface = SKTypeface.FromFile(ReplaceDefaultFontPath);
-        }
-
-        _fontCache = _defaultSKTypeface != null ? new SkiaFontCache(_defaultSKTypeface) : new SkiaFontCache();
+    /// <summary>
+    /// Replace default font with specific from this file path
+    /// </summary>
+    public void ReplaceDefaultFont(string fontPath)
+    {
+        _fontCache.ReplaceDefaultFont(fontPath);
     }
 
     /// <inheritdoc/>
@@ -104,9 +96,5 @@ public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
     public void Dispose()
     {
         _fontCache.Dispose();
-        if (_defaultSKTypeface != null)
-        {
-            _defaultSKTypeface.Dispose();
-        }
     }
 }
