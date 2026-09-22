@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using SkiaSharp;
 using UglyToad.PdfPig.Annotations;
@@ -57,6 +58,14 @@ public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
         : base(pdfScanner, resourceStore, filterProvider, pageContentParser, parsingOptions)
     {
         _fontCache = new SkiaFontCache();
+    }
+
+    /// <summary>
+    /// Replace default font with specific from this file path
+    /// </summary>
+    public void ReplaceDefaultFont(string fontPath)
+    {
+        _fontCache.ReplaceDefaultFont(fontPath);
     }
 
     /// <inheritdoc/>

@@ -15,6 +15,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -40,11 +41,17 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         /// </summary>
         private const string NotoFont = "Noto";
 
-        private readonly Lazy<SkiaFontCacheItem> DefaultSkiaFontCacheItem = new(() => new SkiaFontCacheItem(SKTypeface.Default)); // Do not make static
+        private SKTypeface? _defaultSKTypeface;
+        private readonly Lazy<SkiaFontCacheItem> DefaultSkiaFontCacheItem; // Do not make static
 
         private readonly ConcurrentDictionary<IFont, ConcurrentDictionary<int, Lazy<SKPath?>>> _cache = new();
 
         private readonly ConcurrentDictionary<string, List<SkiaFontCacheItem>> _typefaces = new();
+
+        internal SkiaFontCache()
+        {
+            DefaultSkiaFontCacheItem = new(() => new SkiaFontCacheItem(_defaultSKTypeface ?? SKTypeface.Default));
+        }
 
         public SkiaFontCacheItem GetTypefaceOrFallback(IFont font, string unicode)
         {
@@ -350,6 +357,21 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
         }
 
+        internal void ReplaceDefaultFont(string fontPath)
+        {
+            if (DefaultSkiaFontCacheItem.IsValueCreated)
+            {
+                throw new InvalidOperationException($"A default font cannot be replaced after the {nameof(DefaultSkiaFontCacheItem)} has been initialized.");
+            }
+
+            if (string.IsNullOrEmpty(fontPath) || !File.Exists(fontPath))
+            {
+                throw new FileNotFoundException($"{nameof(fontPath)} file does not exist: '{fontPath}'.");
+            }
+
+            _defaultSKTypeface = SKTypeface.FromFile(fontPath);
+        }
+
         public void Dispose()
         {
             // Atomic test-and-set
@@ -421,6 +443,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             }
 
             _typefaces.Clear();
+            _defaultSKTypeface?.Dispose();
         }
     }
 }
