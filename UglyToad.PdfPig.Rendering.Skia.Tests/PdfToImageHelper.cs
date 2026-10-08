@@ -324,7 +324,8 @@ public static class PdfToImageHelper
     }
 
     public static bool TestSinglePage(string pdfFile, int pageNumber, string expectedFile, int scale = 1,
-        double maxDifferingPixelRatio = MaxDifferingPixelRatio, bool useIccProfile = false, bool useOutputIntent = false)
+        double maxDifferingPixelRatio = MaxDifferingPixelRatio, bool useIccProfile = false, bool useOutputIntent = false,
+        bool skipHiddenOptionalContent = false)
     {
         if (useOutputIntent && !useIccProfile)
         {
@@ -378,7 +379,8 @@ public static class PdfToImageHelper
                     ? useOutputIntent
                         ? UnicolourIccProfileService.InstanceWithIntent
                         : UnicolourIccProfileService.Instance
-                    : null
+                    : null,
+                SkipHiddenOptionalContent = skipHiddenOptionalContent
             };
 
             using (var document = PdfDocument.Open(docPath, options))

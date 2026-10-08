@@ -149,7 +149,7 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
 
             PushState();
 
-            ProcessOperations(operations);
+            ProcessContentStream(operations);
 
             PopState();
 
@@ -279,18 +279,6 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
     {
         //_canvas.DrawRect(rectangle.ToSKRect(_height), _paintCache.GetImageDebug());
         _canvas.ClipRect(rectangle.ToSKRect(), SKClipOperation.Intersect);
-    }
-
-    /// <inheritdoc/>
-    public override void BeginMarkedContent(NameToken name, NameToken? propertyDictionaryName, DictionaryToken? properties)
-    {
-        // No op
-    }
-
-    /// <inheritdoc/>
-    public override void EndMarkedContent()
-    {
-        // No op
     }
 
     public override void ModifyCurrentTransformationMatrix(TransformationMatrix value)

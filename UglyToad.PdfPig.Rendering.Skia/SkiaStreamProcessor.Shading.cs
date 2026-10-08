@@ -88,6 +88,11 @@ internal partial class SkiaStreamProcessor
     /// <inheritdoc/>
     public override void PaintShading(NameToken shadingNameToken)
     {
+        if (IsOptionalContentHidden)
+        {
+            return;
+        }
+
         RenderShading(ResourceStore.GetShading(shadingNameToken), in SKMatrix.Identity, false, null);
     }
 

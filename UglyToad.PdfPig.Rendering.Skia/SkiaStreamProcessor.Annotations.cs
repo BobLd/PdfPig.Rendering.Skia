@@ -70,6 +70,11 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     continue;
                 }
 
+                if (!IsOptionalContentVisible(annotation.AnnotationDictionary))
+                {
+                    continue;
+                }
+
                 // Get appearance
                 StreamToken? appearance = GetNormalAppearanceAsStream(annotation);
 

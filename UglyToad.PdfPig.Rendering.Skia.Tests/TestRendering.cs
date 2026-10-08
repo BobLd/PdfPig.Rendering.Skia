@@ -14,7 +14,10 @@
 
 // Uses documents from https://github.com/pdf-association/pdf-differences (CC BY 4.0)
 
+using System.Collections.Generic;
 using System.IO;
+using System.Text;
+using SkiaSharp;
 using Xunit;
 
 namespace UglyToad.PdfPig.Rendering.Skia.Tests;
@@ -870,6 +873,30 @@ public class TestRendering
         },
     };
 
+    /// <summary>
+    /// Rendered with <see cref="ParsingOptions.SkipHiddenOptionalContent"/> set: only the default
+    /// configuration's visible layer ("Default View", a single tick) is drawn. The hidden layers draw a
+    /// mirrored tick on top, forming an X, when hidden optional content is drawn too.
+    /// </summary>
+    public static readonly TheoryData<string, string, int, int> DocumentsOptionalContent = new()
+    {
+        {
+            // /D wins over the /Configs alternate configurations.
+            "GWG150_OptionalContent-OCCD_X4_1.png",
+            "GWG150_OptionalContent-OCCD_X4.pdf", 1, 2
+        },
+        {
+            // Radio-button group, OFF groups listed in /D /OFF.
+            "GWG151_OptionalContent-RBGroup_X4_1.png",
+            "GWG151_OptionalContent-RBGroup_X4.pdf", 1, 2
+        },
+        {
+            // Visibility controlled through optional content membership dictionaries.
+            "GWG152_OptionalContent-OCMD_X4_1.png",
+            "GWG152_OptionalContent-OCMD_X4.pdf", 1, 2
+        }
+    };
+
     public static bool IsReleaseBuild =>
 #if DEBUG
         false;
@@ -884,6 +911,116 @@ public class TestRendering
         expectedImage = Path.Combine("pdfpig_skia", expectedImage);
         bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale);
         Assert.True(success);
+    }
+
+    [Theory(Skip = "Only valid in Release mode.", SkipUnless = nameof(IsReleaseBuild))]
+    [MemberData(nameof(DocumentsOptionalContent))]
+    public void PdfPigSkiaTestOptionalContent(string expectedImage, string pdfFile, int pageNumber, int scale)
+    {
+        expectedImage = Path.Combine("pdfpig_skia", expectedImage);
+        bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale,
+            skipHiddenOptionalContent: true);
+        Assert.True(success);
+    }
+
+    [Theory(Skip = "Only valid in Release mode.", SkipUnless = nameof(IsReleaseBuild))]
+    [MemberData(nameof(DocumentsOptionalContent))]
+    public void PdfPigSkiaTestOptionalContentNotSkipped(string expectedImage, string pdfFile, int pageNumber, int scale)
+    {
+        // The option is off by default: hidden layers are drawn as well, so the X is back and the
+        // page no longer matches the default-view golden.
+        expectedImage = Path.Combine("pdfpig_skia", expectedImage);
+        bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale);
+        Assert.False(success);
+    }
+
+    [Fact]
+    public void HiddenOptionalContentStillAddsToTextClip()
+    {
+        // ISO 32000-2 §8.11.3.1: hidden content is not drawn, but graphics state that outlives it is the
+        // same whether it is visible or not. A hidden glyph in a clip rendering mode (7 Tr) still adds to
+        // the text clipping path applied at ET, so the visible fill that follows is clipped to the glyph.
+        byte[] pdf = BuildPdf(
+            "q\nBT\n/OC /oc1 BDC\n7 Tr /F1 150 Tf 30 40 Td (I) Tj\nEMC\nET\n0 0 1 rg 0 0 200 200 re f\nQ");
+
+        using SKBitmap hidden = Render(pdf, skipHiddenOptionalContent: true);
+        using SKBitmap visible = Render(pdf, skipHiddenOptionalContent: false);
+
+        // The fill is clipped to the glyph: not the whole page, but not nothing either.
+        int blue = CountBluePixels(hidden);
+        Assert.InRange(blue, 1, hidden.Width * hidden.Height / 2);
+        Assert.Equal(SKColors.White, hidden.GetPixel(2, 2));
+
+        // Mode 7 paints nothing itself, so hiding the glyph must not change a single pixel.
+        Assert.Equal(visible.Bytes, hidden.Bytes);
+    }
+
+    private static SKBitmap Render(byte[] pdf, bool skipHiddenOptionalContent)
+    {
+        var options = new ParsingOptions
+        {
+            UseLenientParsing = true,
+            SkipMissingFonts = true,
+            FilterProvider = SkiaRenderingFilterProvider.Instance,
+            SkipHiddenOptionalContent = skipHiddenOptionalContent
+        };
+
+        using var document = PdfDocument.Open(pdf, options);
+        document.AddSkiaPageFactory();
+        return document.GetPageAsSKBitmap(1, 1, SKColors.White);
+    }
+
+    private static int CountBluePixels(SKBitmap bitmap)
+    {
+        int count = 0;
+        for (int y = 0; y < bitmap.Height; y++)
+        {
+            for (int x = 0; x < bitmap.Width; x++)
+            {
+                SKColor c = bitmap.GetPixel(x, y);
+                if (c.Blue > 200 && c.Red < 50 && c.Green < 50)
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// A one-page 200x200 PDF whose optional content group 'oc1' is OFF in the default configuration,
+    /// with Helvetica as /F1.
+    /// </summary>
+    private static byte[] BuildPdf(string content)
+    {
+        string[] objects =
+        [
+            "<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 6 0 R >> /Properties << /oc1 5 0 R >> >> /Contents 4 0 R >>",
+            $"<< /Length {content.Length} >>\nstream\n{content}\nendstream",
+            "<< /Type /OCG /Name (Hidden clip) >>",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+        ];
+
+        var sb = new StringBuilder("%PDF-1.7\n");
+        var offsets = new List<int>();
+        for (int i = 0; i < objects.Length; i++)
+        {
+            offsets.Add(sb.Length);
+            sb.Append($"{i + 1} 0 obj\n{objects[i]}\nendobj\n");
+        }
+
+        int xref = sb.Length;
+        sb.Append($"xref\n0 {objects.Length + 1}\n0000000000 65535 f \n");
+        foreach (int offset in offsets)
+        {
+            sb.Append($"{offset:D10} 00000 n \n");
+        }
+
+        sb.Append($"trailer\n<< /Size {objects.Length + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF");
+        return Encoding.ASCII.GetBytes(sb.ToString());
     }
 
     [Theory(Skip = "Only valid in Release mode.", SkipUnless = nameof(IsReleaseBuild))]

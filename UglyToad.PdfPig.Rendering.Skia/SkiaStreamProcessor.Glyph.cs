@@ -44,6 +44,19 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             var textRenderingMode = currentState.FontState.TextRenderingMode;
 
+            if (IsOptionalContentHidden)
+            {
+                // ISO 32000-2 §8.11.3.1: hidden content is not drawn, but state that outlives it is still
+                // applied. A clip-mode glyph still adds to the text clipping path applied at ET, so it is
+                // processed as 'add to clipping path' only.
+                if (!textRenderingMode.IsClip())
+                {
+                    return;
+                }
+
+                textRenderingMode = TextRenderingMode.NeitherClip;
+            }
+
             if (textRenderingMode == TextRenderingMode.Neither)
             {
                 return;
@@ -51,7 +64,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             if (font is IType3Font type3Font)
             {
-                ShowType3Glyph(type3Font, code, in renderingMatrix, in textMatrix);
+                ShowType3Glyph(type3Font, code, textRenderingMode, in renderingMatrix, in textMatrix);
                 return;
             }
 
@@ -342,7 +355,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             _textClipPath.AddPath(glyphPathInUserSpace, in currentCanvasMatrix, SKPathAddMode.Append);
         }
 
-        private void ShowType3Glyph(IType3Font font, int code,
+        private void ShowType3Glyph(IType3Font font, int code, TextRenderingMode textRenderingMode,
             in TransformationMatrix renderingMatrix,
             in TransformationMatrix textMatrix)
         {
@@ -374,12 +387,18 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         ShowVectorFontGlyph(vector.Path,
                             currentState.CurrentStrokingColor,
                             currentState.CurrentNonStrokingColor,
-                            currentState.FontState.TextRenderingMode,
+                            textRenderingMode,
                             in TransformationMatrix.Identity,
                             in TransformationMatrix.Identity);
                         return;
 
                     case Type3PictureGlyph picture:
+                        if (IsOptionalContentHidden)
+                        {
+                            // A picture glyph contributes nothing to the text clipping path.
+                            return;
+                        }
+
                         _canvas.DrawPicture(picture.Picture);
 #if DEBUG
                         var rect = picture.Picture.CullRect;

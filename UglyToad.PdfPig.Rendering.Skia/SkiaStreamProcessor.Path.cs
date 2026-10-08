@@ -133,6 +133,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
+            if (IsOptionalContentHidden)
+            {
+                EndPath();
+                return;
+            }
+
             if (close)
             {
                 _currentPath.Close();
@@ -193,6 +199,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             if (_currentPath is null)
             {
+                return;
+            }
+
+            if (IsOptionalContentHidden)
+            {
+                EndPath();
                 return;
             }
 
@@ -258,6 +270,12 @@ namespace UglyToad.PdfPig.Rendering.Skia
         {
             if (_currentPath is null)
             {
+                return;
+            }
+
+            if (IsOptionalContentHidden)
+            {
+                EndPath();
                 return;
             }
 
