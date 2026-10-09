@@ -36,6 +36,12 @@ namespace UglyToad.PdfPig.Rendering.Skia;
 /// </summary>
 public sealed class SkiaLayeredPageFactory : BasePageFactory<SkiaLayeredPage>, IDisposable
 {
+    /// <summary>
+    /// This factory's own cache: it must never be shared with the document's <see cref="SkiaPageFactory"/>. The cache
+    /// keeps Type 3 glyph pictures, and they are recorded with a different visibility in each mode: the direct render
+    /// leaves out what is hidden in the document's default view, while a layered page records every layer's content.
+    /// A glyph cached by one would be replayed by the other with the wrong content shown or hidden.
+    /// </summary>
     private readonly SkiaFontCache _fontCache;
 
     /// <summary>

@@ -13,8 +13,10 @@
 // limitations under the License.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using SkiaSharp;
 using Xunit;
 
@@ -189,6 +191,97 @@ public class LayeredPageTests
         using var after = Rasterize(composed, width, height, 2);
         Assert.True(PdfToImageHelper.AreEquivalent(before, after));
         Assert.Throws<ObjectDisposedException>(() => layered.Compose(null));
+    }
+
+    [Fact]
+    public void Compose_TransparencyGroupAndSoftMaskSpanningLayers_MatchesTheDirectRender()
+    {
+        // Two layers drawn (a) inside one transparency group form XObject painted with /Multiply (and /Screen
+        // between them inside it) and (b) under one ExtGState /SMask, plus (c) a BDC /OC nested in another:
+        // layer B (OFF by default) outside, layer A (ON) inside.
+        byte[] defaultPdf = BuildLayersSpanningTransparencyPdf("[6 0 R]");
+        byte[] bOnPdf = BuildLayersSpanningTransparencyPdf("[]");
+
+        using var document = PdfDocument.Open(defaultPdf, SkiaRenderingParsingOptions.Instance);
+        document.AddSkiaPageFactory();
+        using var direct = document.GetPageAsSKBitmap(1, 2, SKColors.White);
+        using var layered = document.GetPage<SkiaLayeredPage>(1);
+        Assert.True(layered.HasOptionalContent);
+
+        var state = document.OptionalContent!;
+        using var composed = layered.Compose(state);
+        using var composedBitmap = Rasterize(composed, direct.Width, direct.Height, 2);
+        Assert.True(PdfToImageHelper.AreEquivalent(direct, composedBitmap));
+
+        using var bOnDocument = PdfDocument.Open(bOnPdf, SkiaRenderingParsingOptions.Instance);
+        bOnDocument.AddSkiaPageFactory();
+        using var bOnDirect = bOnDocument.GetPageAsSKBitmap(1, 2, SKColors.White);
+        Assert.False(PdfToImageHelper.AreEquivalent(direct, bOnDirect));
+
+        var layerB = state.Groups.Single(g => g.Name == "B");
+        using var bOnComposed = layered.Compose(state.WithGroupState(layerB, true));
+        using var bOnComposedBitmap = Rasterize(bOnComposed, bOnDirect.Width, bOnDirect.Height, 2);
+        Assert.True(PdfToImageHelper.AreEquivalent(bOnDirect, bOnComposedBitmap));
+    }
+
+    /// <summary>
+    /// A one-page 300x300 PDF with layers A (5 0 R, ON) and B (6 0 R, OFF when listed in <paramref name="offList"/>)
+    /// drawn inside a transparency group with blend modes, under a luminosity soft mask, and nested.
+    /// </summary>
+    private static byte[] BuildLayersSpanningTransparencyPdf(string offList)
+    {
+        const string content =
+            "1 1 0 rg 0 150 300 150 re f\n" +
+            "q /GSmul gs /Fm1 Do Q\n" +
+            "q /GSmask gs\n" +
+            "/OC /ocA BDC 0 1 0 rg 20 20 150 100 re f EMC\n" +
+            "/OC /ocB BDC 1 0 1 rg 120 40 150 100 re f EMC\n" +
+            "Q\n" +
+            "/OC /ocB BDC /OC /ocA BDC 0 g 250 250 30 30 re f EMC EMC";
+
+        const string group =
+            "/OC /ocA BDC 1 0 0 rg 20 170 120 100 re f EMC\n" +
+            "/GSscr gs\n" +
+            "/OC /ocB BDC 0 0 1 rg 100 190 120 100 re f EMC";
+
+        const string mask = "1 g 0 0 150 150 re f 0.4 g 150 0 150 150 re f";
+
+        return BuildPdf(
+            $"<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R 6 0 R] /D << /OFF {offList} >> >> >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /Properties << /ocA 5 0 R /ocB 6 0 R >> /ExtGState << /GSmul 8 0 R /GSmask 9 0 R >> /XObject << /Fm1 7 0 R >> >> /Contents 4 0 R >>",
+            $"<< /Length {content.Length} >>\nstream\n{content}\nendstream",
+            "<< /Type /OCG /Name (A) >>",
+            "<< /Type /OCG /Name (B) >>",
+            $"<< /Type /XObject /Subtype /Form /BBox [0 150 300 300] /Group << /S /Transparency >> /Resources << /Properties << /ocA 5 0 R /ocB 6 0 R >> /ExtGState << /GSscr 10 0 R >> >> /Length {group.Length} >>\nstream\n{group}\nendstream",
+            "<< /Type /ExtGState /BM /Multiply >>",
+            "<< /Type /ExtGState /SMask << /Type /Mask /S /Luminosity /G 11 0 R >> >>",
+            "<< /Type /ExtGState /BM /Screen >>",
+            $"<< /Type /XObject /Subtype /Form /BBox [0 0 300 150] /Group << /S /Transparency /CS /DeviceGray >> /Length {mask.Length} >>\nstream\n{mask}\nendstream");
+    }
+
+    /// <summary>
+    /// A PDF made of <paramref name="objects"/>, numbered from 1; the first is the catalog.
+    /// </summary>
+    private static byte[] BuildPdf(params string[] objects)
+    {
+        var sb = new StringBuilder("%PDF-1.7\n");
+        var offsets = new List<int>();
+        for (int i = 0; i < objects.Length; i++)
+        {
+            offsets.Add(sb.Length);
+            sb.Append($"{i + 1} 0 obj\n{objects[i]}\nendobj\n");
+        }
+
+        int xref = sb.Length;
+        sb.Append($"xref\n0 {objects.Length + 1}\n0000000000 65535 f \n");
+        foreach (int offset in offsets)
+        {
+            sb.Append($"{offset:D10} 00000 n \n");
+        }
+
+        sb.Append($"trailer\n<< /Size {objects.Length + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF");
+        return Encoding.ASCII.GetBytes(sb.ToString());
     }
 
     [Fact]

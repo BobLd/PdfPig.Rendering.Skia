@@ -165,6 +165,11 @@ internal sealed class LayeredComposition
 /// </summary>
 internal sealed class ConditionalPictureDrawable : SKDrawable
 {
+    /// <summary>
+    /// What a hidden drawable contributes to a snapshot. Shared and never disposed.
+    /// </summary>
+    private static readonly SKPicture EmptyPicture = CreateEmptyPicture();
+
     private readonly SKPicture _picture;
     private readonly OptionalContentCondition _condition;
     private readonly LayeredComposition _composition;
@@ -195,7 +200,40 @@ internal sealed class ConditionalPictureDrawable : SKDrawable
         }
     }
 
+    /// <summary>
+    /// What <see cref="SkiaLayeredPage.Compose"/> uses: the root's snapshot asks each drawable for a picture.
+    /// The default records <see cref="OnDraw"/> into a new picture per drawable and per composition; the recorded
+    /// picture itself (or the shared empty one) gives the same result without allocating.
+    /// <para>
+    /// The native side takes its own reference to the returned picture (sk_ref_sp) and releases it with the
+    /// snapshot: ownership is not transferred, so returning a picture this drawable still owns and later disposes
+    /// is safe, and a snapshot outliving the page keeps the picture alive.
+    /// </para>
+    /// </summary>
+    protected override SKPicture OnSnapshot()
+    {
+        // Called from native code, like OnDraw: an exception must not cross back into Skia.
+        try
+        {
+            return _composition.IsVisible(_condition) ? _picture : EmptyPicture;
+        }
+        catch (Exception ex)
+        {
+            _composition.SetFailure(ex);
+            return EmptyPicture;
+        }
+    }
+
     protected override SKRect OnGetBounds() => _picture.CullRect;
+
+    private static SKPicture CreateEmptyPicture()
+    {
+        using (var recorder = new SKPictureRecorder())
+        {
+            recorder.BeginRecording(SKRect.Empty);
+            return recorder.EndRecording();
+        }
+    }
 
     protected override void DisposeManaged()
     {
