@@ -437,13 +437,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             var pageCanvas = _canvas;
             using var recorder = new SKPictureRecorder();
-            _aheadOfTimeDepth++;
             _canvas = recorder.BeginRecording(bounds, true);
 
             bool pushedResources = false;
             var savedTextMatrix = TextMatrices.TextMatrix;
             var savedTextLineMatrix = TextMatrices.TextLineMatrix;
 
+            _aheadOfTimeDepth++;
             try
             {
                 if (font.Type3Resources is { } type3Resources)

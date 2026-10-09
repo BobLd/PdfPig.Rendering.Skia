@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using SkiaSharp;
 using UglyToad.PdfPig.Content;
 
@@ -22,6 +23,11 @@ namespace UglyToad.PdfPig.Rendering.Skia;
 /// <summary>
 /// A page recorded once with its optional content (layers) kept apart, composed into an <see cref="SKPicture"/>
 /// for any visibility state without processing the page again.
+/// <para>
+/// Content produced ahead of time (Type 3 glyph pictures, soft masks, mesh shadings, tiling-pattern cells) is
+/// recorded with all its optional content drawn, and does not follow the state: as a whole it is shown or hidden
+/// with the paint that uses it.
+/// </para>
 /// </summary>
 public sealed class SkiaLayeredPage : IDisposable
 {
@@ -48,6 +54,8 @@ public sealed class SkiaLayeredPage : IDisposable
 
     /// <summary>
     /// The page as drawn in <paramref name="state"/>; everything when <paramref name="state"/> is null.
+    /// Content produced ahead of time (Type 3 glyph pictures, soft masks, mesh shadings, tiling-pattern cells) is
+    /// drawn in full whatever the state, as part of the paint that uses it.
     /// Safe to call from several threads (calls are serialised).
     /// </summary>
     /// <exception cref="ArgumentException">The state was built for another document.</exception>
@@ -60,9 +68,25 @@ public sealed class SkiaLayeredPage : IDisposable
                 throw new ObjectDisposedException(nameof(SkiaLayeredPage));
             }
 
+            // Visibility is evaluated inside native Skia callbacks during Snapshot(), where a managed exception
+            // must not escape: check up front that the state belongs to this page's document. Every condition
+            // of a page comes from the same document, so one check covers them all.
+            if (state is not null && _owned.Count > 0)
+            {
+                ((ConditionalPictureDrawable)_owned[0]).Condition.IsVisible(state);
+            }
+
             _composition.Reset(state);
             _root.NotifyDrawingChanged();
-            return _root.Snapshot();
+            var picture = _root.Snapshot();
+
+            if (_composition.TakeFailure() is { } failure)
+            {
+                picture.Dispose();
+                failure.Throw();
+            }
+
+            return picture;
         }
     }
 
@@ -93,11 +117,29 @@ internal sealed class LayeredComposition
 {
     private readonly Dictionary<OptionalContentCondition, bool> _visible = new();
     private OptionalContentState? _state;
+    private ExceptionDispatchInfo? _failure;
 
     public void Reset(OptionalContentState? state)
     {
         _state = state;
         _visible.Clear();
+        _failure = null;
+    }
+
+    /// <summary>
+    /// Records an exception thrown while drawing inside a native callback, to be rethrown once back in managed code.
+    /// Only the first one is kept.
+    /// </summary>
+    public void SetFailure(Exception exception)
+    {
+        _failure ??= ExceptionDispatchInfo.Capture(exception);
+    }
+
+    public ExceptionDispatchInfo? TakeFailure()
+    {
+        var failure = _failure;
+        _failure = null;
+        return failure;
     }
 
     public bool IsVisible(OptionalContentCondition condition)
@@ -134,11 +176,22 @@ internal sealed class ConditionalPictureDrawable : SKDrawable
         _composition = composition;
     }
 
+    public OptionalContentCondition Condition => _condition;
+
     protected override void OnDraw(SKCanvas canvas)
     {
-        if (_composition.IsVisible(_condition))
+        // Called from native code: an exception must not cross back into Skia. Draw nothing and let
+        // SkiaLayeredPage.Compose rethrow it once Snapshot() has returned.
+        try
         {
-            canvas.DrawPicture(_picture);
+            if (_composition.IsVisible(_condition))
+            {
+                canvas.DrawPicture(_picture);
+            }
+        }
+        catch (Exception ex)
+        {
+            _composition.SetFailure(ex);
         }
     }
 

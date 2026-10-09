@@ -342,8 +342,8 @@ internal partial class SkiaStreamProcessor
 
         using var recorder = new SKPictureRecorder();
         SKCanvas saved = _canvas;
-        _aheadOfTimeDepth++;
         _canvas = recorder.BeginRecording(MeshPictureCullRect, true);
+        _aheadOfTimeDepth++;
         try
         {
             drawMesh();
@@ -1094,11 +1094,12 @@ internal partial class SkiaStreamProcessor
 
             // A tiling pattern's content belongs to the invoking page, so it is handed the output intent
             // profile in effect at the point of use - the page-level override, and any soft-mask
-            // suppression - rather than resolving one of its own.
+            // suppression - rather than resolving one of its own. Its optional content follows the default view in a
+            // direct render; when recording a layered page the cell is produced ahead of time, so it is drawn in full.
             var processor = new SkiaStreamProcessor(PageNumber, ResourceStore, PdfScanner, PageContentParser,
                 FilterProvider, new CropBox(pattern.BBox), UserSpaceUnit, default,
                 initialMatrix, null, _fontCache, GetCurrentState().OutputIntentProfile, ParsingOptions,
-                ResourceStore.OptionalContent, layered: false, _token);
+                _layered is null ? ResourceStore.OptionalContent : null, layered: false, _token);
 
             // Same reasoning for the rendering intent: the sub-processor starts from a default graphics
             // state, so without this the pattern's content would convert its colours under

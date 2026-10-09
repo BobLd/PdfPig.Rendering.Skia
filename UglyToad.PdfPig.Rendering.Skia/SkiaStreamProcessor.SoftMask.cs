@@ -67,7 +67,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
             maskCanvas.Concat(in _softMaskMatrix);
 
             var savedCanvas = _canvas;
-            _aheadOfTimeDepth++;
             _canvas = maskCanvas;
             bool savedFlag = _isRenderingSoftMask;
             _isRenderingSoftMask = true;
@@ -81,6 +80,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             var savedOutputIntentProfile = maskState.OutputIntentProfile;
             maskState.OutputIntentProfile = null;
 
+            _aheadOfTimeDepth++;
             try
             {
                 // Drive the form processor through the mask's transparency group exactly as

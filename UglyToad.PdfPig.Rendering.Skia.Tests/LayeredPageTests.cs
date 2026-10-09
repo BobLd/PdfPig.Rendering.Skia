@@ -147,6 +147,29 @@ public class LayeredPageTests
     }
 
     [Fact]
+    public void Compose_StateFromAnotherDocument_Throws()
+    {
+        using var document = PdfDocument.Open(Path.Combine(Helper.DocumentsFolder, "GWG151_OptionalContent-RBGroup_X4.pdf"), SkiaRenderingParsingOptions.Instance);
+        using var other = PdfDocument.Open(Path.Combine(Helper.DocumentsFolder, "GWG150_OptionalContent-OCCD_X4.pdf"), SkiaRenderingParsingOptions.Instance);
+        document.AddSkiaPageFactory();
+        using var layered = document.GetPage<SkiaLayeredPage>(1);
+        Assert.True(layered.HasOptionalContent);
+
+        int width = (int)Math.Ceiling(layered.Bounds.Width * 2);
+        int height = (int)Math.Ceiling(layered.Bounds.Height * 2);
+        using var expected = layered.Compose(document.OptionalContent);
+        using var expectedBitmap = Rasterize(expected, width, height, 2);
+
+        // Rejected in managed code, before Skia calls back into the conditional drawables.
+        Assert.Throws<ArgumentException>(() => layered.Compose(other.OptionalContent));
+
+        // The page is unharmed: a valid state still composes the same picture.
+        using var again = layered.Compose(document.OptionalContent);
+        using var againBitmap = Rasterize(again, width, height, 2);
+        Assert.True(PdfToImageHelper.AreEquivalent(expectedBitmap, againBitmap));
+    }
+
+    [Fact]
     public void Compose_PictureOutlivesTheLayeredPage()
     {
         using var document = PdfDocument.Open(Path.Combine(Helper.DocumentsFolder, "GWG151_OptionalContent-RBGroup_X4.pdf"), SkiaRenderingParsingOptions.Instance);
