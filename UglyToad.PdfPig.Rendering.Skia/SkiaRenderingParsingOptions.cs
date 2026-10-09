@@ -36,8 +36,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             UseLenientParsing = true,
             SkipMissingFonts = true,
             FilterProvider = SkiaRenderingFilterProvider.Instance,
-            IccProfileService = UnicolourIccProfileService.Instance,
-            SkipHiddenOptionalContent = true
+            IccProfileService = UnicolourIccProfileService.Instance
         };
     }
 }

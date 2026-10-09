@@ -1094,7 +1094,8 @@ internal partial class SkiaStreamProcessor
             // suppression - rather than resolving one of its own.
             var processor = new SkiaStreamProcessor(PageNumber, ResourceStore, PdfScanner, PageContentParser,
                 FilterProvider, new CropBox(pattern.BBox), UserSpaceUnit, default,
-                initialMatrix, null, _fontCache, GetCurrentState().OutputIntentProfile, ParsingOptions, _token);
+                initialMatrix, null, _fontCache, GetCurrentState().OutputIntentProfile, ParsingOptions,
+                ResourceStore.OptionalContent, _token);
 
             // Same reasoning for the rendering intent: the sub-processor starts from a default graphics
             // state, so without this the pattern's content would convert its colours under

@@ -77,7 +77,8 @@ public sealed class SkiaPageFactory : BasePageFactory<SKPicture>, IDisposable
         {
             var context = new SkiaStreamProcessor(pageNumber, ResourceStore, PdfScanner, PageContentParser,
                 FilterProvider, cropBox, userSpaceUnit, rotation, initialMatrix, annotationProvider,
-                _fontCache, ResourceStore.GetPageOutputIntentProfile(dictionary), ParsingOptions, CurrentToken);
+                _fontCache, ResourceStore.GetPageOutputIntentProfile(dictionary), ParsingOptions,
+                ResourceStore.OptionalContent, CurrentToken);
 
             return context.Process(pageNumber, operations);
         }

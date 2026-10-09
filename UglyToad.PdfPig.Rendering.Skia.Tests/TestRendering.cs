@@ -874,7 +874,7 @@ public class TestRendering
     };
 
     /// <summary>
-    /// Rendered with <see cref="ParsingOptions.SkipHiddenOptionalContent"/> set: only the default
+    /// Rendered with the document default view: only the default
     /// configuration's visible layer ("Default View", a single tick) is drawn. The hidden layers draw a
     /// mirrored tick on top, forming an X, when hidden optional content is drawn too.
     /// </summary>
@@ -918,20 +918,8 @@ public class TestRendering
     public void PdfPigSkiaTestOptionalContent(string expectedImage, string pdfFile, int pageNumber, int scale)
     {
         expectedImage = Path.Combine("pdfpig_skia", expectedImage);
-        bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale,
-            skipHiddenOptionalContent: true);
-        Assert.True(success);
-    }
-
-    [Theory(Skip = "Only valid in Release mode.", SkipUnless = nameof(IsReleaseBuild))]
-    [MemberData(nameof(DocumentsOptionalContent))]
-    public void PdfPigSkiaTestOptionalContentNotSkipped(string expectedImage, string pdfFile, int pageNumber, int scale)
-    {
-        // The option is off by default: hidden layers are drawn as well, so the X is back and the
-        // page no longer matches the default-view golden.
-        expectedImage = Path.Combine("pdfpig_skia", expectedImage);
         bool success = PdfToImageHelper.TestSinglePage(pdfFile, pageNumber, expectedImage, scale);
-        Assert.False(success);
+        Assert.True(success);
     }
 
     [Fact]
@@ -943,26 +931,21 @@ public class TestRendering
         byte[] pdf = BuildPdf(
             "q\nBT\n/OC /oc1 BDC\n7 Tr /F1 150 Tf 30 40 Td (I) Tj\nEMC\nET\n0 0 1 rg 0 0 200 200 re f\nQ");
 
-        using SKBitmap hidden = Render(pdf, skipHiddenOptionalContent: true);
-        using SKBitmap visible = Render(pdf, skipHiddenOptionalContent: false);
+        using SKBitmap hidden = Render(pdf);
 
         // The fill is clipped to the glyph: not the whole page, but not nothing either.
         int blue = CountBluePixels(hidden);
         Assert.InRange(blue, 1, hidden.Width * hidden.Height / 2);
         Assert.Equal(SKColors.White, hidden.GetPixel(2, 2));
-
-        // Mode 7 paints nothing itself, so hiding the glyph must not change a single pixel.
-        Assert.Equal(visible.Bytes, hidden.Bytes);
     }
 
-    private static SKBitmap Render(byte[] pdf, bool skipHiddenOptionalContent)
+    private static SKBitmap Render(byte[] pdf)
     {
         var options = new ParsingOptions
         {
             UseLenientParsing = true,
             SkipMissingFonts = true,
-            FilterProvider = SkiaRenderingFilterProvider.Instance,
-            SkipHiddenOptionalContent = skipHiddenOptionalContent
+            FilterProvider = SkiaRenderingFilterProvider.Instance
         };
 
         using var document = PdfDocument.Open(pdf, options);

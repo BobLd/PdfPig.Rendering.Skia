@@ -105,6 +105,7 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
         SkiaFontCache fontCache,
         IIccProfile? outputIntentProfile,
         ParsingOptions parsingOptions,
+        OptionalContentState? optionalContentVisibility,
         CancellationToken token)
         : base(pageNumber,
             resourceStore,
@@ -116,7 +117,8 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
             rotation,
             initialMatrix,
             outputIntentProfile,
-            parsingOptions)
+            parsingOptions,
+            optionalContentVisibility)
     {
         _renderAnnotations = annotationProvider is not null;
         _annotations = new Lazy<Annotation[]>(() => annotationProvider?.GetAnnotations().ToArray() ?? []);
