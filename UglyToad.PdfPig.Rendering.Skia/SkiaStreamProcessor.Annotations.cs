@@ -70,7 +70,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     continue;
                 }
 
-                if (!IsOptionalContentVisible(annotation.AnnotationDictionary))
+                using var optionalContentScope = EnterOptionalContent(annotation.AnnotationDictionary);
+                if (IsOptionalContentHidden)
                 {
                     continue;
                 }
