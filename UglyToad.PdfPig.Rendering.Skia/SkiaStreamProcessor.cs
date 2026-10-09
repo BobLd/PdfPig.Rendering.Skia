@@ -106,6 +106,7 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
         IIccProfile? outputIntentProfile,
         ParsingOptions parsingOptions,
         OptionalContentState? optionalContentVisibility,
+        bool layered,
         CancellationToken token)
         : base(pageNumber,
             resourceStore,
@@ -125,6 +126,7 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
 
         _fontCache = fontCache;
         _token = token;
+        _layered = layered ? new LayeredComposition() : null;
 
         var viewBox = cropBox.GetVisibleBounds(rotation);
         _width = (float)viewBox.Width;
@@ -135,6 +137,36 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
     }
 
     public override SKPicture Process(int pageNumberCurrent, IReadOnlyList<IGraphicsStateOperation> operations)
+    {
+        return Record(operations, r => r.EndRecording());
+    }
+
+    /// <summary>
+    /// Records the page with its optional content kept apart (see <see cref="BeginPaint"/>).
+    /// </summary>
+    internal SkiaLayeredPage ProcessLayered(int pageNumberCurrent, IReadOnlyList<IGraphicsStateOperation> operations)
+    {
+        var bounds = SKRect.Create(_width, _height);
+        SKDrawable root;
+        try
+        {
+            root = Record(operations, r => r.EndRecordingAsDrawable());
+        }
+        catch
+        {
+            foreach (var item in _layeredOwned)
+            {
+                item.Dispose();
+            }
+
+            _layeredOwned.Clear();
+            throw;
+        }
+
+        return new SkiaLayeredPage(root, _layered!, _layeredOwned.ToArray(), bounds);
+    }
+
+    private T Record<T>(IReadOnlyList<IGraphicsStateOperation> operations, Func<SKPictureRecorder, T> finish)
     {
         try
         {
@@ -162,7 +194,7 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
 
             _canvas.Flush();
 
-            return recorder.EndRecording();
+            return finish(recorder);
         }
         finally
         {

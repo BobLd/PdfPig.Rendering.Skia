@@ -134,6 +134,23 @@ public static class PdfToImageHelper
         return diff.DifferingRatio <= maxDifferingPixelRatio;
     }
 
+    /// <summary>
+    /// Whether two renders are the same within the tolerance the image-regression tests use.
+    /// </summary>
+    internal static bool AreEquivalent(SKBitmap expected, SKBitmap actual)
+    {
+        if (FilesAreIdentical(expected, actual))
+        {
+            return true;
+        }
+
+        DiffResult diff = DiffImages(expected, actual);
+        diff.DiffImage?.Dispose();
+        TestContext.Current.TestOutputHelper?.WriteLine(
+            $"{diff.DifferingPixels} of {diff.ComparedPixels} pixels differ ({diff.DifferingRatio:P3}).");
+        return IsWithinTolerance(diff, MaxDifferingPixelRatio);
+    }
+
     private static void ReportDifference(string expectedFile, int pageNumber, in DiffResult diff, double maxDifferingPixelRatio)
     {
         string message = $"{expectedFile} (page {pageNumber}): {diff.DifferingPixels} of {diff.ComparedPixels} pixels differ ({diff.DifferingRatio:P3}), tolerance {maxDifferingPixelRatio:P3}.";

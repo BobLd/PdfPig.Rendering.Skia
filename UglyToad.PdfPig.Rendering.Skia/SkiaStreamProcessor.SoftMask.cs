@@ -67,6 +67,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             maskCanvas.Concat(in _softMaskMatrix);
 
             var savedCanvas = _canvas;
+            _aheadOfTimeDepth++;
             _canvas = maskCanvas;
             bool savedFlag = _isRenderingSoftMask;
             _isRenderingSoftMask = true;
@@ -90,6 +91,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
             finally
             {
                 _canvas = savedCanvas;
+                _aheadOfTimeDepth--;
                 _isRenderingSoftMask = savedFlag;
                 maskState.OutputIntentProfile = savedOutputIntentProfile;
             }

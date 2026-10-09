@@ -59,6 +59,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
+            using var paint = BeginPaint();
+
             try
             {
                 using SKAutoCanvasRestore skAutoCanvasRestore = new SKAutoCanvasRestore(_canvas, true);

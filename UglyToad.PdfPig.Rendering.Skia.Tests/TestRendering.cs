@@ -874,9 +874,9 @@ public class TestRendering
     };
 
     /// <summary>
-    /// Rendered with the document default view: only the default
-    /// configuration's visible layer ("Default View", a single tick) is drawn. The hidden layers draw a
-    /// mirrored tick on top, forming an X, when hidden optional content is drawn too.
+    /// Rendered with the document default view: only the default configuration's visible layer
+    /// ("Default View", a single tick) is drawn. The hidden layers must stay undrawn, otherwise their
+    /// mirrored tick forms an X on top.
     /// </summary>
     public static readonly TheoryData<string, string, int, int> DocumentsOptionalContent = new()
     {
@@ -928,8 +928,7 @@ public class TestRendering
         // ISO 32000-2 §8.11.3.1: hidden content is not drawn, but graphics state that outlives it is the
         // same whether it is visible or not. A hidden glyph in a clip rendering mode (7 Tr) still adds to
         // the text clipping path applied at ET, so the visible fill that follows is clipped to the glyph.
-        byte[] pdf = BuildPdf(
-            "q\nBT\n/OC /oc1 BDC\n7 Tr /F1 150 Tf 30 40 Td (I) Tj\nEMC\nET\n0 0 1 rg 0 0 200 200 re f\nQ");
+        byte[] pdf = BuildHiddenClipTextPdf();
 
         using SKBitmap hidden = Render(pdf);
 
@@ -973,10 +972,13 @@ public class TestRendering
 
     /// <summary>
     /// A one-page 200x200 PDF whose optional content group 'oc1' is OFF in the default configuration,
-    /// with Helvetica as /F1.
+    /// with Helvetica as /F1: a glyph in clip rendering mode 7 drawn under 'oc1', then a visible blue fill.
     /// </summary>
-    private static byte[] BuildPdf(string content)
+    internal static byte[] BuildHiddenClipTextPdf()
     {
+        const string content =
+            "q\nBT\n/OC /oc1 BDC\n7 Tr /F1 150 Tf 30 40 Td (I) Tj\nEMC\nET\n0 0 1 rg 0 0 200 200 re f\nQ";
+
         string[] objects =
         [
             "<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>",

@@ -139,6 +139,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
+            using var paint = BeginPaint();
+
             if (close)
             {
                 _currentPath.Close();
@@ -207,6 +209,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 EndPath();
                 return;
             }
+
+            using var paint = BeginPaint();
 
             if (close)
             {
@@ -278,6 +282,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 EndPath();
                 return;
             }
+
+            using var paint = BeginPaint();
 
             if (close)
             {

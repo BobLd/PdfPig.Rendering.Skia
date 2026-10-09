@@ -93,6 +93,7 @@ internal partial class SkiaStreamProcessor
             return;
         }
 
+        using var paint = BeginPaint();
         RenderShading(ResourceStore.GetShading(shadingNameToken), in SKMatrix.Identity, false, null);
     }
 
@@ -341,6 +342,7 @@ internal partial class SkiaStreamProcessor
 
         using var recorder = new SKPictureRecorder();
         SKCanvas saved = _canvas;
+        _aheadOfTimeDepth++;
         _canvas = recorder.BeginRecording(MeshPictureCullRect, true);
         try
         {
@@ -350,6 +352,7 @@ internal partial class SkiaStreamProcessor
         finally
         {
             _canvas = saved;
+            _aheadOfTimeDepth--;
         }
 
         SKPicture picture = recorder.EndRecording();
@@ -1095,7 +1098,7 @@ internal partial class SkiaStreamProcessor
             var processor = new SkiaStreamProcessor(PageNumber, ResourceStore, PdfScanner, PageContentParser,
                 FilterProvider, new CropBox(pattern.BBox), UserSpaceUnit, default,
                 initialMatrix, null, _fontCache, GetCurrentState().OutputIntentProfile, ParsingOptions,
-                ResourceStore.OptionalContent, _token);
+                ResourceStore.OptionalContent, layered: false, _token);
 
             // Same reasoning for the rendering intent: the sub-processor starts from a default graphics
             // state, so without this the pattern's content would convert its colours under

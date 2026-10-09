@@ -62,6 +62,8 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return;
             }
 
+            using var paint = BeginPaint();
+
             if (font is IType3Font type3Font)
             {
                 ShowType3Glyph(type3Font, code, textRenderingMode, in renderingMatrix, in textMatrix);
@@ -435,6 +437,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             var pageCanvas = _canvas;
             using var recorder = new SKPictureRecorder();
+            _aheadOfTimeDepth++;
             _canvas = recorder.BeginRecording(bounds, true);
 
             bool pushedResources = false;
@@ -470,6 +473,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     ResourceStore.UnloadResourceDictionary();
                 }
                 _canvas = pageCanvas;
+                _aheadOfTimeDepth--;
             }
 
             return recorder.EndRecording();

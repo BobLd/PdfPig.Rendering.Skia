@@ -33,12 +33,13 @@ namespace UglyToad.PdfPig.Rendering.Skia;
 public static class PdfPigExtensions
 {
     /// <summary>
-    /// Add the Skia page and the page size` factories.
+    /// Add the Skia page, the Skia layered page and the page size` factories.
     /// </summary>
     public static void AddSkiaPageFactory(this PdfDocument document)
     {
         document.AddPageFactory<PdfPageSize, PageSizeFactory>();
         document.AddPageFactory<SKPicture, SkiaPageFactory>();
+        document.AddPageFactory<SkiaLayeredPage, SkiaLayeredPageFactory>();
     }
 
     /// <summary>
@@ -110,6 +111,34 @@ public static class PdfPigExtensions
         try
         {
             return document.GetPage<SKPicture>(pageNumber);
+        }
+        finally
+        {
+            SkiaPageFactory.CurrentToken = previous;
+        }
+    }
+
+    /// <summary>
+    /// Get the pdf page as a <see cref="SkiaLayeredPage"/>, observing a <see cref="CancellationToken"/>: recorded once
+    /// with its optional content (layers) kept apart, then composed with <see cref="SkiaLayeredPage.Compose"/> for any
+    /// visibility state.
+    /// <para>Same threading and cancellation rules as
+    /// <see cref="GetPageAsSKPicture(PdfDocument, int, CancellationToken)"/>.</para>
+    /// </summary>
+    /// <param name="document">The pdf document.</param>
+    /// <param name="pageNumber">The number of the page to return, this starts from 1.</param>
+    /// <param name="cancellationToken">Token to cancel the recording pass.</param>
+    /// <returns>The <see cref="SkiaLayeredPage"/>, to be disposed by the caller.</returns>
+    /// <exception cref="OperationCanceledException">
+    /// Thrown when <paramref name="cancellationToken"/> is signalled while recording is in progress.
+    /// </exception>
+    public static SkiaLayeredPage GetPageAsSkiaLayeredPage(this PdfDocument document, int pageNumber, CancellationToken cancellationToken)
+    {
+        CancellationToken previous = SkiaPageFactory.CurrentToken;
+        SkiaPageFactory.CurrentToken = cancellationToken;
+        try
+        {
+            return document.GetPage<SkiaLayeredPage>(pageNumber);
         }
         finally
         {
