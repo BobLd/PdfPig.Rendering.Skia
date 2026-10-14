@@ -600,6 +600,12 @@
 		<None Update="ExpectedImages\linux\pdfpig_skia\TextClippingModeChanges_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
+		<None Update="ExpectedImages\linux\pdfpig_skia\translucent-image_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\linux\pdfpig_skia\VerticalText_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
 		<None Update="ExpectedImages\macos\pdfpig_skia\0000042_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
@@ -742,6 +748,12 @@
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\macos\pdfpig_skia\TextClippingModeChanges_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\macos\pdfpig_skia\translucent-image_1.png">
+		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+		</None>
+		<None Update="ExpectedImages\macos\pdfpig_skia\VerticalText_1.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</None>
 		<None Update="ExpectedImages\pdfpig_skia\0000042_1.png">

@@ -67,13 +67,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     using SKImage image = SKImage.FromBitmap(bitmap);
                     if (TryGetActiveSoftMask(out var softMask))
                     {
-                        var innerPaint = _paintCache.GetPaint(pdfImage, BlendMode.Normal);
+                        var innerPaint = _paintCache.GetPaint(pdfImage, BlendMode.Normal, currentState.AlphaConstantNonStroking);
                         DrawWithSoftMask(softMask!, currentState.BlendMode,
                             () => _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, innerPaint));
                     }
                     else
                     {
-                        var imagePaint = _paintCache.GetPaint(pdfImage, currentState.BlendMode);
+                        var imagePaint = _paintCache.GetPaint(pdfImage, currentState.BlendMode, currentState.AlphaConstantNonStroking);
                         _canvas.DrawImage(image, new SKRect(0, 0, 1, 1), SKSamplingOptions.Default, imagePaint);
                     }
                 }

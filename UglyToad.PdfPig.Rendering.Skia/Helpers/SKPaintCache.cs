@@ -26,7 +26,7 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
         private readonly bool _isAntialias;
 
         private readonly Dictionary<int, SKPaint> _cache = new();
-        private readonly Dictionary<(bool, BlendMode), SKPaint> _imagePaintCache = new();
+        private readonly Dictionary<(bool, BlendMode, byte), SKPaint> _imagePaintCache = new();
 
 #if DEBUG
         private readonly SKPaint _imageDebugPaint;
@@ -110,10 +110,12 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             return key;
         }
 
-        public SKPaint GetPaint(IPdfImage pdfImage, BlendMode blendMode)
+        public SKPaint GetPaint(IPdfImage pdfImage, BlendMode blendMode, double alpha)
         {
+            byte alphaByte = (alpha * 255.0).ToByte();
+
             // For non-Normal blend modes, use general cache with ValueTuple key
-            var key = (pdfImage.Interpolate, blendMode);
+            var key = (pdfImage.Interpolate, blendMode, alphaByte);
 
             if (_imagePaintCache.TryGetValue(key, out var paint))
             {
@@ -123,7 +125,8 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
             paint = new SKPaint
             {
                 IsAntialias = pdfImage.Interpolate,
-                BlendMode = blendMode.ToSKBlendMode()
+                BlendMode = blendMode.ToSKBlendMode(),
+                Color = SKColors.Black.WithAlpha(alphaByte)
             };
             
             _imagePaintCache[key] = paint;
