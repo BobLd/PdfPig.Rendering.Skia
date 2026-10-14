@@ -1,0 +1,46 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> /ExtGState << /GS1 6 0 R >> /XObject << /Im1 7 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 188 >>
+stream
+BT /F1 24 Tf 72 700 Td (Text under a 40% image) Tj ET
+BT /F1 24 Tf 72 500 Td (Text under a 40% fill) Tj ET
+q /GS1 gs 400 0 0 60 60 690 cm /Im1 Do Q
+q /GS1 gs 1 0 0 rg 60 490 400 60 re f Q
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /ExtGState /ca 0.4 /CA 0.4 >>
+endobj
+7 0 obj
+<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /ASCIIHexDecode /Length 7 >>
+stream
+FF0000>
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000295 00000 n 
+0000000533 00000 n 
+0000000603 00000 n 
+0000000657 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+830
+%%EOF

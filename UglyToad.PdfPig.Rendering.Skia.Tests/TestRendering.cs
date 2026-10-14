@@ -657,6 +657,10 @@ public class TestRendering
             "Indexed-DeviceRGB-JPXDecode-0-.0.0.255.0.-Font-F1_1_missing_char_255-1_1.png",
             "Indexed-DeviceRGB-JPXDecode-0-.0.0.255.0.-Font-F1_1_missing_char_255-1.pdf", 1, 2
         },
+        {
+            "translucent-image_1.png",
+            "translucent-image.pdf", 1, 2
+        },
         // TODO - Add Type3Test.pdf + DefaultColourSpaces.230802.pdf test
     };
 
