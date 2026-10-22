@@ -110,8 +110,10 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                // A cancellation (thrown while rendering an active soft mask) must fail the render,
+                // not return a page without this image.
                 // We have no way so far to know if skia will be able to draw the picture
                 ParsingOptions.Logger.Error($"Failed to render image: {ex}");
             }

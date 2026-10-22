@@ -138,6 +138,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                         {
                             PopState();
                         }
+
+                        if (ex is OperationCanceledException)
+                        {
+                            // A cancelled render must fail, not return a page without its annotations.
+                            throw;
+                        }
+
                         System.Diagnostics.Debug.WriteLine($"DrawAnnotations: {ex}");
                     }
                     finally
