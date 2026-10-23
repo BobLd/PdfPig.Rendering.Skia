@@ -296,6 +296,35 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <summary>
+        /// Fill the widget's rectangle with the fields highlight colour, in its own graphics state so the colour
+        /// does not leak into the appearance content written after it.
+        /// </summary>
+        private void WriteWidgetHighlight(Annotation widget, Stream ms)
+        {
+            if (!ShouldPaintWidgetBackground(widget))
+            {
+                return;
+            }
+
+            PdfPig.Graphics.Operations.SpecialGraphicsState.Push.Value.Write(ms);
+
+            var (r, g, b) = DefaultFieldsHighlightColor.ToRGBValues();
+            GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
+
+            PdfRectangle bbox = widget.Rectangle;
+            if (widget.AnnotationDictionary.TryGet(NameToken.Rect, PdfScanner, out ArrayToken? rect))
+            {
+                var points = rect.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
+                bbox = new PdfRectangle(points[0], points[1], points[2], points[3]);
+            }
+
+            new AppendRectangle(0, 0, bbox.Width, bbox.Height).Write(ms);
+            PdfPig.Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Write(ms);
+
+            PdfPig.Graphics.Operations.SpecialGraphicsState.Pop.Value.Write(ms);
+        }
+
+        /// <summary>
         /// Constructs and sets new contents for given appearance stream.
         /// </summary>
         private StreamToken SetAppearanceContent(Annotation widget, StreamToken appearanceStream)
@@ -315,12 +344,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
                 if (bmcIndex == -1)
                 {
-                    // append to existing stream
+                    // No marked-content section for the field's value (e.g. a check box): paint the highlight
+                    // underneath the existing appearance, which is kept as is. Appending the highlight instead
+                    // would cover the appearance.
+                    WriteWidgetHighlight(widget, ms);
+
                     foreach (var operation in tokens)
                     {
                         operation.Write(ms);
                     }
-                    new BeginMarkedContent(NameToken.Tx).Write(ms);
                 }
                 else
                 {
@@ -329,58 +361,44 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     {
                         operation.Write(ms);
                     }
-                }
 
-                // insert field contents
-                // TODO - To finish, does not follow PdfBox
-                if (ShouldPaintWidgetBackground(widget))
-                {
-                    var (r, g, b) = DefaultFieldsHighlightColor.ToRGBValues();
-                    GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
+                    // insert field contents
+                    // TODO - To finish, does not follow PdfBox
+                    WriteWidgetHighlight(widget, ms);
 
-                    PdfRectangle bbox = widget.Rectangle;
-                    if (widget.AnnotationDictionary.TryGet(NameToken.Rect, PdfScanner, out ArrayToken? rect))
+                    int emcIndex = tokens.FindIndex(x => x is EndMarkedContent);
+
+                    if (emcIndex != -1)
                     {
-                        var points = rect.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
-                        bbox = new PdfRectangle(points[0], points[1], points[2], points[3]);
+                        int count = emcIndex - (bmcIndex + 1);
+                        foreach (var operation in tokens.Skip(bmcIndex + 1).Take(count))
+                        {
+                            operation.Write(ms);
+                        }
+                    }
+                    else
+                    {
+                        foreach (var operation in tokens.Skip(bmcIndex + 1))
+                        {
+                            operation.Write(ms);
+                        }
                     }
 
-                    new AppendRectangle(0, 0, bbox.Width, bbox.Height).Write(ms);
-                    PdfPig.Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Write(ms);
-                }
+                    //insertGeneratedAppearance(widget, appearanceStream, ms);
+                    // TODO - END To finish, does not follow PdfBox
 
-                int emcIndex = tokens.FindIndex(x => x is EndMarkedContent);
-
-                if (emcIndex != -1)
-                {
-                    int count = emcIndex - (bmcIndex + 1);
-                    foreach (var operation in tokens.Skip(bmcIndex + 1).Take(count))
+                    if (emcIndex == -1)
                     {
-                        operation.Write(ms);
+                        // append EMC
+                        Graphics.Operations.MarkedContent.EndMarkedContent.Value.Write(ms);
                     }
-                }
-                else
-                {
-                    foreach (var operation in tokens.Skip(bmcIndex + 1))
+                    else
                     {
-                        operation.Write(ms);
-                    }
-                }
-
-                //insertGeneratedAppearance(widget, appearanceStream, ms);
-                // TODO - END To finish, does not follow PdfBox
-
-                if (emcIndex == -1)
-                {
-                    // append EMC
-                    Graphics.Operations.MarkedContent.EndMarkedContent.Value.Write(ms);
-                }
-                else
-                {
-                    // append contents after EMC
-                    foreach (var operation in tokens.Skip(emcIndex))
-                    {
-                        operation.Write(ms);
+                        // append contents after EMC
+                        foreach (var operation in tokens.Skip(emcIndex))
+                        {
+                            operation.Write(ms);
+                        }
                     }
                 }
 

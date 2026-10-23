@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using Caly.PdfPig.Fonts;
 using UglyToad.PdfPig.Graphics.Colors.Icc;
 using UglyToad.PdfPig.Rendering.Skia.Icc.Unicolour;
 
@@ -31,6 +32,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
     /// </summary>
     public static class SkiaRenderingParsingOptions
     {
+        static SkiaRenderingParsingOptions()
+        {
+            // Substitute fonts are process-wide rather than a parsing option: register them as soon as the
+            // renderer's options are used, so text extraction before AddSkiaPageFactory() sees them too.
+            StandardFontSubstitutes.Register();
+        }
+
         public static readonly ParsingOptions Instance = new()
         {
             UseLenientParsing = true,

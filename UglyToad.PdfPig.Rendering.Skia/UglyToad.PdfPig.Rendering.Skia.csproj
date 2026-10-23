@@ -56,6 +56,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\..\Caly.PdfPig.Fonts\Caly.PdfPig.Fonts\Caly.PdfPig.Fonts.csproj" />
 		<ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Core\UglyToad.PdfPig.Core.csproj" />
 		<ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.DocumentLayoutAnalysis\UglyToad.PdfPig.DocumentLayoutAnalysis.csproj" />
 		<ProjectReference Include="..\..\PdfPig\src\UglyToad.PdfPig.Fonts\UglyToad.PdfPig.Fonts.csproj" />

@@ -16,6 +16,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using Caly.PdfPig.Fonts;
 using SkiaSharp;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Functions;
@@ -34,9 +35,14 @@ public static class PdfPigExtensions
 {
     /// <summary>
     /// Add the Skia page and the page size` factories.
+    /// <para>
+    /// Also registers the bundled Standard 14 substitute fonts (see <see cref="StandardFontSubstitutes"/>), so
+    /// non-embedded ZapfDingbats and Symbol glyphs render the same on every machine.
+    /// </para>
     /// </summary>
     public static void AddSkiaPageFactory(this PdfDocument document)
     {
+        StandardFontSubstitutes.Register();
         document.AddPageFactory<PdfPageSize, PageSizeFactory>();
         document.AddPageFactory<SKPicture, SkiaPageFactory>();
     }

@@ -82,6 +82,8 @@ Renders a PDF page and compares it pixel-by-pixel against a committed golden PNG
 
 Each job installs the DejaVu / Liberation / Noto (incl. CJK) families before testing. That font set is part of the contract with the committed goldens — changing it, or changing fallback in `SkiaFontCache`, can move images on CI without moving them locally.
 
+Non-embedded **Standard 14 fonts** (and the names PdfPig maps to them, e.g. `Arial`, `TimesNewRoman,Bold`) do not depend on that font set: `SkiaRenderingParsingOptions` (static ctor) and `AddSkiaPageFactory()` call `Caly.PdfPig.Fonts.StandardFontSubstitutes.Register()`, which registers bundled programs process-wide with PdfPig's `SystemFontFinder.AddSubstituteFont` (Liberation Sans for Helvetica; Foxit then Liberation Serif/Mono for Times/Courier; Foxit for Symbol/ZapfDingbats). PdfPig then returns real glyph paths for those fonts, so they take the vector path in `RenderGlyph` instead of the system-font fallback (`GitHubIssues.Issue163_*`). Goldens whose per-OS overrides existed only because of those fonts can be deleted.
+
 ## Architecture
 
 ### Rendering Pipeline
