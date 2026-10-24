@@ -712,7 +712,11 @@ public class TestRendering
         {
             "Indexed-DeviceRGB-JPXDecode-0-.0.0.255.0.-Font-F1_1_missing_char_255-1_1.png",
             "Indexed-DeviceRGB-JPXDecode-0-.0.0.255.0.-Font-F1_1_missing_char_255-1.pdf", 1, 2
-        }
+        },
+        {
+            "checkbox-widget_1.png",
+            "checkbox-widget.pdf", 1, 2
+        },
         // TODO - Add Type3Test.pdf + DefaultColourSpaces.230802.pdf test
     };
 
@@ -869,7 +873,7 @@ public class TestRendering
             "version4pdf.pdf", 1, 2
         },
         {
-            "translucent-image_1.png",
+            "translucent-image_1_icc_intent.png",
             "translucent-image.pdf", 1, 2
         },
         // TODO - Add Type3Test.pdf + DefaultColourSpaces.230802.pdf test

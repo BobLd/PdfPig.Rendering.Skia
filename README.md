@@ -79,6 +79,24 @@ using (var document = PdfDocument.Open(_path, SkiaRenderingParsingOptions.Instan
 	}
 }
 ```
+
+### Consistent rendering of non-embedded standard fonts (opt-in)
+When a PDF uses one of the 14 standard fonts (Helvetica, Times, Courier, Symbol, ZapfDingbats and their
+variants, plus names mapped to them such as `Arial`) **without embedding it**, the text is drawn with a font
+installed on the machine. The result therefore differs between Windows, Linux and macOS, and Symbol /
+ZapfDingbats glyphs (check marks, bullets) can be missing.
+
+To render those fonts the same everywhere, register the bundled substitute fonts (Liberation and Foxit, shipped
+in the [`Caly.PdfPig.Fonts`](https://www.nuget.org/packages/Caly.PdfPig.Fonts) package, which you reference yourself)
+**once, at application startup, before opening any document**:
+```csharp
+Caly.PdfPig.Fonts.StandardFontSubstitutes.Register();
+```
+This is opt-in: this library does not reference that package and nothing registers them for you. Be aware that
+the registration is **process-wide**: it uses PdfPig's `SystemFontFinder.AddSubstituteFont`, so it also applies to PdfPig text extraction in the same process,
+and it replaces any substitute your application registered earlier for the same font names. Fonts already loaded
+by an open document are not affected.
+
 ## How to extract images contained in a pdf page
 ```csharp
 using UglyToad.PdfPig.Rendering.Skia.Helpers;
@@ -112,3 +130,5 @@ images and must be run in **Release** mode.
 > The differences are font related. When a glyph has no usable embedded outline, rendering falls back to a
 > system font, and the available installed fonts (and their substitutions) differ from one OS / machine to another.
 > As a result, an expected image baseline generated on one OS will not match pixel-for-pixel on another.
+> The test assembly registers the bundled standard-font substitutes (`StandardFontSubstitutesFixture`), so
+> non-embedded standard 14 fonts no longer cause such differences; other non-embedded fonts still do.
