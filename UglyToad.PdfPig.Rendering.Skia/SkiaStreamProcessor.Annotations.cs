@@ -21,8 +21,8 @@ using UglyToad.PdfPig.Geometry;
 using UglyToad.PdfPig.Graphics.Colors;
 using UglyToad.PdfPig.Graphics.Core;
 using UglyToad.PdfPig.Graphics.Operations;
-using UglyToad.PdfPig.Graphics.Operations.MarkedContent;
 using UglyToad.PdfPig.Graphics.Operations.PathConstruction;
+using UglyToad.PdfPig.Parser.Parts;
 using UglyToad.PdfPig.Tokens;
 
 namespace UglyToad.PdfPig.Rendering.Skia
@@ -36,6 +36,24 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// TODO - make an option of that
         /// </summary>
         public static readonly RGBColor DefaultFieldsHighlightColor = new RGBColor(204 / 255.0, 215 / 255.0, 1);
+
+        /// <summary>
+        /// Opacity of the fields highlight overlay (100/255, as suggested in issue #162 and used by PDFium-based
+        /// viewers). The higher it is, the more the field's content is tinted.
+        /// </summary>
+        private const double FieldsHighlightAlpha = 100 / 255.0;
+
+        /// <summary>
+        /// Overlay colour chosen so that, composited at <see cref="FieldsHighlightAlpha"/> over a white field,
+        /// it gives exactly <see cref="DefaultFieldsHighlightColor"/>: c = 1 - (1 - target) / alpha.
+        /// Declared after <see cref="DefaultFieldsHighlightColor"/>, which it is computed from.
+        /// </summary>
+        private static readonly double[] FieldsHighlightOverlayColor =
+        [
+            1 - (1 - DefaultFieldsHighlightColor.R) / FieldsHighlightAlpha,
+            1 - (1 - DefaultFieldsHighlightColor.G) / FieldsHighlightAlpha,
+            1 - (1 - DefaultFieldsHighlightColor.B) / FieldsHighlightAlpha
+        ];
 
         /// <summary>
         /// Default Required FieldsHighlightColor.
@@ -79,21 +97,15 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     continue;
                 }
 
-                if (!appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Rect, PdfScanner, out var rectToken))
+                if (!TryGetRectangle(appearance.StreamDictionary, NameToken.Rect, out PdfRectangle rect))
                 {
                     // TODO - log
-                    continue; // Should never happen
+                    continue; // Missing or malformed /Rect
                 }
 
-                var rectPoints = rectToken.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
-                PdfRectangle rect = new PdfRectangle(rectPoints[0], rectPoints[1], rectPoints[2], rectPoints[3]);
-
-                PdfRectangle? bbox = null;
-                if (appearance.StreamDictionary.TryGet<ArrayToken>(NameToken.Bbox, PdfScanner, out var bboxToken))
-                {
-                    var points = bboxToken.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
-                    bbox = new PdfRectangle(points[0], points[1], points[2], points[3]);
-                }
+                PdfRectangle? bbox = TryGetRectangle(appearance.StreamDictionary, NameToken.Bbox, out PdfRectangle b)
+                    ? b
+                    : null;
 
                 // zero-sized rectangles are not valid
                 if (rect.Width > 0 && rect.Height > 0 &&
@@ -150,6 +162,13 @@ namespace UglyToad.PdfPig.Rendering.Skia
                     finally
                     {
                         PopState();
+                    }
+
+                    // Widgets without an /AP get a generated appearance that already is the highlight.
+                    if (annotation.Type == AnnotationType.Widget && GetAppearance(annotation) is not null &&
+                        ShouldPaintWidgetBackground(annotation))
+                    {
+                        DrawWidgetHighlight(rect);
                     }
                 }
             }
@@ -264,11 +283,6 @@ namespace UglyToad.PdfPig.Rendering.Skia
                 return null;
             }
 
-            if (annotation.Type == AnnotationType.Widget)
-            {
-                normalAppearance = SetAppearanceContent(annotation, normalAppearance);
-            }
-
             // The form XObject's dictionary has no /Rect, so carry the annotation's declared /Rect onto it
             // for DrawAnnotations. Use the raw array (unrotated page space) rather than annotation.Rectangle,
             // which initialMatrix has already rotated/translated - the canvas CTM re-applies that matrix.
@@ -296,113 +310,56 @@ namespace UglyToad.PdfPig.Rendering.Skia
         }
 
         /// <summary>
-        /// Constructs and sets new contents for given appearance stream.
+        /// Reads a rectangle array (e.g. /Rect or /BBox), resolving indirect entries. Returns false when the
+        /// entry is missing or has fewer than four numbers, instead of throwing on a malformed file.
         /// </summary>
-        private StreamToken SetAppearanceContent(Annotation widget, StreamToken appearanceStream)
+        private bool TryGetRectangle(DictionaryToken dictionary, NameToken key, out PdfRectangle rectangle)
         {
-            // first copy any needed resources from the document’s DR dictionary into
-            // the stream’s Resources dictionary
-            //getWidgetDefaultAppearanceString(widget);
-            //defaultAppearance.copyNeededResourcesTo(appearanceStream);
-
-            using (var ms = new MemoryStream())
+            rectangle = default;
+            if (!dictionary.TryGet(key, PdfScanner, out ArrayToken? array) || array.Data.Count < 4)
             {
-                var contentStream = appearanceStream.Decode(FilterProvider, PdfScanner);
-                var tokens = PageContentParser
-                    .Parse(PageNumber, new MemoryInputBytes(contentStream), ParsingOptions.Logger).ToList();
+                return false;
+            }
 
-                int bmcIndex = tokens.FindIndex(x => x is BeginMarkedContent);
-
-                if (bmcIndex == -1)
+            Span<double> values = stackalloc double[4];
+            for (int i = 0; i < 4; i++)
+            {
+                if (!DirectObjectFinder.TryGet(array.Data[i], PdfScanner, out NumericToken? number))
                 {
-                    // append to existing stream
-                    foreach (var operation in tokens)
-                    {
-                        operation.Write(ms);
-                    }
-                    new BeginMarkedContent(NameToken.Tx).Write(ms);
-                }
-                else
-                {
-                    // prepend content before BMC
-                    foreach (var operation in tokens.Take(bmcIndex + 1))
-                    {
-                        operation.Write(ms);
-                    }
+                    return false;
                 }
 
-                // insert field contents
-                // TODO - To finish, does not follow PdfBox
-                if (ShouldPaintWidgetBackground(widget))
-                {
-                    var (r, g, b) = DefaultFieldsHighlightColor.ToRGBValues();
-                    GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
+                values[i] = number.Double;
+            }
 
-                    PdfRectangle bbox = widget.Rectangle;
-                    if (widget.AnnotationDictionary.TryGet(NameToken.Rect, PdfScanner, out ArrayToken? rect))
-                    {
-                        var points = rect.Data.OfType<NumericToken>().Select(x => x.Double).ToArray();
-                        bbox = new PdfRectangle(points[0], points[1], points[2], points[3]);
-                    }
+            rectangle = new PdfRectangle(values[0], values[1], values[2], values[3]);
+            return true;
+        }
 
-                    new AppendRectangle(0, 0, bbox.Width, bbox.Height).Write(ms);
-                    PdfPig.Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Write(ms);
-                }
+        /// <summary>
+        /// Draws the fields highlight as a translucent overlay on top of a widget's own appearance, over its
+        /// page-space <paramref name="rect"/> (as PDFium does). Drawn on top so fields with an opaque /MK /BG
+        /// background are highlighted too, and translucent so their border and value (text, check mark) stay
+        /// visible. The appearance stream itself is not modified.
+        /// </summary>
+        private void DrawWidgetHighlight(PdfRectangle rect)
+        {
+            rect = rect.Normalise();
 
-                int emcIndex = tokens.FindIndex(x => x is EndMarkedContent);
+            PushState();
+            try
+            {
+                var state = GetCurrentState();
+                state.AlphaConstantNonStroking = FieldsHighlightAlpha;
+                state.BlendMode = BlendMode.Normal;
 
-                if (emcIndex != -1)
-                {
-                    int count = emcIndex - (bmcIndex + 1);
-                    foreach (var operation in tokens.Skip(bmcIndex + 1).Take(count))
-                    {
-                        operation.Write(ms);
-                    }
-                }
-                else
-                {
-                    foreach (var operation in tokens.Skip(bmcIndex + 1))
-                    {
-                        operation.Write(ms);
-                    }
-                }
-
-                //insertGeneratedAppearance(widget, appearanceStream, ms);
-                // TODO - END To finish, does not follow PdfBox
-
-                if (emcIndex == -1)
-                {
-                    // append EMC
-                    Graphics.Operations.MarkedContent.EndMarkedContent.Value.Write(ms);
-                }
-                else
-                {
-                    // append contents after EMC
-                    foreach (var operation in tokens.Skip(emcIndex))
-                    {
-                        operation.Write(ms);
-                    }
-                }
-
-                var content = ms.AsMemory();
-
-                // The rewritten content is the *decoded* operations written back out, but the source
-                // dictionary still declares the encoding the original data had. Leave /Filter (and its
-                // /DecodeParms) in place and ProcessFormXObject decodes the plain content again, which
-                // yields nothing and the annotation silently disappears. /Length is restated for the
-                // same reason: nothing about this stream is the encoded one any more.
-                var dict = appearanceStream.StreamDictionary
-                    .Without(NameToken.Filter)
-                    .Without(NameToken.DecodeParms)
-                    .With(NameToken.Length, new NumericToken(content.Length));
-
-                var newAppearance = new StreamToken(dict, content);
-
-                //var contentStreamTest = newAppearance.Decode(FilterProvider, PdfScanner);
-                //var operationsTest = PageContentParser
-                //    .Parse(PageNumber, new ByteArrayInputBytes(contentStreamTest), ParsingOptions.Logger).ToList();
-
-                return newAppearance;
+                GetAnnotationNonStrokeColorOperation(FieldsHighlightOverlayColor)?.Run(this);
+                new AppendRectangle(rect.Left, rect.Bottom, rect.Width, rect.Height).Run(this);
+                PdfPig.Graphics.Operations.PathPainting.FillPathEvenOddRule.Value.Run(this);
+            }
+            finally
+            {
+                PopState();
             }
         }
 
@@ -1006,7 +963,7 @@ namespace UglyToad.PdfPig.Rendering.Skia
 
             using (var ms = new MemoryStream())
             {
-                // TODO - handle no background color filling required, see `SetAppearanceContent(Annotation widget, StreamToken appearanceStream)`
+                // TODO - handle no background color filling required, see `ShouldPaintWidgetBackground(Annotation widget)`
                 var (r, g, b) = DefaultFieldsHighlightColor.ToRGBValues();
                 GetAnnotationNonStrokeColorOperation([r, g, b])?.Write(ms);
 

@@ -87,7 +87,7 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
     /// at <c>ET</c> regardless of whether <c>cm</c>/<c>q</c>/<c>Q</c> moved the CTM in-between.
     /// <c>null</c> when no text object is open.
     /// </summary>
-    private SKPath? _textClipPath;
+    private List<SKPath>? _textClipGlyphs;
 
     private SKCanvas _canvas;
 
@@ -305,8 +305,22 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
         // PDF spec: text rendering modes 4–7 build up a clipping path glyph-by-glyph that is
         // only applied to the canvas clip on the matching ET (§9.3.6). Start a fresh accumulator
         // for this text object. Nested BTs are disallowed by the spec, so we don't stack them.
-        _textClipPath?.Dispose();
-        _textClipPath = null;
+        DisposeTextClipGlyphs();
+    }
+
+    private void DisposeTextClipGlyphs()
+    {
+        if (_textClipGlyphs is null)
+        {
+            return;
+        }
+
+        foreach (SKPath glyph in _textClipGlyphs)
+        {
+            glyph.Dispose();
+        }
+
+        _textClipGlyphs = null;
     }
 
     public override void EndText()
@@ -314,17 +328,19 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
         // Apply the accumulated text clipping path (if any) to the current canvas clip before
         // resetting the text matrices. The path was recorded in device pixel space, so we
         // temporarily neutralise the CTM around the ClipPath call to avoid double-transforming.
-        if (_textClipPath is { } textClip)
+        if (_textClipGlyphs is { } glyphs)
         {
-            _textClipPath = null;
-            if (!textClip.IsEmpty)
+            using (SKPath textClip = BuildTextClipPath(glyphs))
             {
-                var savedMatrix = _canvas.TotalMatrix;
-                _canvas.SetMatrix(in SKMatrix.Identity);
-                _canvas.ClipPath(textClip, SKClipOperation.Intersect, _antiAliasing);
-                _canvas.SetMatrix(in savedMatrix);
+                DisposeTextClipGlyphs();
+                if (!textClip.IsEmpty)
+                {
+                    var savedMatrix = _canvas.TotalMatrix;
+                    _canvas.SetMatrix(in SKMatrix.Identity);
+                    _canvas.ClipPath(textClip, SKClipOperation.Intersect, _antiAliasing);
+                    _canvas.SetMatrix(in savedMatrix);
+                }
             }
-            textClip.Dispose();
         }
 
         base.EndText();
@@ -430,8 +446,7 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
         {
             _pendingMasks.Pop()?.Dispose();
         }
-        _textClipPath?.Dispose();
-        _textClipPath = null;
+        DisposeTextClipGlyphs();
         if (_meshPictureCache is not null)
         {
             foreach (var entry in _meshPictureCache.Values)
