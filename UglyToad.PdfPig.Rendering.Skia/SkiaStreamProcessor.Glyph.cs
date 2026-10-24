@@ -336,10 +336,53 @@ namespace UglyToad.PdfPig.Rendering.Skia
         /// </summary>
         private void AppendGlyphToTextClipPath(SKPath glyphPathInUserSpace)
         {
-            _textClipPath ??= new SKPath();
+            _textClipGlyphs ??= new List<SKPath>();
 
+            // One path per glyph: EndText unions them, see BuildTextClipPath.
             var currentCanvasMatrix = _canvas.TotalMatrix;
-            _textClipPath.AddPath(glyphPathInUserSpace, in currentCanvasMatrix, SKPathAddMode.Append);
+            var glyphPath = new SKPath();
+            glyphPath.AddPath(glyphPathInUserSpace, in currentCanvasMatrix, SKPathAddMode.Append);
+            _textClipGlyphs.Add(glyphPath);
+        }
+
+        /// <summary>
+        /// Combines the glyph outlines accumulated by a clipping text object into the clip path.
+        /// <para>
+        /// The spec combines them as subpaths of one path under the non-zero rule. Concatenating them that way
+        /// makes overlapping glyphs cancel out when their contours run in opposite directions, which happens as
+        /// soon as two fonts of different formats are mixed: TrueType outer contours are clockwise, PostScript
+        /// (Type 1 / CFF) ones counter-clockwise. For non-embedded fonts the format depends on the substitute
+        /// picked, not on the file (OverlappingGlyphClipping.pdf: Times-Bold and Helvetica). The union of each
+        /// glyph's own area is what the non-zero rule gives when all glyphs share a direction, so use that.
+        /// </para>
+        /// </summary>
+        private static SKPath BuildTextClipPath(List<SKPath> glyphs)
+        {
+            var result = new SKPath();
+            if (glyphs.Count > 1)
+            {
+                using (var builder = new SKPath.OpBuilder())
+                {
+                    foreach (SKPath glyph in glyphs)
+                    {
+                        builder.Add(glyph, SKPathOp.Union);
+                    }
+
+                    if (builder.Resolve(result))
+                    {
+                        return result;
+                    }
+                }
+
+                result.Reset(); // Path ops failed: fall back to plain concatenation.
+            }
+
+            foreach (SKPath glyph in glyphs)
+            {
+                result.AddPath(glyph, SKPathAddMode.Append);
+            }
+
+            return result;
         }
 
         private void ShowType3Glyph(IType3Font font, int code,
