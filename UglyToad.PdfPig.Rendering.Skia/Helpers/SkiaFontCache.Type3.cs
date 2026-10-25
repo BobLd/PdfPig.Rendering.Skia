@@ -52,7 +52,23 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
                 c => new Lazy<Type3CachedGlyph>(
                     () => BuildType3Glyph(font, c, ctx),
                     LazyThreadSafetyMode.ExecutionAndPublication));
-            return lazy.Value;
+
+            try
+            {
+                return lazy.Value;
+            }
+            catch
+            {
+                // Only successful builds are cached. Lazy<T> keeps a failed build's exception and
+                // rethrows it on every later access, and a build fails when its render is cancelled.
+                var failed = new KeyValuePair<int, Lazy<Type3CachedGlyph>>(code, lazy);
+#if NET
+                perFont.TryRemove(failed);
+#else
+                ((ICollection<KeyValuePair<int, Lazy<Type3CachedGlyph>>>)perFont).Remove(failed);
+#endif
+                throw;
+            }
         }
 
         private static Type3CachedGlyph BuildType3Glyph(IType3Font font, int code, Type3BuildContext ctx)
