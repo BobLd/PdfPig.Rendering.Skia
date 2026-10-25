@@ -116,7 +116,8 @@ internal partial class SkiaStreamProcessor : BaseStreamProcessor<SKPicture>
             rotation,
             initialMatrix,
             outputIntentProfile,
-            parsingOptions)
+            parsingOptions,
+            token)
     {
         _renderAnnotations = annotationProvider is not null;
         _annotations = new Lazy<Annotation[]>(() => annotationProvider?.GetAnnotations().ToArray() ?? []);

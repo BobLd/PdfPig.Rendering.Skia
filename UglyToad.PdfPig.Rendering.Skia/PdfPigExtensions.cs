@@ -89,12 +89,6 @@ public static class PdfPigExtensions
     /// if you have multiple concurrent callers. Rendering pages from <i>different</i>
     /// <see cref="PdfDocument"/> instances in parallel is safe.
     /// </para>
-    /// <para>
-    /// The cancellation token is propagated to the active rendering pass via an
-    /// <see cref="System.Threading.AsyncLocal{T}"/> on <see cref="SkiaPageFactory"/>; it
-    /// flows correctly across <c>await</c> boundaries within a single logical call but is
-    /// scoped to the in-flight <see cref="PdfDocument.GetPage{TPage}(int)"/> invocation.
-    /// </para>
     /// </remarks>
     /// <param name="document">The pdf document.</param>
     /// <param name="pageNumber">The number of the page to return, this starts from 1.</param>
@@ -105,16 +99,7 @@ public static class PdfPigExtensions
     /// </exception>
     public static SKPicture GetPageAsSKPicture(this PdfDocument document, int pageNumber, CancellationToken cancellationToken)
     {
-        CancellationToken previous = SkiaPageFactory.CurrentToken;
-        SkiaPageFactory.CurrentToken = cancellationToken;
-        try
-        {
-            return document.GetPage<SKPicture>(pageNumber);
-        }
-        finally
-        {
-            SkiaPageFactory.CurrentToken = previous;
-        }
+        return document.GetPage<SKPicture>(pageNumber, cancellationToken);
     }
 
     /// <summary>

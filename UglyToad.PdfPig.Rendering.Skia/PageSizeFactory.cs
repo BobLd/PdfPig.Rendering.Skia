@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System;
+using System.Threading;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Filters;
 using UglyToad.PdfPig.Geometry;
@@ -52,7 +53,7 @@ public sealed class PageSizeFactory : IPageFactory<PdfPageSize>
     }
 
     /// <inheritdoc/>
-    public PdfPageSize Create(int number, DictionaryToken dictionary, PageTreeMembers pageTreeMembers, NamedDestinations namedDestinations)
+    public PdfPageSize Create(int number, DictionaryToken dictionary, PageTreeMembers pageTreeMembers, NamedDestinations namedDestinations, CancellationToken token)
     {
         if (dictionary is null)
         {
