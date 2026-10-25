@@ -399,7 +399,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 foreach (var value in fontCache.Values)
                 {
-                    value?.Value?.Dispose();
+                    if (value.IsValueCreated)
+                    {
+                        value.Value?.Dispose();
+                    }
                 }
 
                 fontCache.Clear();
@@ -416,7 +419,10 @@ namespace UglyToad.PdfPig.Rendering.Skia.Helpers
 
                 foreach (var value in perFont.Values)
                 {
-                    value?.Value?.Dispose();
+                    if (value.IsValueCreated)
+                    {
+                        value.Value.Dispose();
+                    }
                 }
 
                 perFont.Clear();
